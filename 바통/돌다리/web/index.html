@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>돌다리 v1.0 · 업무 인수인계 도우미</title>
+<style>
+:root{--ink:#1d2430;--mute:#5d6673;--line:#d9dee6;--bg:#f5f7fa;--card:#fff;--acc:#1f5fbf;--acc2:#e8f0fc;--warn:#b54708;--warnbg:#fff4e5;--ok:#1a7f4b;--okbg:#e6f6ec}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Malgun Gothic","맑은 고딕","Apple SD Gothic Neo",sans-serif}
+header{background:#fff;border-bottom:1px solid var(--line);padding:14px 24px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+header h1{font-size:20px;margin:0}
+header .sub{color:var(--mute);font-size:14px}
+main{max-width:1100px;margin:0 auto;padding:18px 16px 60px}
+section.step{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px}
+section.step h2{font-size:18px;margin:0 0 10px;display:flex;align-items:center;gap:10px}
+section.step h2 .n{display:inline-flex;width:28px;height:28px;border-radius:50%;background:var(--line);color:#333;align-items:center;justify-content:center;font-size:15px}
+section.step.cur h2 .n{background:var(--acc);color:#fff}
+section.step.done h2 .n{background:var(--ok);color:#fff}
+section.step.off{opacity:.55}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
+input[type=text],select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;min-width:120px}
+input.wide{flex:1;min-width:260px}
+button{font:inherit;padding:9px 16px;border-radius:7px;border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer}
+button.ghost{background:#fff;color:var(--acc)}
+button.danger{background:#fff;color:var(--warn);border-color:var(--warn)}
+button:disabled{opacity:.45;cursor:default}
+.hint{color:var(--mute);font-size:14px}
+.note{background:var(--warnbg);border-left:4px solid var(--warn);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:14px}
+.good{background:var(--okbg);border-left:4px solid var(--ok);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:14px}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:#f0f3f7;font-weight:600}
+td.num,th.num{text-align:right;white-space:nowrap}
+.bar{height:14px;background:#e6eaf0;border-radius:7px;overflow:hidden;margin:6px 0}
+.bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .4s}
+.tabs{display:flex;gap:6px;margin:6px 0 10px;flex-wrap:wrap}
+.tabs button{background:#fff;color:var(--ink);border-color:var(--line)}
+.tabs button.on{background:var(--acc2);border-color:var(--acc);color:var(--acc)}
+.item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0;display:grid;grid-template-columns:28px 1fr;gap:8px 10px;background:#fff}
+.item.off{opacity:.5;background:#fafafa}
+.item .t{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.item input.text{flex:1;min-width:240px}
+.item input.when{width:120px}
+.item .src{font-size:13px;color:var(--mute);word-break:break-all}
+.item .src b{color:#333;font-weight:600}
+.item .tag{font-size:12px;padding:1px 7px;border-radius:10px;background:#eef1f5;color:#444;white-space:nowrap}
+.item .tag.fix{background:#fff1d6;color:#7a4b00}
+.item .tag.man{background:#e4f3ff;color:#0b4f8a}
+.item input.note{width:100%;font-size:13px;border-style:dashed}
+details{margin:10px 0}
+summary{cursor:pointer;color:var(--acc)}
+.count{font-weight:600}
+#log{font-family:Consolas,monospace;font-size:12px;color:var(--mute);white-space:pre-wrap;max-height:120px;overflow:auto;background:#f7f8fa;padding:8px;border-radius:6px}
+.add{background:var(--acc2);border-radius:8px;padding:10px 12px;margin-top:10px}
+footer{color:var(--mute);font-size:12px;text-align:center;margin-top:30px}
+@media print{header,button,.tabs,#s1,#s2,#s3,#s5,details,footer,#log{display:none !important} .item{break-inside:avoid}}
+</style>
+</head>
+<body>
+<header><h1>돌다리 v1.0</h1><span class="sub">업무 인수인계 도우미 · 전임자의 업무 폴더에서 후임자가 알아야 할 것을 출처와 함께 뽑습니다 · 이 PC 안에서만 작동(외부 전송 없음)</span></header>
+<main>
+
+<section class="step" id="s1"><h2><span class="n">1</span>업무 폴더 고르기</h2>
+<div class="row"><input type="text" id="folder" class="wide" placeholder="예) C:\업무\서무  (폴더 주소를 붙여 넣거나 「찾기」)"><button class="ghost" id="btnBrowse">찾기…</button><button id="btnExtract">읽기</button></div>
+<div class="hint">읽을 수 있는 파일: 한글(.hwp 5.0·.hwpx), 워드(.docx), PDF(글자 있는 것), 엑셀(.xlsx), 메일(.eml), 메모(.txt·.md·.csv), 압축(.zip 안의 파일). 원본은 읽기만 하고 바꾸지 않습니다(처리 전후 지문 대조). 옛 한글 2.x·3.x 문서, 암호 문서, 스캔 이미지는 「못 읽은 파일」로 따로 적힙니다.</div>
+<div id="extractMsg"></div>
+</section>
+
+<section class="step" id="s2"><h2><span class="n">2</span>읽은 결과와 처리 계획</h2>
+<div id="files"></div>
+<div class="row"><label>모델 <select id="model"><option value="">없음(규칙만, 몇 초)</option></select></label>
+<label>모델 주소 <input type="text" id="url" style="width:330px"></label>
+<button class="ghost" id="btnModels">목록 새로고침</button></div>
+<div class="row"><label><input type="checkbox" id="tables"> 표 파일(엑셀·csv)도 모델에 보내기 <span class="hint">(기본은 규칙만. 모델이 표를 잘못 읽는 일이 많음)</span></label>
+<label>최근 <select id="recent"><option value="0">전체 연도</option><option value="1">1년</option><option value="2">2년</option><option value="3">3년</option></select> 파일만 모델에 보내기 <span class="hint">(파일 이름·앞머리의 연도 기준, 연도 없는 파일은 포함)</span></label>
+<label>긴 파일은 앞 <select id="maxCalls"><option value="1">6천 자</option><option value="2">1만2천 자</option><option value="3" selected>1만8천 자</option><option value="6">3만6천 자</option><option value="99">전부</option></select>까지만 <span class="hint">(6천 자마다 모델 1회)</span></label></div>
+<div id="plan"></div>
+<div class="row"><button id="btnDraft">초안 만들기</button><span class="hint" id="planHint"></span></div>
+</section>
+
+<section class="step" id="s3"><h2><span class="n">3</span>초안 만드는 중</h2>
+<div class="bar"><i id="barFill"></i></div>
+<div class="row"><span id="progText" class="hint"></span><button class="danger" id="btnStop">여기까지만(중단)</button></div>
+<div class="hint">중단하면 지금까지 읽은 파일의 항목과 규칙으로 뽑은 항목(전체 파일)만으로 검토 화면이 열립니다.</div>
+</section>
+
+<section class="step" id="s4"><h2><span class="n">4</span>검토 — 지우고, 고치고, 직접 적기</h2>
+<div class="hint">항목마다 출처 파일과 원문 발췌가 붙어 있습니다. 틀리거나 필요 없는 항목은 체크를 풀면 인수인계서에서 빠집니다. 글은 바로 고칠 수 있고, 메모 칸에 후임자에게 남길 말을 적습니다. 확인되지 않아 뺀 항목은 맨 아래 「불확실(제외)」에서 되살릴 수 있습니다.</div>
+<div class="row"><label>제목 꼬리 <input type="text" id="title" placeholder="예) 영업과 우편영업실 · 2026.2." style="width:300px"></label><span id="counts" class="hint"></span><button class="ghost" id="btnSave">저장</button></div>
+<div class="tabs" id="tabs"></div>
+<div id="items"></div>
+<div class="add"><b>직접 적기</b> <span class="hint">(문서에 없거나 모델이 못 잡은 현안·할 일·사람. 출처는 「전임자가 직접 적음」으로 남습니다)</span>
+<div class="row"><select id="addType"><option>진행 중 현안</option><option>월별 할 일</option><option>협의할 사람</option></select><input type="text" id="addWhen" placeholder="시기(예: 2026년 2월)" style="width:150px"><input type="text" id="addText" class="wide" placeholder="내용"><input type="text" id="addNote" placeholder="메모(선택)" style="width:200px"><button id="btnAdd">추가</button></div></div>
+<details id="droppedBox"><summary>불확실(제외): 발췌가 원문에서 확인되지 않아 뺀 모델 항목 <span class="count" id="nDropped"></span></summary><div id="dropped"></div></details>
+<details id="errBox"><summary>처리 중 오류 <span class="count" id="nErr"></span></summary><div id="errs" class="hint"></div></details>
+<div class="row"><button id="btnExport">인수인계서 내보내기(.md + .docx)</button><button class="ghost" onclick="window.print()">이 화면 인쇄</button></div>
+</section>
+
+<section class="step" id="s5"><h2><span class="n">5</span>내보낸 파일</h2>
+<div id="exports"></div>
+<div class="hint">파일은 작업 폴더에 저장됩니다. .docx는 워드·한글에서 열어 꾸미고, 원본지문.csv는 처리 전후 원본이 바뀌지 않았다는 증빙입니다. 인수인계서에는 개인정보(전화번호 등)가 들어 있으니 업무 목적 외 사용·보관을 금합니다.</div>
+</section>
+
+<details><summary>작업 기록</summary><div id="log"></div></details>
+<footer>돌다리 v1.0 · 「2026년 공공 AI 대전환 챌린지」 세션2 지정과제① 업무바통 출품작 · © 2026 이희재(정읍우체국). 모든 처리는 이 PC 안에서만 이루어집니다.</footer>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
