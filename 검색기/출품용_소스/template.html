@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src @@CSP@@; style-src 'unsafe-inline'; img-src data:; connect-src https://*.epost.go.kr https://*.koreapost.go.kr https://*.law.go.kr http://localhost:* http://127.0.0.1:*; form-action 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="이희재">
+<meta name="creator" content="이희재">
+<meta name="generator" content="우편번호 자동검색기 v1.4">
+<meta name="version" content="1.4">
+<meta name="build-date" content="2026-10-05">
+<meta name="copyright" content="© 2026 이희재(정읍우체국). 2026 공공 AI 대전환 챌린지 출품본 — 대회 규정에 따른 사용권 부여">
+<meta name="dcterms.creator" content="이희재">
+<meta name="dcterms.rightsHolder" content="이희재">
+<title>우편번호 자동검색기 v1.4 (출품본)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c8102e'/%3E%3Crect x='7' y='10' width='18' height='13' rx='2' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='m7.5 12 8.5 6 8.5-6' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f4f5f7; --card:#ffffff; --ink:#1c2430; --ink2:#566273; --line:#dfe3ea; --line2:#eef0f4;
+  --accent:#c8102e; --accent-ink:#ffffff; --accent-soft:#fdecef;
+  --ok:#1f7a4d; --ok-bg:#e6f4ec; --sim:#8a5a00; --sim-bg:#fff3d1; --sim2:#9a4a00; --sim2-bg:#ffe4cc; --fail:#b3261e; --fail-bg:#fde7e5;
+  --tint:#f3f6fa; --focus:#2563eb; --shadow:0 1px 2px rgba(20,30,50,.06),0 4px 14px rgba(20,30,50,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#12161c; --card:#1a2029; --ink:#e8ecf2; --ink2:#9aa6b6; --line:#2c3542; --line2:#232b36;
+    --accent:#ff5a6e; --accent-ink:#1a0a0d; --accent-soft:#3a1a20;
+    --ok:#6fd39f; --ok-bg:#15342a; --sim:#f2c35b; --sim-bg:#3a2f12; --sim2:#ffab6b; --sim2-bg:#3d2514; --fail:#ff8a80; --fail-bg:#3f1c1a;
+    --tint:#202835; --focus:#7aa7ff; --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15.5px/1.6 "Pretendard","Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+h1,h2,h3,p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+.top{background:var(--card);border-bottom:1px solid var(--line)}
+.top-in{display:flex;gap:20px;align-items:center;justify-content:space-between;padding-top:18px;padding-bottom:18px;flex-wrap:wrap}
+.brand{display:flex;gap:14px;align-items:center;min-width:0;flex:1 1 440px}
+.mark{flex:none;width:46px;height:46px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center}
+.mark svg{width:26px;height:26px}
+h1{font-size:22px;letter-spacing:-.02em}
+.sub{color:var(--ink2);font-size:14.5px;margin-top:2px;text-wrap:pretty}
+.dbbox{display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none}
+.dbline{font-size:14px;color:var(--ink2);display:flex;align-items:center;gap:7px}
+.dot{width:8px;height:8px;border-radius:50%;background:#c2c8d2}
+.dot.on{background:var(--ok)} .dot.err{background:var(--fail)} .dot.warn{background:#d9a400}
+.dbbtns{display:flex;gap:6px}
+
+main.wrap{padding-top:22px;padding-bottom:60px;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px 20px;box-shadow:var(--shadow)}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.card-h h2{font-size:17px;letter-spacing:-.01em}
+.no{width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--card);display:grid;place-items:center;font-size:14px;font-weight:700;flex:none}
+.hint{color:var(--ink2);font-size:14px;margin-left:4px}
+.tabs{margin-left:auto;display:flex;background:var(--line2);border-radius:9px;padding:3px}
+.tab{border:0;background:transparent;padding:5px 14px;border-radius:7px;cursor:pointer;color:var(--ink2);font-size:14.5px}
+.tab.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12);font-weight:600}
+
+.drop{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 16px;border:2px dashed var(--line);border-radius:12px;cursor:pointer;text-align:center;transition:background .15s,border-color .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop-ico{font-size:22px;color:var(--accent)}
+.drop-t{font-weight:600}
+.drop-s{color:var(--ink2);font-size:14px}
+textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--card);resize:vertical;min-height:120px}
+.msg{margin-top:12px;padding:10px 12px;border-radius:10px;font-size:14.5px;background:var(--line2);color:var(--ink)}
+.msg.err{background:var(--fail-bg);color:var(--fail)} .msg.ok{background:var(--ok-bg);color:var(--ok)} .msg.warn{background:var(--sim-bg);color:var(--sim)}
+
+.btn{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:8px 16px;cursor:pointer;font-weight:600;font-size:15px;white-space:nowrap}
+.btn:hover{border-color:var(--ink2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.ghost{background:transparent}
+.btn.sm{padding:5px 11px;font-size:14px;font-weight:500}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.row-r{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.row-c{display:flex;justify-content:center;margin-top:12px}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field.inline{flex-direction:row;align-items:center;gap:8px}
+.field label{font-size:14px;color:var(--ink2);font-weight:600}
+.field label small{font-weight:400;margin-left:4px}
+.fmsg{font-size:13.5px;color:var(--ink2);min-height:1em}
+.fmsg.bad{color:var(--fail)} .fmsg.good{color:var(--ok)}
+select,input[type=text]{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--card);min-width:0;width:100%}
+.field.inline select{width:auto}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px}
+.cols .field.req label::after{content:" 필수";color:var(--accent);font-weight:600;font-size:12.5px}
+.opt{margin-top:14px;border-top:1px solid var(--line2);padding-top:10px}
+.opt summary{cursor:pointer;color:var(--ink2);font-size:14.5px;font-weight:600;margin-bottom:10px}
+
+.preview-wrap,.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px;margin-top:14px}
+.preview-wrap{max-height:220px}
+.table-wrap{max-height:560px}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line2);text-align:left;vertical-align:top}
+thead th{position:sticky;top:0;background:var(--line2);font-weight:600;color:var(--ink2);white-space:nowrap;z-index:1}
+.preview td,.preview th{white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+.preview th{vertical-align:bottom}
+.preview th.hl,.preview td.hl{background:var(--accent-soft)}
+.preview th.hl2,.preview td.hl2{background:var(--tint)}
+.preview th small{display:block;font-weight:600;color:var(--ink2);font-size:12.5px}
+.preview th.hl small{color:var(--accent)}
+.result{min-width:880px}
+.result td{overflow-wrap:anywhere}
+.c-no{width:60px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.c-zip{width:92px}.c-gr{width:84px}
+.result td.c-no{color:var(--ink2)}
+.zipin{width:74px;padding:4px 6px;border-radius:7px;font-variant-numeric:tabular-nums;letter-spacing:.03em}
+.zipin.edited{border-color:var(--focus);background:rgba(37,99,235,.08)}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:13px;font-weight:700;white-space:nowrap}
+.g-ok{background:var(--ok-bg);color:var(--ok)} .g-sim{background:var(--sim-bg);color:var(--sim)} .g-sim2{background:var(--sim2-bg);color:var(--sim2)} .g-fail{background:var(--fail-bg);color:var(--fail)} .g-edit{background:rgba(37,99,235,.12);color:var(--focus)}
+.note{color:var(--ink2)}
+.was{display:block;color:var(--ink2);font-size:13px}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.tile b{display:block;font-size:22px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.tile span{font-size:13.5px;color:var(--ink2)}
+.tile.t-ok b{color:var(--ok)} .tile.t-sim b{color:var(--sim)} .tile.t-fail b{color:var(--fail)}
+.bar{display:flex;height:8px;border-radius:99px;overflow:hidden;margin-top:12px;background:var(--line2)}
+.bar i{display:block;height:100%}
+.bar .b-ok{background:var(--ok)} .bar .b-s1{background:#e0b341} .bar .b-s2{background:#e08a41} .bar .b-fail{background:var(--fail)}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+.chip{border:1px solid var(--line);background:transparent;border-radius:999px;padding:4px 12px;font-size:14px;cursor:pointer}
+.chip.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
+
+.presets{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.preset{border:1px solid var(--line);border-radius:12px;padding:11px 13px;cursor:pointer;display:flex;flex-direction:column;gap:3px;text-align:left;background:transparent}
+.preset b{font-size:15px}
+.preset span{font-size:13.5px;color:var(--ink2)}
+.preset.on{border-color:var(--accent);background:var(--accent-soft)}
+#presetOpts{margin-top:14px}
+.sub-h{font-size:14.5px;font-weight:700;margin:4px 0 8px}
+.dl-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px;border-top:1px solid var(--line2);padding-top:14px}
+.grow{flex:1}
+.chk{display:flex;gap:6px;align-items:center;font-size:14.5px;cursor:pointer}
+.clist{display:flex;flex-direction:column;gap:6px}
+.crow{display:grid;grid-template-columns:28px 1fr 1fr 110px 64px;gap:6px;align-items:center}
+.crow .idx{color:var(--ink2);font-size:13.5px;text-align:center}
+.mini{padding:5px 8px;font-size:13.5px;border-radius:7px}
+.tools{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}
+
+dialog{border:1px solid var(--line);border-radius:14px;padding:0;max-width:720px;width:calc(100% - 32px);background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(10,15,25,.5)}
+.dlg-h{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+.dlg-b{padding:16px 20px 22px;max-height:70vh;overflow:auto;font-size:15px}
+.dlg-b h3{font-size:15px;margin:16px 0 8px} .dlg-b h3:first-child{margin-top:0}
+.dlg-b ul{margin:0;padding-left:18px} .dlg-b li{margin:4px 0}
+.help th{width:84px;white-space:nowrap}
+
+.busy{position:fixed;inset:0;background:rgba(10,15,25,.45);display:grid;place-items:center;z-index:50}
+.busy[hidden]{display:none}
+.busy-in{background:var(--card);border-radius:14px;padding:22px 26px;min-width:260px;display:flex;flex-direction:column;gap:12px;align-items:center}
+.spin{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.prog{width:100%;height:6px;background:var(--line2);border-radius:99px;overflow:hidden}
+.prog div{height:100%;width:0;background:var(--accent);transition:width .1s}
+[hidden]{display:none !important}
+@media (max-width:640px){.dbbox{align-items:flex-start}.tabs{margin-left:0}.crow{grid-template-columns:22px 1fr 1fr}}
+
+
+/* ---- DB 기준일 배지 */
+.age{font-size:13px;padding:1px 7px;border-radius:99px;background:var(--ok-bg);color:var(--ok)}
+.age.warn{background:var(--sim-bg);color:var(--sim)}
+.age.old{background:var(--fail-bg);color:var(--fail);font-weight:700}
+
+/* ---- 결과표: 배달 우체국·찾기 단추 */
+.off{display:block;font-size:12.5px;color:var(--ink2);margin-top:3px;white-space:nowrap}
+.findbtn{margin-top:5px;display:block;border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:7px;padding:2px 7px;font-size:12.5px;cursor:pointer}
+.findbtn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---- 주소 찾기 */
+.findbar{display:flex;gap:8px;align-items:center}
+.findbar input{flex:1;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--card)}
+#findBest{margin:12px 0}
+.fb{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid var(--ok);background:var(--ok-bg);border-radius:10px;padding:10px 12px}
+.fb.none{border-color:var(--line);background:var(--tint);color:var(--ink2);display:block}
+.fb .z{font-size:19px;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+.fb .a{flex:1;min-width:180px}
+.fb .m{font-size:13.5px;color:var(--ink2)}
+.flist{display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow:auto;margin-bottom:10px}
+.frow{display:grid;grid-template-columns:62px 1fr 108px 116px;gap:8px;align-items:center;text-align:left;border:1px solid var(--line2);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 10px;cursor:pointer;font-size:14px}
+.frow:hover{border-color:var(--accent);background:var(--accent-soft)}
+.frow b{font-variant-numeric:tabular-nums}
+.frow .r,.frow .o{color:var(--ink2);font-size:13px;text-align:right}
+@media (max-width:640px){.frow{grid-template-columns:58px 1fr;}.frow .r,.frow .o{display:none}}
+
+/* ---- DB 최신화 창 */
+.updnow{display:flex;gap:10px;align-items:baseline;margin-bottom:8px}
+.updnow .big{font-size:16px}
+.big.good{color:var(--ok)} .big.warn{color:var(--sim)} .big.bad{color:var(--fail)}
+.netline{display:flex;gap:8px;align-items:center;font-size:14.5px;color:var(--ink2);background:var(--tint);border-radius:9px;padding:9px 12px;margin-bottom:14px}
+.updfoot{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line2);margin-top:16px;padding-top:12px}
+#updGuide{width:100%;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--tint);font-size:13.5px;font-family:ui-monospace,Consolas,monospace}
+
+/* ---- 라벨 인쇄 */
+.lbprev{margin-top:14px;background:var(--tint);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;max-height:46vh}
+.lbprev #labelArea{zoom:.72}
+#labelArea .sheet{width:210mm;min-height:297mm;padding:10mm 6mm;background:#fff;color:#000;margin:0 auto 10px;display:grid;grid-template-columns:repeat(var(--cols),var(--lw));grid-auto-rows:var(--lh);box-shadow:0 1px 6px rgba(0,0,0,.15)}
+#labelArea .label{padding:3mm 4mm;overflow:hidden;font-size:var(--fs);line-height:1.45;display:flex;flex-direction:column;justify-content:center;gap:1mm}
+#labelArea .from{font-size:.72em;color:#555}
+#labelArea .zip{font-size:1.18em;font-weight:700;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+#labelArea .addr{word-break:keep-all}
+#labelArea .to{font-weight:700;margin-top:.5mm}
+#labelArea .to em{font-style:normal;font-weight:400}
+#labelArea .to .tel{font-weight:400;font-size:.82em;color:#444;margin-left:3mm}
+
+@media print{
+  body{background:#fff}
+  body > *{display:none !important}
+  dialog#labelDlg[open]{display:block !important;position:static;border:0;padding:0;margin:0;max-width:none;width:auto;background:#fff}
+  dialog#labelDlg[open]::backdrop{display:none}
+  #labelDlg .dlg-h,#labelDlg .grid2,#labelDlg .row-r,#labelDlg .hint{display:none !important}
+  #labelDlg .dlg-b{padding:0;max-height:none;overflow:visible}
+  .lbprev{margin:0;padding:0;border:0;background:#fff;max-height:none;overflow:visible}
+  #labelArea .sheet{box-shadow:none;margin:0;break-after:page;page-break-after:always}
+  #labelArea .sheet:last-child{break-after:auto;page-break-after:auto}
+  @page{size:A4;margin:0}
+}
+dialog#labelDlg{max-width:860px}
+dialog#findDlg{max-width:820px}
+@media print{.lbprev #labelArea{zoom:1}}
+
+/* ---- 개인정보 가림 */
+.chip.mask{margin-left:auto;border-color:var(--ok);color:var(--ok)}
+.chip.mask:not(.on){border-color:var(--fail);color:var(--fail);background:var(--fail-bg);font-weight:700}
+tr.masked td{color:var(--ink)}
+.eye{display:block;margin:4px auto 0;border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:6px;padding:1px 5px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.eye:hover{border-color:var(--focus);color:var(--focus)}
+#labelArea .pr{display:none}
+@media print{#labelArea .pv{display:none}#labelArea .pr{display:inline}}
+
+/* ---- 처리 이력 */
+.logwrap{margin-top:12px;max-height:46vh;overflow:auto;border:1px solid var(--line2);border-radius:9px}
+.logt{width:100%;border-collapse:collapse;font-size:13.5px}
+.logt th{position:sticky;top:0;background:var(--tint);text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);font-weight:600;white-space:nowrap}
+.logt td{padding:6px 9px;border-bottom:1px solid var(--line2);vertical-align:top}
+.logt td.n,.logt th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.logt tr:last-child td{border-bottom:0}
+dialog#privacyDlg{max-width:620px}
+dialog#logDlg{max-width:760px}
+
+/* ---- 글자 크기 조절 */
+.zoomer{display:inline-flex;align-items:center;gap:4px;margin-right:4px}
+.zoomer #zoomNow{font-size:12.5px;color:var(--ink2);min-width:38px;text-align:center;font-variant-numeric:tabular-nums}
+.btn.zb{padding:3px 8px;font-weight:700;line-height:1.2}
+.btn.zb small{font-size:.85em;margin-left:1px}
+.btn.zb:disabled{opacity:.4;cursor:default}
+
+/* ---- 결과표 정렬 */
+.result thead th[data-sort]{cursor:pointer;user-select:none}
+.result thead th[data-sort]:hover{color:var(--accent)}
+.result thead th[data-sort]::after{content:'';opacity:.35;margin-left:5px;font-size:.85em}
+.result thead th[data-sort]:hover::after{content:'↕'}
+.result thead th.sorted::after{content:'↑';opacity:1;color:var(--accent)}
+.result thead th.sorted-desc::after{content:'↓';opacity:1;color:var(--accent)}
+
+/* ── 제작·버전·무결성 표시 (footer) ── */
+.foot{margin:34px auto 26px;color:var(--ink2)}
+.foot-in{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between;border-top:1px solid var(--line);padding-top:14px}
+.foot-l{font-size:14px}
+.foot-l b{color:var(--ink)}
+.foot .ver{display:inline-block;background:var(--line2);color:var(--ink2);border-radius:6px;padding:1px 7px;font-size:12.5px;font-weight:700;letter-spacing:.2px}
+.foot .sep{opacity:.45;margin:0 2px}
+.dim{color:var(--ink2)}
+.foot-r{display:flex;align-items:center;gap:8px}
+.foot-c{font-size:12.5px;color:var(--ink2);margin:10px 2px 0;line-height:1.55}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12.5px;font-weight:700;color:var(--ink2);background:var(--card)}
+.chip.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+.chip.bad{background:var(--fail-bg);color:var(--fail);border-color:transparent}
+.fp{font-family:ui-monospace,"Menlo","Consolas",monospace;font-size:12px;word-break:break-all;color:var(--ink2)}
+
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7.5 8.5 6 8.5-6"/></svg></span>
+      <div>
+        <h1>우편번호 자동검색기</h1>
+        <p class="sub">주소록을 넣으면 우편번호를 찾아 채우고 등록용 양식으로 바꿉니다. 모든 처리는 이 PC 안에서만 이루어집니다.</p>
+      </div>
+    </div>
+    <div class="dbbox">
+      <div class="dbline"><span class="dot" id="dbDot"></span><span id="dbInfo">우편번호 DB를 여는 중…</span></div>
+      <div class="dbbtns">
+        <span class="zoomer" role="group" aria-label="글자 크기">
+          <button type="button" class="btn ghost sm zb" id="btnZoomOut" title="글자 작게" aria-label="글자 작게">가<small>−</small></button>
+          <span id="zoomNow" title="글자 크기">100%</span>
+          <button type="button" class="btn ghost sm zb" id="btnZoomIn" title="글자 크게" aria-label="글자 크게">가<small>+</small></button>
+        </span>
+        <button type="button" class="btn ghost sm" id="btnFind">주소 찾기</button>
+        <button type="button" class="btn ghost sm" id="btnDbUpdate">DB 최신화</button>
+        <button type="button" class="btn ghost sm" id="btnLog">처리 이력</button>
+        <button type="button" class="btn ghost sm" id="btnWipe">끝내고 지우기</button>
+        <button type="button" class="btn ghost sm" id="btnHelp">판정 기준·도움말</button>
+      </div>
+      <input type="file" id="dbFiles" multiple accept=".zip,.txt" hidden aria-label="우편번호 DB 파일">
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="card" id="step1">
+    <div class="card-h"><span class="no">1</span><h2>주소록 넣기</h2>
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab on" data-tab="file" role="tab">파일</button>
+        <button type="button" class="tab" data-tab="paste" role="tab">직접 입력</button>
+      </div>
+    </div>
+    <div id="tab-file">
+      <label class="drop" id="drop" for="fileInput" tabindex="0">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.txt,.cell,.ods,.tsv" hidden>
+        <span class="drop-ico" aria-hidden="true">⬇</span>
+        <span class="drop-t">엑셀·한셀·CSV 파일을 여기에 끌어다 놓거나 눌러서 고르세요</span>
+        <span class="drop-s">xlsx · xls · cell · csv · txt — 주소 열은 자동으로 찾습니다</span>
+      </label>
+    </div>
+    <div id="tab-paste" hidden>
+      <textarea id="pasteBox" rows="6" placeholder="주소를 한 줄에 하나씩 붙여 넣으세요.&#10;예) 대전 서구 둔산동 920 정부대전청사 1동 11층&#10;    부산 기장군 기장읍 시랑리 408-1"></textarea>
+      <div class="row-r"><button type="button" class="btn" id="btnPaste">이 주소들로 검색</button></div>
+    </div>
+    <p class="msg" id="fileMsg" hidden></p>
+  </section>
+
+  <section class="card" id="step2" hidden>
+    <div class="card-h"><span class="no">2</span><h2>열 확인</h2><span class="hint" id="fileLabel"></span></div>
+    <div class="grid2">
+      <div class="field" id="sheetField"><label for="selSheet">시트</label><select id="selSheet"></select></div>
+      <div class="field"><label for="selHeader">제목 줄</label><select id="selHeader"></select></div>
+    </div>
+    <div class="cols" id="colMap"></div>
+    <details class="opt">
+      <summary>검색 옵션</summary>
+      <div class="grid2">
+        <div class="field">
+          <label for="optRegion">기본 지역 <small>시·군이 빠진 주소에 적용</small></label>
+          <input type="text" id="optRegion" placeholder="예) 전북특별자치도 정읍시">
+          <small class="fmsg" id="regionMsg"></small>
+        </div>
+        <div class="field">
+          <label for="optZipPolicy">기존 우편번호가 있을 때</label>
+          <select id="optZipPolicy">
+            <option value="smart">정확히 찾은 경우만 새 번호로 교체 (권장)</option>
+            <option value="fill">비어 있거나 틀린 형식일 때만 채움</option>
+            <option value="replace">항상 검색한 번호로 교체</option>
+          </select>
+        </div>
+      </div>
+    </details>
+    <div class="preview-wrap"><table class="preview" id="previewTable"></table></div>
+    <div class="row-r"><button type="button" class="btn primary" id="btnRun">우편번호 검색</button></div>
+  </section>
+
+  <section class="card" id="step3" hidden>
+    <div class="card-h"><span class="no">3</span><h2>검색 결과</h2><span class="hint" id="runInfo"></span>
+      <span class="grow"></span><button type="button" class="btn ghost sm" id="btnSummary">결과 요약 복사</button></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="bar" id="ratioBar" aria-hidden="true"></div>
+    <div class="filters" id="filters"></div>
+    <div class="table-wrap">
+      <table class="result" id="resultTable">
+        <thead><tr><th class="c-no" data-sort="no" title="눌러서 정렬">행</th><th data-sort="addr" title="눌러서 정렬">원본 주소</th><th class="c-zip" data-sort="zip" title="눌러서 정렬">우편번호</th><th class="c-gr" data-sort="grade" title="눌러서 정렬">결과</th><th>근거</th><th>정제 주소</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="row-c"><button type="button" class="btn ghost" id="btnMore" hidden>더 보기</button></div>
+  </section>
+
+  <section class="card" id="step4" hidden>
+    <div class="card-h"><span class="no">4</span><h2>내려받기</h2></div>
+    <div class="presets" id="presets"></div>
+    <div id="presetOpts"></div>
+    <div class="dl-row">
+      <div class="field inline"><label for="selFormat">파일 형식</label><select id="selFormat"></select></div>
+      <label class="chk" id="chkSkipWrap"><input type="checkbox" id="chkSkipFail"> 우편번호를 못 찾은 행은 빼기</label>
+      <span class="grow"></span>
+      <button type="button" class="btn ghost" id="btnLabel">라벨 인쇄</button>
+      <button type="button" class="btn ghost" id="btnCopy">표 복사</button>
+      <button type="button" class="btn ghost" id="btnReport">점검표(유사·실패)</button>
+      <button type="button" class="btn primary" id="btnDownload">내려받기</button>
+    </div>
+    <p class="msg" id="dlMsg" hidden></p>
+  </section>
+
+</main>
+
+<footer class="foot wrap">
+  <div class="foot-in">
+    <div class="foot-l">
+      <b>우편번호 자동검색기</b> <span class="ver">v1.4</span>
+      <span class="sep">·</span> 제작 <b>이희재</b>
+      <span class="sep">·</span> <span class="dim">2026-10-05</span>
+    </div>
+    <div class="foot-r">
+      <span class="chip" id="intChip" title="파일이 원본 그대로인지 스스로 확인한 결과입니다.">무결성 확인 중…</span>
+      <button type="button" class="btn ghost sm" id="btnAbout">파일 정보</button>
+    </div>
+  </div>
+  <p class="foot-c">© 2026 이희재(정읍우체국). 「2026 공공 AI 대전환 챌린지」 출품본 — 대회 규정에 따라 행정안전부에 사용권을 부여합니다. 공개된 주소정보(도로명주소법·우정사업본부 고시)를 근거로 동작합니다.</p>
+</footer>
+
+<dialog id="aboutDlg">
+  <div class="dlg-h"><h2>파일 정보</h2><button type="button" class="btn ghost sm" data-close>닫기</button></div>
+  <div class="dlg-b">
+    <table class="help">
+      <tr><th>이름</th><td>우편번호 자동검색기</td></tr>
+      <tr><th>버전</th><td>v1.4 <span class="dim">(QR 접수 메모 · 예시 체험 · AI 연결 시험 · 오픈소스 고지 / v1.3 감열 인쇄 · v1.2 어르신 직접 입력 · v1.1 복수배송지 · v1.0 2026-09-19)</span></td></tr>
+      <tr><th>제작</th><td>이희재</td></tr>
+      <tr><th>만든 날</th><td>2026-10-05</td></tr>
+      <tr><th>우편번호 DB</th><td><span id="aboutDb">-</span></td></tr><tr><th>자료 근거</th><td>우정사업본부 우편번호 고시(별표 5 범위자료·사서함, 국가법령정보센터 공개)와 인터넷우체국 범위주소·사서함 DB를 바탕으로 동작합니다. 실제 고객 정보는 들어 있지 않습니다.</td></tr><tr><th>오픈소스</th><td>xlsx-js-style 1.2.0(SheetJS CE 0.18.5 기반, Apache-2.0) · fflate(MIT) · qrcode-generator 1.4.4(MIT)<details><summary>라이선스 전문 보기</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:40vh;overflow:auto">■ fflate — MIT License
+Copyright (c) 2020 Arjun Barrett
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the &quot;Software&quot;), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+■ qrcode-generator 1.4.4 — MIT License
+Copyright (c) 2009 Kazuhiko Arase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the &quot;Software&quot;), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+■ xlsx-js-style 1.2.0 (SheetJS Community Edition 0.18.5 기반) — Apache License 2.0
+Copyright (C) SheetJS LLC, (C) gitbrent
+
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      &quot;License&quot; shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      &quot;Licensor&quot; shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      &quot;Legal Entity&quot; shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      &quot;control&quot; means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      &quot;You&quot; (or &quot;Your&quot;) shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      &quot;Source&quot; form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      &quot;Object&quot; form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      &quot;Work&quot; shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      &quot;Derivative Works&quot; shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      &quot;Contribution&quot; shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, &quot;submitted&quot;
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as &quot;Not a Contribution.&quot;
+
+      &quot;Contributor&quot; shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a &quot;NOTICE&quot; text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an &quot;AS IS&quot; BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets &quot;[]&quot;
+      replaced with your own identifying information. (Don&#x27;t include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same &quot;printed page&quot; as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+</pre></details></td></tr>
+      <tr><th>무결성</th><td><span id="aboutInt">-</span></td></tr>
+      <tr><th>핵심 지문<br>(SHA-256)</th><td><code id="aboutFp" class="fp">@@EXPECTED@@</code><br><span class="dim">파일 전체의 SHA-256은 배포처 공문·게시글에 함께 안내됩니다. 두 값이 모두 맞아야 원본입니다.</span></td></tr>
+    </table>
+    <p class="hint">이 파일은 손대면 무결성 표시가 「변경됨」으로 바뀝니다. 다만 클라이언트 프로그램의 특성상 완벽한 복제 방지는 불가능하므로, 배포처가 안내한 SHA-256 값과 대조하는 것이 가장 확실한 확인 방법입니다.</p>
+    <div class="row-r"><button type="button" class="btn primary" data-close>닫기</button></div>
+  </div>
+</dialog>
+
+<dialog id="helpDlg">
+  <div class="dlg-h"><h2>판정 기준·도움말</h2><button type="button" class="btn ghost sm" data-close>닫기</button></div>
+  <div class="dlg-b">
+    <h3>결과 구분</h3>
+    <table class="help">
+      <tr><th><span class="badge g-ok">정확</span></th><td>도로명·건물번호 또는 읍면동(리)·번지가 우편번호 DB 구간 안에 있습니다.</td></tr>
+      <tr><th><span class="badge g-sim">유사·상</span></th><td>표기만 보정했거나(옛 행정구역명, 행정리→법정리, 읍·면 생략), 해당 도로·리의 우편번호가 하나뿐이라 사실상 확실한 경우입니다.</td></tr>
+      <tr><th><span class="badge g-sim">유사·중</span></th><td>같은 도로의 가까운 번호 구간, 같은 리의 가까운 번지 구간, 한 글자 오탈자 보정 등으로 추정했습니다.</td></tr>
+      <tr><th><span class="badge g-sim2">유사·하</span></th><td>도시 지역에서 동까지만 맞았거나 도로명까지만 있는 경우입니다. 한 동에 우편번호가 여러 개라 틀릴 수 있지만 대부분 같은 집배 권역(앞 3자리) 안입니다.</td></tr>
+      <tr><th><span class="badge g-fail">실패</span></th><td>시·군·구나 읍면동·도로명을 알 수 없습니다. 기존 우편번호가 있으면 그대로 둡니다.</td></tr>
+    </table>
+    <h3>알아 둘 점</h3>
+    <ul>
+      <li>우편번호 DB는 번호 <b>구간</b> 자료입니다. 건물이 실제로 있는지는 확인하지 않으므로, 접수 시스템의 주소검증에서 걸리는 건이 일부 남을 수 있습니다.</li>
+      <li>지번 주소는 한 필지에 우편번호가 둘 이상인 곳(대단지 등)이 드물게 있어 0.1% 정도 어긋날 수 있습니다.</li>
+      <li>지번 주소에 행정동(예: 내장상동, 역삼1동)을 적은 경우는 DB에 법정동만 있어 찾지 못하거나 「유사」로 표시됩니다. 행정동 이름이 다른 법정동 이름과 같으면 그 법정동으로 읽힐 수 있습니다.</li>
+      <li>「산」 번지인데 「산」을 빠뜨린 주소는 일반 번지로 읽힙니다.</li>
+      <li>번호 뒤에 건물명이 붙어 있거나(146현대아파트) 띄어쓰기가 어긋난 주소는 맞게 찾아도 「유사」로 표시해 한 번 더 보시도록 했습니다.</li>
+      <li>시·군이 빠진 지역 주소록은 「검색 옵션 ▸ 기본 지역」에 시·군을 적어 두면 찾습니다.</li>
+      <li>우편번호 칸은 표에서 바로 고칠 수 있고(Enter를 누르면 다음 줄로 넘어갑니다), 고친 값이 내려받는 파일에 들어갑니다.</li>
+      <li>글자가 작으면 왼쪽 위 <b>가− 가+</b>로 키우세요(Ctrl+＋ / Ctrl+－). 키운 크기는 다음에도 그대로 쓰입니다.</li>
+      <li>표의 제목(행·원본 주소·우편번호·결과)을 누르면 그 기준으로 정렬됩니다.</li>
+      <li>엑셀에서 여러 칸을 복사해 「직접 입력」에 붙여 넣으면 표 그대로 읽습니다. 파일은 창 아무 데나 끌어다 놓아도 됩니다.</li>
+      <li>표 맨 위에 「○○ 주소록」 같은 제목이 얹혀 있어도, 그 아래의 항목 이름 줄(순번·성명·주소…)을 찾아 제목 줄로 잡습니다. 「주 소」처럼 띄어 쓴 머리글도 알아봅니다.</li>
+      <li>행정동(내장상동·역삼1동 등)으로 적은 지번 주소는 <b>행정동↔법정동 대조표</b>로 바꿔 찾습니다. 한 행정동이 여러 법정동을 관할하면 번지로 가려내고, 그래도 갈리면 「유사」로 표시합니다.</li>
+      <li>우편번호 옆의 <b>배달 우체국</b>은 그 번호를 배달하는 집배국입니다. 번호가 조금 달라도 배달국이 같으면 같은 집배 권역입니다.</li>
+      <li>도로명·번지로 끝내 못 찾은 주소는 <b>건물·상호 이름</b>으로 한 번 더 찾습니다(예: 「전북 정읍시 정읍시청」, 「서산시 힐스테이트서산 405동」). 전국 61만 건의 건물명 자료를 쓰며, 이름이 같은 건물이 그 시·군·구에 여럿이면 「유사·중」으로 알려 줍니다.</li>
+    </ul>
+    <h3>우편번호가 붙지 않는 주소 — 접수 시스템 기준</h3>
+    <ul>
+      <li>시·도는 반드시 적습니다. 약칭(서울, 충남, 경기)은 됩니다.</li>
+      <li>시·군·구는 접미사까지 적습니다. 「서울 종로구」(O) / 「서울 종로」(X)</li>
+      <li>읍·면 지역은 읍·면을 적습니다. 도로명은 「대로·로·길」을 정확히 적습니다. 「인사동6길」(O) / 「인사동6로」(X), 「평화로15번길」(O) / 「평화로 15번길」(X)</li>
+      <li>지하는 도로명과 건물번호 사이에 적습니다. 「종로 지하 55」(O) / 「종로 55 지하」(X)</li>
+      <li>건물번호 뒤에는 접미사를 붙이지 않습니다. 「정보화길 1번지」(X), 「인동길 25의1」(X) — 주·부번은 하이픈(-)으로 잇습니다.</li>
+      <li>주소 끝의 마침표(.)는 오류가 됩니다. 쉼표(,)는 괜찮습니다.</li>
+      <li>지번은 「빛가람동 219」 「산25-1」처럼 적고, 「689의3」은 인식되지 않습니다.</li>
+      <li>배달 정확도를 위해 동·층·호수와 참고항목(법정동, 아파트명)을 함께 적는 것이 좋습니다.</li>
+    </ul>
+    <h3>우체국쇼핑 복수배송지(여러곳배송) 만들기 <span class="dim">v1.1</span></h3>
+    <ul>
+      <li>주소록에 <b>보내는 분(주문자)</b> 열이 있으면 행마다 그 사람을 발송인으로 넣습니다. 머리글에 발송·보내는·송하인·주문자·신청인이 들어간 열을 보내는 분으로 알아보며, 「열 확인」에서 직접 고칠 수 있습니다.</li>
+      <li>「보내는 분 정하기」는 세 가지입니다. ① 파일의 보내는 분 열(행마다 따로) ② 받는 분과 같게(본인 수령) ③ 모든 행 같은 보내는 분(입력값).</li>
+      <li>발송인과 수취인이 <b>같은 건과 다른 건을 한 파일</b>에 섞어도 됩니다. 보내는 분 칸이 비면 받는 분과 같게(또는 고정값으로), 받는 분 칸이 비면 보내는 분 주소로 <b>본인 수령</b> 처리합니다.</li>
+      <li>보내는 분 주소의 우편번호도 함께 찾습니다. 못 찾은 행은 내려받을 때 행 번호로 알려 드립니다.</li>
+      <li>우체국쇼핑은 한 번에 300개 주소까지 올릴 수 있어 <b>300건씩 자동으로 나눕니다</b>. 상품명 열이 있으면 상품별로, 원하면 주문자별로도 나눕니다.</li>
+      <li>수량 열이 있으면 수량만큼 줄을 늘립니다(1줄 = 1개). 업로드 뒤 화면에서 배송지별 수량을 따로 정할 수 있다면 이 선택을 끄고 쓰세요.</li>
+      <li>받는 분 전화가 없으면 보내는 분 전화로 채울 수 있습니다(기본 켜짐). 이때 배달 안내는 보내는 분에게 갑니다.</li>
+      <li>머리글 칸에 예시·주의 문구가 여러 줄 붙은 양식(여러곳배송 양식 등)도 각 칸의 <b>첫 줄</b>로 알아봅니다. 이미 만든 여러곳배송 파일의 우편번호만 고치려면 「원본 + 우편번호」로 내려받으세요. 받는 분·보내는 분 우편번호를 제자리에 채웁니다.</li>
+    </ul>
+    <h3>어르신 직접 입력 <span class="dim">v1.4</span></h3>
+    <ul>
+      <li>위의 <b>어르신 직접 입력</b>을 누르면 큰 글씨 대화 화면이 열립니다. 공중실 기기는 파일 주소 끝에 <code>#kiosk</code>를 붙여 열면 처음부터 이 화면으로 시작합니다.</li>
+      <li>어르신이 아시는 대로 적으면(인터넷 되는 기기는 말로도 가능) 빠진 부분만 되묻습니다 — 시·군·구 고르기, 비슷한 곳 목록, 번지·대문 번호, 동·호수. 우편번호는 언제나 고시 자료로 확정합니다.</li>
+      <li>받는 분 이름·전화를 받고, 마지막에 보내는 분 정보를 받아 <b>접수 메모 번호</b>를 드립니다. 「종이로 뽑기」로 메모를 출력하거나, 직원이 「접수 화면으로 넘기기」를 누르면 이 프로그램의 주소록으로 들어와 복수배송지·라벨 등으로 바로 내보낼 수 있습니다.</li>
+      <li>직원 설정은 화면 오른쪽 아래 <b>직원</b> 단추를 2초 동안 누르면 열립니다 — 우리 동네(기본 지역), 자동 지우기 시간, 종이로 뽑기 용지(A4·감열 80mm·58mm), 선택 기능인 AI 주소 정리(이 PC의 로컬 모델만 연결).</li>
+      <li>공중실에 구형 노트북과 저가 감열(영수증) 프린터를 두면, 어르신이 적은 주소가 「접수 메모」로 바로 뽑혀 창구에 전달됩니다. 감열 프린터를 기본 프린터로 두고 크롬을 <code>--kiosk --kiosk-printing</code>으로 실행하면 인쇄 확인 창 없이 뽑힙니다. 메모 길이는 내용만큼만 잡습니다.</li>
+      <li>메모 아래쪽 <b>QR</b>을 창구 스캐너로 찍으면 「QR 메모 읽기」 창에 주소가 바로 들어옵니다. 스캐너가 한글 상태로 입력해도 바로잡아 읽으며, 여러 장을 이어서 찍은 뒤 「주소록으로 넣기」를 누르면 복수배송지·라벨로 이어집니다.</li>
+      <li>「예시로 해 보기」는 공개된 기관 주소와 가상 이름으로 만든 모의 주문서를 불러와 전 과정을 바로 체험하게 합니다(실제 고객 정보 없음).</li>
+      <li>자리를 비우면 정해진 시간 뒤 확인을 묻고 지웁니다. 적은 내용은 저장하지 않으며, 처리 이력에는 건수만 남습니다.</li>
+    </ul>
+    <h3>개인정보 보호</h3>
+    <p>주소록은 개인정보입니다. 고객 정보 유출을 예방하려면 <b>업무 목적 외 조회를 막는 가림(마스킹)</b>과 <b>처리 이력 관리</b>가 기본입니다. 이 프로그램은 이 원칙에 따라 만들었습니다.</p>
+    <table class="help">
+      <tr><th>내 PC 안에서만</th><td>주소록 파일은 브라우저 안에서만 열립니다. 서버로 보내지 않고, 화면을 닫으면 사라집니다. 이 PC에 남는 것은 우편번호 DB·설정·처리 이력뿐입니다.</td></tr>
+      <tr><th>화면 가림</th><td>이름·전화·번지·동/호수를 기본으로 가립니다(시·군·구와 도로명은 확인할 수 있게 둡니다). 필요한 줄만 「보기」로 10초 동안 열 수 있고, 전체 가림을 풀면 처리 이력에 남습니다. 내려받는 파일과 인쇄물에는 원래 값이 들어갑니다.</td></tr>
+      <tr><th>처리 이력</th><td>언제·무엇을·몇 건 다뤘는지만 이 PC에 남깁니다. 주소·이름 같은 내용은 저장하지 않습니다. 엑셀로 내보내 점검 자료로 쓸 수 있습니다.</td></tr>
+      <tr><th>끝내고 지우기</th><td>화면의 주소록과 저장된 보내는 분 정보, 클립보드를 한 번에 정리합니다. 자리를 뜨기 전에 눌러 주세요.</td></tr>
+      <tr><th>외부 연결</th><td>스스로 바깥과 통신하지 않습니다. 「DB 최신화 ▸ 연결 확인」을 누를 때만 인터넷우체국·법령정보센터에 닿는지 확인합니다(주소록은 보내지 않습니다). 프로그램 안에 <b>접속 허용 목록</b>(epost.go.kr · koreapost.go.kr · law.go.kr)을 박아 두어, 설령 파일이 손상되더라도 그 밖으로는 접속 자체가 되지 않습니다.</td></tr>
+      <tr><th>조작된 파일</th><td>주소록·양식 파일의 글자는 모두 <b>글자로만</b> 다루므로, 파일에 스크립트를 심어도 실행되지 않습니다. 내려받는 CSV·복사한 표는 엑셀에서 수식으로 실행되지 않도록 처리합니다. DB 파일은 전국 자료의 모양(구간 수·시군구 수·우편번호 종류·기준일)을 확인한 뒤에만 적용합니다.</td></tr>
+    </table>
+    <p><b>받으신 파일이 원본인지 확인하려면</b> 윈도우 명령 프롬프트에서 <code>certutil -hashfile 우편번호_자동검색기.html SHA256</code> 을 실행해, 배포 공문에 적힌 값과 같은지 보세요(파워셸은 <code>Get-FileHash</code>). 값이 다르면 누군가 파일을 고친 것이므로 쓰지 마시고 알려 주세요.</p>
+    <p>내려받은 파일은 이 프로그램이 지울 수 없습니다. 용무가 끝나면 파기하고, 메일·메신저로 보낼 때는 엑셀에서 암호를 걸어 보내세요(파일 ▸ 정보 ▸ 통합 문서 보호 ▸ 암호 설정). 라벨을 인쇄한 뒤에는 공용 프린터에 남은 출력물을 확인해 주세요.</p>
+    <h3>DB 최신화</h3>
+    <p>우편번호 고시는 한 달에 한 번입니다. 위의 「DB 최신화」를 누르면 지금 DB가 며칠 지났는지 보여 주고, 3개월(주기 변경 가능)이 지나면 알려 줍니다. 넣는 방법은 두 가지이고 <b>자료는 서로 같습니다</b>.</p>
+    <table class="help">
+      <tr><th>법령정보센터<br>(권장)</th><td>우편번호 고시는 법령으로 공표되므로 <b>국가법령정보센터(law.go.kr)</b>에서 언제든 받을 수 있고, 이곳은 <b>내부망에서도 열립니다</b>. 「DB 최신화 ▸ 법령정보센터에서 고시 열기」를 누르면 늘 현행 고시로 들어가며, 본문 아래쪽 <b>별표 5 — 참고자료(도로명주소 및 지번주소 범위자료, 사서함)</b>를 받아 넣으면 됩니다.</td></tr>
+      <tr><th>고시 공문</th><td>매월 오는 고시 공문의 붙임 <b>별표 5</b>가 같은 파일입니다. <b>풀지 말고 그대로</b> 넣으세요. 도로명범위·지번범위·사서함이 한 파일에 다 들어 있습니다. 별표 1~4는 지역별(건물 단위) 자료라 쓰지 않습니다.</td></tr>
+      <tr><th>인터넷우체국</th><td>인터넷이 되는 PC에서 <b>범위주소 DB</b>(areacd_rangeaddr_DB.zip)와 <b>사서함주소 DB</b>(areacd_pobox_DB.zip)를 받아 같은 방법으로 넣습니다.</td></tr>
+    </table>
+    <p>창 아무 데나 끌어다 놓아도 되고, 교체한 DB는 이 PC의 브라우저에 저장되어 다음에도 그대로 쓰입니다. 내부망에서 쓰실 분에게는 「반출 안내문 복사」로 절차를 그대로 전달할 수 있습니다.</p>
+    <h3>함께 들어 있는 보조 자료</h3>
+    <table class="help">
+      <tr><th>행정동<br>대조표</th><td>행정동 2,156개 → 법정동. 우정사업정보센터 「우편번호(주소)찾기 프로그램」 오프라인용(2026-09-08)의 대조표.</td></tr>
+      <tr><th>배달<br>우체국</th><td>우편번호 34,811개 → 집배국 512곳. 같은 자료의 우편번호별 배달국 표.</td></tr>
+      <tr><th>건물명</th><td>건물·상호 이름 40만 개(항목 61만 건). 우정사업본부 고시 「도로명주소 연계 우편번호 조정 고시」 <b>별표 1~4(지역별 주소 DB)</b>의 「시군구용건물명」. 도로명주소법에 따라 공개되는 주소정보이며 개인정보는 들어 있지 않습니다.</td></tr>
+    </table>
+    <p>세 가지 모두 범위주소 DB에는 없는 자료여서 따로 넣었습니다. 「DB 최신화」로 범위 DB를 교체해도 이 자료는 그대로 쓰이므로(2026-09-08 기준), 시간이 지나면 실제와 조금 달라질 수 있습니다.</p>
+    <h3>지원 브라우저</h3>
+    <p>엣지·크롬·웨일 최신 버전. 인터넷 연결은 필요 없습니다.</p>
+  </div>
+</dialog>
+
+<dialog id="findDlg">
+  <div class="dlg-h"><h2>주소 찾기</h2><button type="button" class="btn ghost sm" data-close>닫기</button></div>
+  <div class="dlg-b">
+    <div class="findbar">
+      <input type="text" id="findQ" placeholder="예) 정읍시 충정로 146 · 강북구 솔매로50길 · 정읍시 정읍우체국 · 서산시 힐스테이트" aria-label="찾을 주소">
+      <button type="button" class="btn primary" id="btnFindGo">찾기</button>
+    </div>
+    <p class="hint" id="findHint"></p>
+    <div id="findBest"></div>
+    <div class="flist" id="findList"></div>
+    <p class="hint">목록은 우편번호 DB의 <b>구간</b>입니다. 건물번호나 번지를 함께 넣으면 그 번호가 든 구간만 보여 줍니다. <b>건물·상호 이름</b>으로도 찾을 수 있습니다(시·군·구를 함께 적으면 정확합니다).</p>
+  </div>
+</dialog>
+
+<dialog id="labelDlg">
+  <div class="dlg-h"><h2>라벨 인쇄</h2><button type="button" class="btn ghost sm" data-close>닫기</button></div>
+  <div class="dlg-b">
+    <div class="grid2">
+      <div class="field"><label for="lbKind">라벨 규격 <small>A4 한 장에 들어가는 수</small></label><select id="lbKind"></select></div>
+      <div class="field"><label for="lbTitle">호칭 <small>이름 뒤에 붙임</small></label><input type="text" id="lbTitle" list="lbTitles" placeholder="예) 귀하"><datalist id="lbTitles"><option>귀하</option><option>귀중</option><option>님</option></datalist></div>
+      <div class="field"><label for="lbSize">글자 크기</label><select id="lbSize"><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option></select></div>
+      <div class="field"><label>함께 넣기</label>
+        <label class="chk"><input type="checkbox" id="lbTel"> 전화번호</label>
+        <label class="chk"><input type="checkbox" id="lbSender"> 보내는 분(작게)</label>
+      </div>
+    </div>
+    <div class="row-r"><span class="hint grow" id="lbInfo"></span><button type="button" class="btn ghost" id="btnLabelPeek">미리보기 잠깐 보기</button><button type="button" class="btn primary" id="btnLabelPrint">인쇄</button></div>
+    <p class="hint">미리보기는 실제 인쇄 크기와 같습니다. 라벨지 여백이 다르면 인쇄 창의 「배율」로 맞추세요. 「내려받기」의 <b>우편번호를 못 찾은 행은 빼기</b>를 켜 두면 그 줄은 인쇄되지 않습니다.</p>
+    <div class="lbprev"><div id="labelArea"></div></div>
+  </div>
+</dialog>
+
+<dialog id="updDlg">
+  <div class="dlg-h"><h2>우편번호 DB 최신화</h2><button type="button" class="btn ghost sm" data-close>닫기</button></div>
+  <div class="dlg-b">
+    <p class="msg warn" id="updAuto" hidden>우편번호 고시는 한 달에 한 번입니다. 이 PC의 DB가 오래되어 알려 드립니다.</p>
+    <div class="updnow">지금 쓰는 DB <b class="big" id="updNow"></b></div>
+    <div class="netline" id="updNet"></div>
+
+    <div id="updOnline" hidden>
+      <h3>방법 ③ 인터넷우체국에서 받기 <small style="font-weight:400;color:var(--ink2)">— 인터넷이 되는 PC</small></h3>
+      <p class="hint">받은 압축파일(areacd_rangeaddr_DB.zip · areacd_pobox_DB.zip)은 <b>풀지 말고 그대로</b> 넣으면 됩니다. 이 창에 끌어다 놓아도 됩니다.</p>
+      <div class="row-r">
+        <button type="button" class="btn primary" id="btnUpdOpen">인터넷우체국에서 받으러 가기</button>
+        <button type="button" class="btn" id="btnUpdPick">받은 DB 파일 고르기</button>
+      </div>
+    </div>
+
+    <div id="updOffline">
+      <h3>방법 ① 국가법령정보센터에서 받기 <small style="font-weight:400;color:var(--ink2)">— 내부망에서도 열립니다</small></h3>
+      <p class="hint">우편번호 고시는 법령으로 공표되므로 <b>국가법령정보센터(law.go.kr)</b>에서 언제든 최신 자료를 받을 수 있습니다. 아래 단추를 누르면 늘 <b>현행 고시</b>로 바로 들어가고, 본문 아래쪽 <b>별표 5 — 참고자료(도로명주소 및 지번주소 범위자료, 사서함)</b>를 받아 이 창에 끌어다 놓으면 끝입니다.</p>
+      <div class="row-r">
+        <button type="button" class="btn primary" id="btnUpdLaw">법령정보센터에서 고시 열기</button>
+        <button type="button" class="btn" id="btnUpdPick2">별표 5(또는 받은 DB) 파일 고르기</button>
+      </div>
+
+      <h3>방법 ② 매월 오는 고시 공문의 붙임</h3>
+      <p class="hint">우정사업본부 고시 「도로명주소 연계 우편번호 조정 고시」 공문 붙임 가운데 <b>별표 5</b> 압축파일이 같은 자료입니다. <b>풀지 말고 그대로</b> 넣으세요. 별표 1~4는 지역별(건물 단위) 자료라 쓰지 않습니다.</p>
+      <div class="row-r">
+        <button type="button" class="btn" id="btnUpdCopy">반출 안내문 복사</button>
+      </div>
+      <textarea id="updGuide" rows="12" hidden aria-label="반출 안내문"></textarea>
+      <details class="opt" style="margin-top:12px">
+        <summary>주소를 붙여 넣어 바로 받기(한 번만 설정해 두면 다음부터 단추 하나)</summary>
+        <p class="hint">법령정보센터의 <b>별표 5</b> 또는 인터넷우체국의 <b>범위주소 DB</b> 링크를 오른쪽 클릭 → 「링크 주소 복사」 → 아래 칸에 붙여 넣으면 바로 받아 적용합니다. 보안을 위해 <b>epost.go.kr · koreapost.go.kr · law.go.kr</b> 주소만 받으며, 사이트 정책에 따라 막힐 수 있습니다.</p>
+        <div class="findbar">
+          <input type="text" id="updUrl" placeholder="https://www.epost.go.kr/… 또는 https://www.law.go.kr/flDownload.do?flSeq=…" aria-label="내려받기 주소">
+          <button type="button" class="btn" id="btnUpdFetch">바로 받아 적용</button>
+        </div>
+      </details>
+    </div>
+
+    <p class="msg" id="updMsg" hidden></p>
+    <div class="updfoot">
+      <div class="field inline"><label for="updWarn">알림 주기</label>
+        <select id="updWarn"><option value="30">1개월(30일)</option><option value="60">2개월(60일)</option><option value="90">3개월(90일)</option><option value="180">6개월(180일)</option></select>
+      </div>
+      <label class="chk"><input type="checkbox" id="optAutoProbe"> 이 창을 열 때 연결 자동 확인</label>
+      <span class="grow"></span>
+      <button type="button" class="btn ghost sm" id="btnUpdSnooze">오늘은 그만 보기</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="logDlg">
+  <div class="dlg-h"><h2>처리 이력</h2><button type="button" class="btn ghost sm" data-close>닫기</button></div>
+  <div class="dlg-b">
+    <p class="hint">이 PC에서 이 프로그램으로 <b>언제 몇 건을 다뤘는지</b>만 남깁니다. 주소·이름·전화 같은 <b>내용은 저장하지 않습니다</b>. 개인정보 처리 이력을 점검하거나 사고 발생 시 소명할 때 쓰세요.</p>
+    <div class="row-r"><span class="hint grow" id="logCount"></span>
+      <button type="button" class="btn" id="btnLogExport">엑셀로 내보내기</button>
+      <button type="button" class="btn ghost" id="btnLogClear">이력 지우기</button>
+    </div>
+    <div class="logwrap" id="logBody"></div>
+  </div>
+</dialog>
+
+<dialog id="privacyDlg">
+  <div class="dlg-h"><h2>개인정보 취급 안내</h2></div>
+  <div class="dlg-b">
+    <p>이 프로그램이 다루는 주소록은 <b>개인정보</b>입니다. 처음 여셨으니 한 번만 안내드립니다.</p>
+    <h3>이 프로그램이 하는 일</h3>
+    <ul>
+      <li>주소록 파일은 <b>이 PC의 브라우저 안에서만</b> 열리고, 어디로도 보내지 않습니다. 화면을 닫으면 사라집니다.</li>
+      <li>이 PC에 남는 것은 우편번호 DB와 설정, 그리고 <b>내용 없는 처리 이력</b>뿐입니다.</li>
+      <li>밖으로 연결하는 것은 「DB 최신화 ▸ 인터넷 연결 확인」을 <b>누를 때 한 번</b>뿐입니다.</li>
+    </ul>
+    <h3>쓰실 때 지켜 주실 것</h3>
+    <ul>
+      <li>맡은 업무에 필요한 범위에서만 다루고, 사적인 조회·이용은 하지 않습니다.</li>
+      <li>화면은 기본으로 <b>가려져</b> 있습니다. 확인이 필요한 줄만 「보기」로 잠깐 여세요. 전체 가림을 풀면 처리 이력에 남습니다.</li>
+      <li>내려받은 파일은 이 프로그램이 지울 수 없습니다. 용무가 끝나면 직접 파기하고, 메일·메신저로 보낼 때는 암호를 거세요.</li>
+      <li>자리를 뜰 때는 「끝내고 지우기」를 누르거나 화면을 닫아 주세요.</li>
+    </ul>
+    <p class="hint">개인정보를 업무 목적 밖으로 이용하거나 제3자에게 준 경우 「개인정보 보호법」에 따라 형사처벌·징계 대상이 됩니다.</p>
+    <div class="row-r"><button type="button" class="btn primary" id="btnPrivacyOk">알겠습니다</button></div>
+  </div>
+</dialog>
+
+<div class="busy" id="busy" hidden><div class="busy-in"><div class="spin"></div><div id="busyText">처리 중…</div><div class="prog"><div id="busyBar"></div></div></div></div>
+
+<script id="zipdb" type="application/octet-stream">@@FILE:data/zipdb.b64@@</script>
+<script id="zipextra" type="application/octet-stream">@@FILE:data/zipextra.b64@@</script>
+<script>@@FILE:vendor/fflate.js@@</script>
+<script>@@FILE:vendor/xlsx-js-style.js@@</script>
+<script>@@FILE:src/dbbuild.js@@</script>
+<script>@@FILE:src/engine.js@@</script>
+<script>@@FILE:src/ui.js@@</script>
+<script>@@KIOSK@@</script>
+<script id="sig">/* 무결성 자가검증 — 핵심 코드(라이브러리·엔진·화면)의 지문(SHA-256)을 빌드 때 박은 값과 대조한다.
+   일부러 난독화하지 않고 읽기 쉽게 둔다(감사·검증용). 데이터 블록(우편번호 DB)과 이 검증기 자신은 대조 대상에서 뺀다.
+   ※ 클라이언트 프로그램의 특성상 이 검증은 '가벼운 손댐'을 탐지할 뿐, 완벽한 위·변조 방지가 아니다.
+      배포처 공문·게시글에 함께 안내되는 '파일 전체 SHA-256' 대조가 최종 근거다. */
+(function () {
+  'use strict';
+  var EXPECTED = '@@EXPECTED@@';
+
+  // ---- SHA-256 (순수 JS, 외부 의존 없음) ----
+  function sha256hex(str) {
+    function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+    var K = [
+      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+      0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+      0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+      0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+      0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+      0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+      0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+      0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+    // UTF-8 바이트열
+    var bytes = [];
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      if (c < 0x80) bytes.push(c);
+      else if (c < 0x800) { bytes.push(0xc0 | (c >> 6), 0x80 | (c & 63)); }
+      else if (c < 0xd800 || c >= 0xe000) { bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }
+      else { // 서로게이트 쌍
+        i++; var c2 = str.charCodeAt(i);
+        var cp = 0x10000 + (((c & 0x3ff) << 10) | (c2 & 0x3ff));
+        bytes.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));
+      }
+    }
+    var l = bytes.length, bitLen = l * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    for (var k = 7; k >= 0; k--) bytes.push((bitLen / Math.pow(2, k * 8)) & 0xff);
+
+    var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    var w = new Array(64);
+    for (var off = 0; off < bytes.length; off += 64) {
+      for (var t = 0; t < 16; t++)
+        w[t] = (bytes[off + t * 4] << 24) | (bytes[off + t * 4 + 1] << 16) | (bytes[off + t * 4 + 2] << 8) | (bytes[off + t * 4 + 3]);
+      for (t = 16; t < 64; t++) {
+        var s0 = rotr(w[t - 15], 7) ^ rotr(w[t - 15], 18) ^ (w[t - 15] >>> 3);
+        var s1 = rotr(w[t - 2], 17) ^ rotr(w[t - 2], 19) ^ (w[t - 2] >>> 10);
+        w[t] = (w[t - 16] + s0 + w[t - 7] + s1) | 0;
+      }
+      var a = H[0], b = H[1], c2 = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (t = 0; t < 64; t++) {
+        var S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        var ch = (e & f) ^ (~e & g);
+        var t1 = (h + S1 + ch + K[t] + w[t]) | 0;
+        var S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        var maj = (a & b) ^ (a & c2) ^ (b & c2);
+        var t2 = (S0 + maj) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c2; c2 = b; b = a; a = (t1 + t2) | 0;
+      }
+      H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c2) | 0; H[3] = (H[3] + d) | 0;
+      H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+    }
+    var hex = '';
+    for (var m = 0; m < 8; m++) hex += ('00000000' + (H[m] >>> 0).toString(16)).slice(-8);
+    return hex;
+  }
+
+  function payload() {
+    var parts = [], list = document.getElementsByTagName('script');
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i];
+      if (s.id === 'sig') continue;      // 검증기 자신 제외
+      if (s.type) continue;              // 데이터 블록(우편번호 DB) 제외 → DB 최신화와 무관하게 안정
+      parts.push(s.textContent);
+    }
+    return parts.join('\n');
+  }
+
+  function run() {
+    var got, ok;
+    try { got = sha256hex(payload()); ok = (got === EXPECTED); }
+    catch (e) { got = ''; ok = null; }          // 계산 자체가 안 되면 판정 보류
+    window.__integrity = { ok: ok, expected: EXPECTED, got: got };
+
+    var chip = document.getElementById('intChip');
+    if (chip) {
+      if (ok === true) { chip.textContent = '원본 확인됨'; chip.className = 'chip ok'; chip.title = '핵심 코드가 원본 그대로입니다. 지문 ' + EXPECTED.slice(0, 12) + '…'; }
+      else if (ok === false) { chip.textContent = '⚠ 변경됨'; chip.className = 'chip bad'; chip.title = '핵심 코드가 원본과 다릅니다. 배포처의 원본을 다시 받으세요.'; }
+      else { chip.textContent = '무결성 확인 불가'; chip.className = 'chip'; }
+    }
+    var ai = document.getElementById('aboutInt');
+    if (ai) ai.textContent = ok === true ? '원본 확인됨 (핵심 코드 지문 일치)' : ok === false ? '변경됨 — 원본과 다릅니다' : '확인 불가';
+    var af = document.getElementById('aboutFp');
+    if (af && ok === false) af.textContent = got + ' (현재) / ' + EXPECTED + ' (원본)';
+
+    if (ok === false) {
+      try {
+        if (!document.getElementById('intBar')) {
+          var bar = document.createElement('div');
+          bar.id = 'intBar';
+          bar.setAttribute('role', 'alert');
+          bar.style.cssText = 'position:sticky;top:0;z-index:9999;background:#b00020;color:#fff;padding:10px 16px;font-weight:700;text-align:center;font-size:15px';
+          bar.textContent = '⚠ 이 파일은 원본에서 변경되었습니다. 배포처가 안내한 원본(과 SHA-256 값)을 사용하세요.';
+          document.body.insertBefore(bar, document.body.firstChild);
+        }
+      } catch (e) { /* 무시 */ }
+      try { if (window.__zip && window.__zip.log) window.__zip.log('무결성 경고', 0, '핵심 코드 지문 불일치'); } catch (e) { }
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(run, 0); });
+  else setTimeout(run, 0);
+})();
+</script>
+</body>
+</html>

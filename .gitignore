@@ -3,3 +3,7 @@
 ~$*
 .~lock.*
 __pycache__/
+검색기/출품용_소스/dist/
+검색기/출품용_소스/tools/out/
+길잡이/**/config.json
+길잡이/**/만든도구/
