@@ -1,8 +1,11 @@
 @echo off
-chcp 65001 >nul
 cd /d %~dp0
-if "%~1"=="" (echo ì‚¬ìš©ë²•: ì‹¤ì¸¡.bat ëª¨ë¸ì´ë¦„ "PC ì‚¬ì–‘"  ì˜ˆ) ì‹¤ì¸¡.bat exaone3.5:7.8b "i5-13500 16GB CPU" & pause & exit /b 1)
+if "%~1"=="" goto usage
 set M=%~1
 set N=%M::=_%
-python measure.py ê°€ìƒê¸°ê´€_ëª¨ì˜ì—…ë¬´í´ë” ì •ë‹µí‘œ.xlsx ê²°ê³¼_%N% --model %M% --label "%~2"
+python measure.py "°¡»ó±â°ü_¸ğÀÇ¾÷¹«Æú´õ" "Á¤´äÇ¥.xlsx" "°á°ú_%N%" --model %M% --label "%~2"
+pause
+exit /b
+:usage
+echo usage: silcheuk.bat MODEL "PC spec"   ex: silcheuk.bat exaone3.5:7.8b "i5-13500 16GB CPU"
 pause

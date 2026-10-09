@@ -7,7 +7,7 @@
 | `extract.py` | 자체 추출기. .hwp(한글 5.0, olefile+zlib로 직접 읽음)·.hwpx·.pdf·.xlsx·.docx·.eml·.txt/.md/.csv·.zip(안의 파일 재처리). 원본은 읽기만 하고 처리 전후 SHA-256을 대조표로 남긴다. 못 읽는 파일은 사유와 함께 목록에 남긴다 |
 | `make_mock.py` | 가상 기관 「한빛군청 행정지원과 서무담당」 1년치 모의 업무폴더 36개 파일과 정답표를 만든다. 기관·사람·전화·업체·문서번호 모두 가상 |
 | `measure.py` | 로컬 모델(OpenAI 호환 주소)로 파일마다 출처 달린 항목을 뽑고 정답표로 채점한다. 결과.md(관문 판정표)·결과.json·인수인계_초안.md를 쓴다 |
-| `실측.bat` | 윈도용 한 번에 실행. `실측.bat exaone3.5:7.8b "i5-13500 16GB CPU"` |
+| `실측.bat` | 윈도용 한 번에 실행(cp949로 저장, 10.9. 괄호 문법 오류 고침). bat이 안 되면 아래의 파이썬 명령을 직접 쓴다 |
 | `requirements.txt` | olefile(BSD)·pypdf(BSD)·openpyxl(MIT). 재배포 제한 없음 |
 
 ## 실측 순서(미니PC, 10.10.~10.11.)
@@ -21,10 +21,10 @@
 3. 폴더에서 주소창에 `cmd`를 치고 아래를 차례로 실행한다. 첫 줄은 패키지 설치(한 번만), 둘째·셋째 줄이 모델별 실측이다. 각 실측은 파일 34개에 모델을 34번 부르므로 CPU에서 10~30분 걸릴 수 있다. 끝나면 결과표가 화면에 찍히고 `결과_모델이름\결과.md`에 남는다.
    ```
    python -m pip install -r requirements.txt
-   실측.bat exaone3.5:7.8b "i5-13500 16GB CPU"
-   실측.bat gemma3:4b "i5-13500 16GB CPU"
+   python measure.py 가상기관_모의업무폴더 정답표.xlsx 결과_exaone --model exaone3.5:7.8b --label "i5-13500 16GB CPU"
+   python measure.py 가상기관_모의업무폴더 정답표.xlsx 결과_gemma --model gemma3:4b --label "i5-13500 16GB CPU"
    ```
-4. `결과_exaone3.5_7.8b\결과.md`, `결과_gemma3_4b\결과.md` 두 파일과, 각 폴더의 `인수인계_초안.md`를 보내 주면 관문 ②를 판정한다.
+4. `결과_exaone\결과.md`, `결과_gemma\결과.md` 두 파일과, 각 폴더의 `인수인계_초안.md`를 보내 주면 관문 ②를 판정한다.
 
 모델 없이 배관만 확인하려면 `python measure.py 가상기관_모의업무폴더 정답표.xlsx 결과_점검 --model fake`(정답을 그대로 돌려주는 가짜 모델, 100%가 나와야 정상).
 
