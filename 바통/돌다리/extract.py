@@ -60,8 +60,12 @@ def _hwp_para_text(data):
 
 def extract_hwp(path):
     import olefile
+    with open(path, 'rb') as fh:
+        head = fh.read(32)
+    if head.startswith(b'HWP Document File V'):
+        raise ValueError('한글 %s 형식(옛 한글 2.x·3.x 문서). 한글에서 열어 .hwp(5.0) 또는 .hwpx로 다시 저장하면 읽습니다' % head[19:23].decode('ascii', 'ignore').strip())
     if not olefile.isOleFile(path):
-        raise ValueError('한글 5.0 형식이 아님(한글 97 이하 또는 다른 파일)')
+        raise ValueError('한글 5.0 형식이 아님(다른 파일이거나 손상)')
     ole = olefile.OleFileIO(path)
     try:
         if not ole.exists('FileHeader'):
