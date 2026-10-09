@@ -30,6 +30,6 @@ for m in re.finditer(r"<script([^>]*)>", html):
 html = html.replace("@@CSP@@", " ".join(hashes), 1)
 out = ROOT / "dist" / "우편번호_자동검색기_v1.4_출품본.html"
 out.parent.mkdir(exist_ok=True)
-out.write_text(html, encoding="utf-8")
+out.write_bytes(html.replace("\r\n", "\n").encode("utf-8"))  # 줄바꿈을 LF로 고정(윈도에서도 같은 SHA-256)
 print("핵심 지문:", expected)
 print("파일 SHA-256:", hashlib.sha256(out.read_bytes()).hexdigest())
