@@ -66,7 +66,10 @@ def extract_hwp(path):
         raise ValueError('한글 %s 형식(옛 한글 2.x·3.x 문서). 한글에서 열어 .hwp(5.0) 또는 .hwpx로 다시 저장하면 읽습니다' % head[19:23].decode('ascii', 'ignore').strip())
     if not olefile.isOleFile(path):
         raise ValueError('한글 5.0 형식이 아님(다른 파일이거나 손상)')
-    ole = olefile.OleFileIO(path)
+    try:
+        ole = olefile.OleFileIO(path)
+    except Exception:
+        raise ValueError('한글 5.0 형식이 아님(다른 파일이거나 손상)')
     try:
         if not ole.exists('FileHeader'):
             raise ValueError('FileHeader 없음(한글 문서가 아님)')
@@ -231,8 +234,70 @@ def extract_text(path):
     return [{'loc': '전체', 'text': t.strip()}]
 
 
+def _odf_text(el):
+    """ODF 요소 안의 글자(공백·탭·줄바꿈 요소 포함)를 이어 붙인다."""
+    T = '{urn:oasis:names:tc:opendocument:xmlns:text:1.0}'
+    out = []
+    if el.text:
+        out.append(el.text)
+    for ch in el:
+        tag = ch.tag
+        if tag == T + 's':
+            out.append(' ' * int(ch.get(T + 'c', '1')))
+        elif tag == T + 'tab':
+            out.append('\t')
+        elif tag == T + 'line-break':
+            out.append('\n')
+        elif tag in (T + 'note', T + 'tracked-changes', T + 'soft-page-break'):
+            pass
+        else:
+            out.append(_odf_text(ch))
+        if ch.tail:
+            out.append(ch.tail)
+    return ''.join(out)
+
+
+def extract_odt(path):
+    """ODT(오픈도큐먼트 글, 우정사업본부 전자문서 공문)·ODS(표). 문단·제목·표 셀을 읽는다."""
+    T = '{urn:oasis:names:tc:opendocument:xmlns:text:1.0}'
+    TB = '{urn:oasis:names:tc:opendocument:xmlns:table:1.0}'
+    with zipfile.ZipFile(path) as z:
+        if 'content.xml' not in z.namelist():
+            raise ValueError('오픈도큐먼트 형식이 아님(content.xml 없음)')
+        root = ET.fromstring(z.read('content.xml'))
+    units = []
+    body = root.find('{urn:oasis:names:tc:opendocument:xmlns:office:1.0}body')
+    if body is None:
+        return units
+    n = 0
+
+    def walk(node, in_table):
+        nonlocal n
+        for ch in list(node):
+            if ch.tag == TB + 'table':
+                for ri, row in enumerate(ch.iter(TB + 'table-row')):
+                    cells = []
+                    for cell in row:
+                        if cell.tag in (TB + 'table-cell', TB + 'covered-table-cell'):
+                            cells.append(' '.join(_odf_text(p).strip() for p in cell.iter() if p.tag in (T + 'p', T + 'h')).strip())
+                    line = '\t'.join(c for c in cells if c)
+                    if line.strip():
+                        n += 1
+                        units.append({'loc': '표 %d행' % (ri + 1), 'text': line})
+            elif ch.tag in (T + 'p', T + 'h'):
+                t = _odf_text(ch).strip()
+                if t:
+                    n += 1
+                    units.append({'loc': '문단 %d' % n, 'text': t})
+            else:
+                walk(ch, in_table)
+    walk(body, False)
+    return units
+
+
 HANDLERS = {'.hwp': extract_hwp, '.hwpx': extract_hwpx, '.pdf': extract_pdf, '.xlsx': extract_xlsx, '.xlsm': extract_xlsx,
-            '.docx': extract_docx, '.eml': extract_eml, '.txt': extract_text, '.md': extract_text, '.csv': extract_text}
+            '.docx': extract_docx, '.eml': extract_eml, '.txt': extract_text, '.md': extract_text, '.csv': extract_text,
+            '.odt': extract_odt, '.ods': extract_odt}
 
 
 def extract_file(path, rel, results, failures, depth=0):
@@ -270,8 +335,10 @@ def extract_file(path, rel, results, failures, depth=0):
             failures.append({'file': rel, 'reason': '글자가 없음'})
             return
         results.append({'file': rel, 'kind': ext[1:], 'chars': sum(len(u['text']) for u in units), 'units': units})
+    except ValueError as e:
+        failures.append({'file': rel, 'reason': str(e)[:160]})
     except Exception as e:
-        failures.append({'file': rel, 'reason': str(e)[:160] or type(e).__name__})
+        failures.append({'file': rel, 'reason': '%s(파일 손상 가능: %s)' % ({'.hwp': '한글 5.0 구조를 읽지 못함', '.hwpx': 'hwpx 구조를 읽지 못함', '.pdf': 'PDF 구조를 읽지 못함', '.xlsx': '엑셀 구조를 읽지 못함', '.docx': '워드 구조를 읽지 못함', '.odt': 'ODT 구조를 읽지 못함'}.get(ext, '읽지 못함'), (str(e)[:80] or type(e).__name__))})
 
 
 def extract_folder(folder):

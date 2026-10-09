@@ -36,23 +36,26 @@ SYS = ('너는 공공기관 인수인계 도우미다. 전임자의 업무 문�
        '규칙: (1) quote는 문서에 있는 한 줄(한 문장)을 글자 그대로 복사한다. 줄여 쓰거나 합치거나 고치지 않는다. (2) 문서에 없는 내용은 만들지 않는다. '
        '(3) quote를 채울 수 없는 항목은 넣지 않는다. (4) 해당 항목이 없으면 {"items":[]}. (5) 설명문·코드 펜스 없이 JSON만.')
 
-PHONE = re.compile(r'0\d{1,2}-\d{3,4}-\d{4}')
+PHONE = re.compile(r'0\d{1,2}-\d{3,4}-\d{4}')  # ☎·☏ 뒤에 와도 번호만 잡힌다
 DUE = re.compile(r'(\d{1,2})월\s*(?:(\d{1,2})일|말|초|중순)\s*까지')
+DUE_EVERY = re.compile(r'(매월|익월|매주|매년|매분기)\s*(?:\d{1,2}일|[월화수목금토일]요일|말|초)?\s*(?:까지)?')
 DUE_RANGE = re.compile(r'(\d{1,2})월\s*\d{1,2}일\s*[~∼～-]\s*(?:\d{1,2}월\s*)?\d{1,2}일')
 DATE_FULL = re.compile(r'(20\d{2})[-.]\s?(\d{1,2})[-.]\s?(\d{1,2})')
 REL_DUE = re.compile(r'\d+\s*(?:개월|주|일)\s*전')
-ACTION = re.compile(r'합니다|한다|할 것|제출|수립|실시|협의|조치|이관|정리|보완|결정|검토|점검|제출일|기한|마감')
+ACTION = re.compile(r'합니다|한다|할 것|제출|수립|실시|협의|조치|이관|정리|보완|결정|검토|점검|제출일|기한|마감|통보|안내|채용|납부|독촉|배정|정산|회신|보고|작성|접수|발송|게시|확인|신청|제출|갱신|이동|교환')
 ISSUE = re.compile(r'미조치|미결|미완료|미이행|미납|미확정|미해결|반려|보류|지연|끝나지 않|결론 못|안 됨|못 냄|재협의|협의 중|이견|고장|누수|파손|분실')
 TITLE = re.compile(r'([가-힣]{2,4})\s+(?:담당|주무관|과장|팀장|실장|계장|대리|주임|사원)')
+TITLE2 = re.compile(r'(?:담당|주무관|과장|팀장|실장|계장|대리|주임|사원|국장)\s+([가-힣]{2,4})(?![가-힣])')
 NOT_NAME = re.compile(r'과$|팀$|실$|부$|처$|국$|군청|시청|도청|구청|사무소|소방서|담당|요청|업체|연락|전화|번호|협의|문의|총괄|업무|서무|예산|보안|청사|관리|기록|감사|계약|현안|회의|참석|발견|보수')
 MONTH = re.compile(r'(\d{1,2})월')
 
 
 def name_near_phone(line_body, phone):
     """전화번호 줄에서 사람 이름을 고른다: 「이름 담당/과장…」 → 번호 바로 앞 낱말 → '담당자'."""
-    for m in TITLE.finditer(line_body):
-        if not NOT_NAME.search(m.group(1)):
-            return m.group(1)
+    for rx in (TITLE, TITLE2):
+        for m in rx.finditer(line_body):
+            if not NOT_NAME.search(m.group(1)):
+                return m.group(1)
     before = re.sub(r'\([^()]*\)', ' ', line_body[:line_body.find(phone)])  # 괄호 안(소속 설명)은 이름 후보에서 뺀다
     m = re.search(r'([가-힣]{2,4})\s*[\(:·,]?\s*$', before)
     if m and not NOT_NAME.search(m.group(1)):
@@ -244,6 +247,10 @@ def rule_items(fobj):
                 continue
             if REL_DUE.search(line_body) and ACTION.search(line_body):
                 add('월별 할 일', re.sub(r'^\d+\.\s*', '', line_body), '', raw, u['loc'])
+                continue
+            e = DUE_EVERY.search(line_body)
+            if e and ACTION.search(line_body) and len(norm(line_body)) >= 8:
+                add('월별 할 일', re.sub(r'^\d+\.\s*', '', line_body), e.group(1), raw, u['loc'])
                 continue
             # 진행 중 현안: 현안 신호어가 든 줄(전화번호 줄은 위에서 처리)
             if ISSUE.search(line_body) and len(norm(line_body)) >= 8 and not PHONE.search(line_body):

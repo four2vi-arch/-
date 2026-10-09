@@ -3,7 +3,7 @@ cd /d %~dp0
 if "%~1"=="" goto usage
 set M=%~1
 set N=%M::=_%
-python measure.py "가상기관_모의업무폴더" "정답표.xlsx" "결과_%N%" --model %M% --label "%~2"
+python measure.py "가온우체국_모의업무폴더" "정답표.xlsx" "결과_%N%" --model %M% --label "%~2"
 pause
 exit /b
 :usage

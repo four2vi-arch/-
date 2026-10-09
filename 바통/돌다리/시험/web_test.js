@@ -21,7 +21,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const shots = process.env.SHOTS || '/tmp/돌다리_shots'; fs.mkdirSync(shots, {recursive: true});
   try {
     await page.goto(`http://127.0.0.1:${PORT}/`);
-    await page.fill('#folder', path.join(HERE, '모의데이터', '가상기관_모의업무폴더'));
+    await page.fill('#folder', path.join(HERE, '모의데이터', '가온우체국_모의업무폴더'));
     await page.click('#btnExtract');
     await page.waitForSelector('#files .good', {timeout: 20000});
     console.log('① 읽기:', await page.textContent('#files .good'));
@@ -62,7 +62,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await page.goto(`http://127.0.0.1:${PORT}/`); await sleep(800);
     console.log('재접속 단계 cur:', await page.$eval('section.step.cur h2', h => h.textContent.trim()));
     // 느린 모델로 다시 만들다가 중단
-    await page.fill('#folder', path.join(HERE, '모의데이터', '가상기관_모의업무폴더')); await page.click('#btnExtract'); await page.waitForSelector('#files .good');
+    await page.fill('#folder', path.join(HERE, '모의데이터', '가온우체국_모의업무폴더')); await page.click('#btnExtract'); await page.waitForSelector('#files .good');
     await page.evaluate(() => { const s = document.querySelector('#model'); s.insertAdjacentHTML('beforeend', '<option value="slow-fake">slow-fake</option>'); s.value = 'slow-fake'; s.dispatchEvent(new Event('change')); });
     await sleep(300);
     await page.click('#btnDraft'); await sleep(2500); await page.click('#btnStop');
