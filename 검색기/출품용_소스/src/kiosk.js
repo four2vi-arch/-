@@ -1,5 +1,5 @@
-/*! 우편번호 자동검색기 v1.4 (출품본) — 어르신 직접 입력·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본 — 대회 규정에 따른 사용권 부여 */
-/* 공중실에서 어르신이 직접 쓰는 대화형 주소 입력.
+/*! 물어물어(우편번호 자동검색기) v1.4 (출품본) · 어르신 직접 입력·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/* 민원실에서 어르신이 직접 쓰는 대화형 주소 입력.
    - 말(인터넷 PC)·글자로 받은 주소를 정리해 엔진에 묻고, 빠진 부분만 되묻는다.
    - 우편번호는 언제나 엔진(우편번호 고시 DB)이 확정한다. AI는 주소 조각을 뽑는 보조 역할만 한다.
    - 적은 내용은 이 기기 안에서만 쓰고, 마치거나 자리를 비우면 지운다. */
@@ -104,31 +104,59 @@
   }
   function look(text) { return E().lookup(text, regionOpts()); }
 
-  // ------------------------------------------------------------------ AI 보조(선택) — 주소 조각만 뽑는다
+  // ------------------------------------------------------------------ AI 보조(선택) · 주소 조각만 뽑는다
   var SYS = '너는 우편 주소 정리기다. 사용자가 말한 문장에서 한국 주소 조각만 뽑아 JSON 하나로만 답하라. ' +
     '모르는 값은 빈 문자열로 둔다. 우편번호는 절대 만들지 마라. 사람 이름·전화번호는 넣지 마라. ' +
     '형식: {"sido":"","sigungu":"","eupmyeondong":"","ri":"","road":"","buildingNo":"","jibun":"","buildingName":"","detail":""}';
-  function aiCfg() { var a = cfg().ai || {}; return a.url && a.model ? a : null; }
-  function aiExtract(text, override) {
+  function isLocalUrl(u) { return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//i.test(clean(u)); }
+  function aiCfg() { var a = cfg().ai || {}; return a.url && a.model && isLocalUrl(a.url) ? a : null; }
+  function aiReason(e) {
+    var m = String(e && e.message || e || '');
+    if (/^abort/i.test(m) || (e && e.name === 'AbortError')) { return '시간 초과(25초). 모델이 너무 느리거나 멈춰 있어요.'; }
+    if (/^HTTP 404/.test(m)) { return '모델 이름을 찾지 못했어요(404). ollama pull 로 받은 이름과 같은지 확인하세요.'; }
+    if (/^HTTP 401|^HTTP 403/.test(m)) { return '키가 없거나 틀렸어요(' + m + ').'; }
+    if (/^HTTP/.test(m)) { return '모델 실행기가 오류를 냈어요(' + m + ').'; }
+    if (/^JSON/.test(m)) { return '모델 답이 JSON이 아니에요. 다른 모델 이름으로 해 보세요.'; }
+    return '연결이 거부됐어요. 모델 실행기가 켜져 있는지, 허용 출처(OLLAMA_ORIGINS에 「*」 또는 file://*)를 확인하고 다시 시작하세요.';
+  }
+  function aiExtractRaw(text, override) {
     var a = override || aiCfg();
-    if (!a || !window.fetch) { return Promise.resolve(null); }
+    if (!a || !window.fetch) { return Promise.reject(new Error('설정 없음')); }
     var headers = { 'Content-Type': 'application/json' };
     if (a.key) { headers.Authorization = 'Bearer ' + a.key; }
     var ctl = window.AbortController ? new AbortController() : null;
     var tm = setTimeout(function () { if (ctl) { ctl.abort(); } }, 25000);
     return fetch(a.url, {
       method: 'POST', headers: headers, signal: ctl ? ctl.signal : undefined,
-      body: JSON.stringify({ model: a.model, temperature: 0, stream: false, messages: [{ role: 'system', content: SYS }, { role: 'user', content: text }] })
+      body: JSON.stringify({ model: a.model, temperature: 0, stream: false, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: SYS }, { role: 'user', content: text }] })
     }).then(function (r) {
       if (!r.ok) { throw new Error('HTTP ' + r.status); }
       return r.json();
     }).then(function (j) {
       clearTimeout(tm);
       var c = (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || (j && j.message && j.message.content) || '';
-      var m = String(c).match(/\{[\s\S]*\}/);
-      if (!m) { return null; }
-      try { return JSON.parse(m[0]); } catch (e) { return null; }
-    }).catch(function () { clearTimeout(tm); return null; });
+      var o = parseJsonLoose(c);
+      if (!o) { throw new Error('JSON 아님'); }
+      return o;
+    }).catch(function (e) { clearTimeout(tm); throw e; });
+  }
+  // 모델 답에서 JSON 객체 하나만 꺼낸다(<think>…</think>·코드 펜스·설명문 제거, 중괄호 짝 맞춤)
+  function parseJsonLoose(c) {
+    var s = String(c || '').replace(/<think>[\s\S]*?<\/think>/g, '').replace(/```[a-z]*/gi, '');
+    var i = s.indexOf('{');
+    while (i >= 0) {
+      var depth = 0, inStr = false;
+      for (var k = i; k < s.length; k++) {
+        var ch = s.charAt(k);
+        if (inStr) { if (ch === '\\') { k++; } else if (ch === '"') { inStr = false; } continue; }
+        if (ch === '"') { inStr = true; } else if (ch === '{') { depth++; } else if (ch === '}') { depth--; if (!depth) { try { return JSON.parse(s.slice(i, k + 1)); } catch (e) { break; } } }
+      }
+      i = s.indexOf('{', i + 1);
+    }
+    return null;
+  }
+  function aiExtract(text, override) {
+    return aiExtractRaw(text, override).catch(function () { return null; });
   }
   function aiAssist(t) {
     return aiExtract(t).then(function (o) {
@@ -261,8 +289,8 @@
     sb.addEventListener('pointerdown', down);
     sb.addEventListener('pointerup', up);
     sb.addEventListener('pointerleave', up);
-    root.addEventListener('pointerdown', touch, true);
-    root.addEventListener('keydown', touch, true);
+    document.addEventListener('pointerdown', touch, true);
+    document.addEventListener('keydown', touch, true);
     applyFont();
   }
   function applyFont() {
@@ -409,8 +437,12 @@
     if (rank(r) >= 4) { return screen(confirmAddr, [r, false]); }
     if (aiCfg() && !c.triedAI) {
       c.triedAI = true;
-      main.innerHTML = '<div class="k-bubble">주소를 정리하고 있어요… 잠시만요.</div>';
+      c.aiSkip = false;
+      var skipBtn = [btn('기다리지 않고 진행', 'sub', function () { c.aiSkip = true; decide(r, q); })];
+      main.innerHTML = '<div class="k-bubble">주소를 정리하고 있어요… 잠시만요.<small>AI가 말씀을 주소로 정리하는 중이에요(최대 25초).</small></div>' + row(skipBtn);
+      bindRow(skipBtn);
       return aiAssist(c.raw).then(function (b) {
+        if (c.aiSkip) { return; }
         if (b && rank(b.r) > rank(r)) {
           c.ai = true;
           if (b.detail) { c.aiDetail = b.detail; }
@@ -541,12 +573,14 @@
     });
   }
   function giveUp() {
-    var b = [btn('다시 적기', 'pri', function () { newCurKeep(); screen(askAddress); }), btn('창구에서 할게요', 'sub', function () { screen(listView); })];
+    var send = st.cur && st.cur.kind === 'send';
+    var b = [btn('다시 적기', 'pri', function () { newCurKeep(); screen(askAddress); }), btn('창구에서 할게요', 'sub', function () { screen(send ? finish : listView); })];
     frame('주소를 찾기가 어려워요.', '괜찮아요. 창구 직원이 도와 드릴게요. 적으신 내용은 메모로 남겨 둘게요.', row(b));
     bindRow(b);
     var c = st.cur;
-    if (c.kind === 'recv' && c.raw) {
-      st.entries.push({ name: '', phone: '', zip: '', addr1: c.raw, addr2: '', check: true, note: '주소 찾기 실패 — 창구 확인' });
+    if (c.kind === 'recv' && c.raw && !c.gaveUp) {
+      c.gaveUp = true;
+      st.entries.push({ name: '', phone: '', zip: '', addr1: c.raw, addr2: '', check: true, note: '주소 찾기 실패 · 창구 확인' });
     }
   }
   function newCurKeep() { var k = st.cur ? st.cur.kind : 'recv'; newCur(k); }
@@ -811,7 +845,7 @@
     var s = st.sender || {};
     var full = !!s.addr1;
     var head = (full ? ['보내는 분', '보내는 분 전화', '보내는 분 우편번호', '보내는 분 주소', '보내는 분 상세주소'] : [])
-      .concat(['받는 분', '받는 분 전화', '우편번호', '주소', '상세주소', '비고']);
+      .concat(['받는 분', '받는 분 전화', '우편번호', '주소', '상세주소', '접수 확인']);
     var memo = full ? '' : '보내는 분 ' + (s.name || '') + (s.phone ? ' ' + s.phone : '') + ' · 주소 창구 확인';
     var rows = st.entries.map(function (x) {
       var note = [x.check ? '창구 확인 필요' : '', memo].filter(Boolean).join(' / ');
@@ -864,12 +898,14 @@
     var a = { url: clean($('#kfUrl').value), model: clean($('#kfModel').value), key: $('#kfKey').value };
     var m = $('#kfMsg');
     if (!a.url || !a.model) { m.textContent = '주소와 모델 이름을 먼저 넣어 주세요.'; return; }
+    if (!isLocalUrl(a.url)) { m.textContent = '이 PC의 모델 주소만 연결됩니다. http://127.0.0.1:포트/… 또는 http://localhost:포트/… 로 적어 주세요(외부 주소는 접속 허용 목록에서 막힙니다).'; return; }
     m.textContent = '시험 중…';
     var t0 = Date.now();
-    aiExtract('우리 아들네 정읍시 충정로 이백삼십사 시청으로 보내 주세요', a).then(function (o) {
-      if (!o) { m.textContent = '연결되지 않았어요. 주소·모델 이름과, 이 PC에서 모델이 켜져 있는지 확인하세요.'; return; }
+    aiExtractRaw('우리 아들네 정읍시 충정로 이백삼십사 시청으로 보내 주세요', a).then(function (o) {
       var got = clean([o.sido, o.sigungu, o.eupmyeondong, o.road, o.buildingNo, o.jibun].filter(Boolean).join(' '));
       m.textContent = '연결됨 · ' + a.model + ' · ' + ((Date.now() - t0) / 1000).toFixed(1) + '초 · 뽑은 주소: ' + (got || '(없음)');
+    }, function (e) {
+      m.textContent = '연결되지 않았어요. ' + aiReason(e);
     });
   }
   function staffPanel() {
@@ -882,12 +918,14 @@
       '<label class="k-field"><b>종이로 뽑기 용지</b><select id="kfPaper" style="width:100%;font-size:16px;padding:8px"><option value="a4">A4 일반 프린터</option><option value="80">감열 영수증 80mm</option><option value="58">감열 영수증 58mm</option></select></label>' +
       '<label class="k-chk"><input type="checkbox" id="kfAuto"> 다 마치면 메모를 바로 뽑기</label>' +
       '<p class="k-note">감열 프린터를 「기본 프린터」로 두고 크롬을 <b>--kiosk --kiosk-printing</b> 옵션으로 실행하면 인쇄 확인 창 없이 바로 뽑힙니다. 영수증 용지는 붙지 않으니 창구 전달용 메모로 씁니다.</p>' +
-      '<label class="k-field"><b>AI 주소 정리 연결(선택) — 주소</b><input id="kfUrl" value="' + esc(a.url || '') + '" placeholder="예) http://127.0.0.1:11434/v1/chat/completions"></label>' +
+      '<label class="k-field"><b>AI 주소 정리 연결(선택) · 주소</b><input id="kfUrl" value="' + esc(a.url || '') + '" placeholder="예) http://127.0.0.1:11434/v1/chat/completions"></label>' +
       '<label class="k-field"><b>모델 이름</b><input id="kfModel" value="' + esc(a.model || '') + '" placeholder="예) gemma3:4b · exaone3.5:7.8b"></label>' +
       '<label class="k-field"><b>키(필요한 곳만)</b><input id="kfKey" type="password" value="' + esc(a.key || '') + '"></label>' +
       '<p class="k-note">이 PC에서 돌리는 로컬 모델(127.0.0.1)만 연결할 수 있습니다. AI에는 주소 문장만 보내고 이름·전화는 보내지 않으며, 우편번호는 언제나 고시 자료로 확정합니다.</p>' +
       '<p class="k-note" id="kfMsg"></p>',
       [['저장', function () {
+        var u = clean($('#kfUrl').value);
+        if (u && !isLocalUrl(u)) { $('#kfMsg').textContent = '이 PC의 모델 주소만 저장됩니다. http://127.0.0.1:포트/… 또는 http://localhost:포트/… 로 적어 주세요.'; return; }
         setCfg({ org: clean($('#kfOrg').value), region: clean($('#kfRegion').value), idle: Math.max(30, Number($('#kfIdle').value) || 120), paper: $('#kfPaper').value, autoPrint: $('#kfAuto').checked, ai: { url: clean($('#kfUrl').value), model: clean($('#kfModel').value), key: $('#kfKey').value } });
         closeModal(); toast('저장했어요.');
       }, 'pri'],
@@ -900,6 +938,7 @@
 
   // ------------------------------------------------------------------ 자리 비움·지우기
   function touch() {
+    if (!root || root.hidden) { return; }
     clearTimeout(idleT);
     var sec = Number(cfg().idle) || 120;
     idleT = setTimeout(idleWarn, sec * 1000);
@@ -1035,7 +1074,7 @@
     b.className = 'btn sm';
     b.id = 'btnKiosk';
     b.textContent = '어르신 직접 입력';
-    b.title = '공중실에서 어르신이 직접 주소를 적는 큰 글씨 대화 화면';
+    b.title = '민원실에서 어르신이 직접 주소를 적는 큰 글씨 대화 화면';
     b.onclick = openKiosk;
     box.insertBefore(b, box.firstChild);
     var q = document.createElement('button');

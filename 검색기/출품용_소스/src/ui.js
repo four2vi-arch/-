@@ -1,4 +1,4 @@
-/*! 우편번호 자동검색기 v1.4 (출품본) — 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본 — 대회 규정에 따른 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.4 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function () {
   "use strict";
 
@@ -87,7 +87,7 @@
       }
     }
     return {
-      name: "우편번호 자동검색기",
+      name: "물어물어(우편번호 자동검색기)",
       version: a("version") || "1.0",
       author: "이희재",
       org: "",
@@ -506,7 +506,7 @@
     return Promise.all(g).then(yieldFrame).then(function () {
       if (!c.road || !c.jibun) {
         if (d.area || d.big) {
-          throw new Error("넣으신 것은 「지역별 주소 DB」(고시 별표 1~4)입니다. 이 프로그램은 구간 자료를 쓰므로 같은 고시의 <별표 5 — 참고자료(도로명주소 및 지번주소 범위자료, 사서함)>를 넣어 주세요.");
+          throw new Error("넣으신 것은 「지역별 주소 DB」(고시 별표 1~4)입니다. 이 프로그램은 구간 자료를 쓰므로 같은 고시의 <별표 5 참고자료(도로명주소 및 지번주소 범위자료, 사서함)>를 넣어 주세요.");
         }
         if (d.chg) {
           throw new Error("넣으신 것은 「변경분 DB」(변동분)입니다. 이 프로그램은 전체 구간 자료를 쓰므로 고시의 <별표 5>를 넣어 주세요.");
@@ -714,6 +714,18 @@
     var c = [];
     var d = Math.min(b.e.r, 1048575);
     var f = Math.min(b.e.c, 255);
+    if (d > 50000) {
+      var mx = -1;
+      Object.keys(a).forEach(function (k) {
+        if (k.charAt(0) !== "!") {
+          var rc = XLSX.utils.decode_cell(k);
+          if (rc.r > mx) {
+            mx = rc.r;
+          }
+        }
+      });
+      d = Math.max(0, Math.min(d, mx));
+    }
     for (var i = 0; i <= d; i++) {
       var g = [];
       for (var j = 0; j <= f; j++) {
@@ -738,6 +750,7 @@
   }
   function readInputFile(a) {
     if (!S.engine) {
+      setMsg(qs("#fileMsg"), "우편번호 DB를 아직 여는 중입니다. 잠시 뒤 다시 넣어 주세요.", "warn");
       return;
     }
     if (/\.(hwpx?|pdf|docx?|pptx?)$/i.test(a.name || "")) {
@@ -1103,7 +1116,7 @@
     }
     x.zip = u1;
     // 기관 발송 명단에 흔한 머리글(수신자·대상자 등)은 그 낱말만 있을 때 받는 분으로 본다(「수신자 주소」 같은 머리글은 제외)
-    x.name = v(/성명|성함|이름|수취인|수신인|받는\s*(분|사람|이)|받을\s*(분|사람|이)|수령|고객명|상호|업체명|기관명|거래처|name|^(수신자|대상자|민원인|납세자|세대주)(명|성명|이름)?$/i, y);
+    x.name = v(/성명|성함|이름|수취인|수신인|받는\s*(분|사람|이)|받을\s*(분|사람|이)|수령|고객명|상호|업체명|기관명|거래처|name|^(수신자|대상자|민원인|납세자|세대주)(명|성명|이름)?$/i, /발송|보내는|송하인|주문자|신청인|주소|우편|전화|연락|휴대|번호|이메일|메일/);
     if (x.name < 0) {
       for (i = 0; i < d; i++) {
         if (x.addr.indexOf(i) >= 0 || i === x.zip || i === x.addr2 || t1.indexOf(i) >= 0) {
@@ -1265,7 +1278,7 @@
     if (!S.cols.addr.length) {
       setMsg(qs("#fileMsg"), "주소 열을 자동으로 찾지 못했습니다. 아래 「주소」 칸에서 직접 골라 주세요. 시·군이 빠진 주소록이면 검색 옵션의 기본 지역을 먼저 적어 주세요.", "warn");
     } else if (S.headerIdx >= 0) {
-      setMsg(qs("#fileMsg"), (S.headerAuto || S.headerIdx + 1 + "행을 제목 줄로 보고 빼고 검색합니다.") + " 아니면 「제목 줄」에서 바꾸세요." + (hasSenderCols() ? " 보내는 분(주문자) 열도 찾았습니다 — 보내는 분 주소의 우편번호도 함께 찾습니다." : ""), "ok");
+      setMsg(qs("#fileMsg"), (S.headerAuto || S.headerIdx + 1 + "행을 제목 줄로 보고 빼고 검색합니다.") + " 아니면 「제목 줄」에서 바꾸세요." + (hasSenderCols() ? " 보내는 분(주문자) 열도 찾았습니다 · 보내는 분 주소의 우편번호도 함께 찾습니다." : ""), "ok");
     }
     qs("#step2").scrollIntoView({
       behavior: "smooth",
@@ -1283,14 +1296,14 @@
         c.className = "sub-h";
         c.style.gridColumn = "1/-1";
         c.style.margin = "8px 0 0";
-        c.textContent = "보내는 분(주문자) — 파일에 있으면 우체국쇼핑 양식에 행마다 따로 넣습니다";
+        c.textContent = "보내는 분(주문자) · 파일에 있으면 우체국쇼핑 양식에 행마다 따로 넣습니다";
         colMapEl.appendChild(c);
       }
       var d = document.createElement("div");
       d.className = "field" + (b.req ? " req" : "");
       var f = "col_" + b.key;
       var g = "<label for=\"" + f + "\">" + escHtml(b.label) + "</label><select id=\"" + f + "\">";
-      g += "<option value=\"\">" + (b.req ? "— 고르세요 —" : "(없음)") + "</option>";
+      g += "<option value=\"\">" + (b.req ? "(고르세요)" : "(없음)") + "</option>";
       if (b.key === "addr" && S.cols.addr.length > 1) {
         g += "<option value=\"" + S.cols.addr.join(",") + "\" selected>" + colLetter(S.cols.addr[0]) + "~" + colLetter(S.cols.addr[S.cols.addr.length - 1]) + "열 합치기</option>";
       }
@@ -1755,7 +1768,7 @@
     var g = document.createElement("button");
     g.type = "button";
     g.className = "chip mask" + (privacyMask.on ? " on" : "");
-    g.textContent = privacyMask.on ? "가림 켜짐" : "가림 꺼짐 — 노출 주의";
+    g.textContent = privacyMask.on ? "가림 켜짐" : "가림 꺼짐 · 노출 주의";
     g.title = "이름·전화·번지와 상세주소를 화면에서만 가립니다. 내려받는 파일에는 원래 값이 들어갑니다.";
     g.onclick = function () {
       privacyMask.on = !privacyMask.on;
@@ -1837,7 +1850,7 @@
     },
     epost: {
       name: "우체국쇼핑 여러곳배송",
-      desc: "복수배송지 epost_order 12열 · 300건씩 나눔",
+      desc: "사용자 양식의 예시 · 복수배송지 epost_order 12열 · 300건씩 나눔",
       formats: ["xls", "xlsx"],
       sheet: "epost_order",
       sender: true,
@@ -1855,7 +1868,7 @@
     },
     biz: {
       name: "계약소포 파일등록",
-      desc: "계약고객 전용시스템 제공 파일구조 · 5,000건씩 나눔",
+      desc: "사용자 양식의 예시 · 계약고객 전용시스템 제공 파일구조 · 5,000건씩 나눔",
       formats: ["xlsx", "xls"],
       sheet: "Sheet1",
       split: 5000,
@@ -1887,7 +1900,7 @@
     },
     custom: {
       name: "사용자 지정 양식",
-      desc: "창구접수·간편사전접수 등 — 양식 파일을 넣어 열 구성을 그대로 따라갑니다",
+      desc: "창구접수·간편사전접수 등 · 양식 파일을 넣어 열 구성을 그대로 따라갑니다",
       formats: ["xlsx", "xls", "csv"],
       sheet: "Sheet1",
       custom: true,
@@ -2465,7 +2478,7 @@
       Author: APP.author,
       Manager: APP.author,
       Keywords: APP_CREDIT,
-      Comments: "개인정보 포함 — 업무 목적 외 사용·제공·보관 금지. 용무가 끝나면 파기하세요.\n" + APP_CREDIT + " · " + dateLabel(todayYmd()) + " 생성"
+      Comments: "개인정보 포함 · 업무 목적 외 사용·제공·보관 금지. 용무가 끝나면 파기하세요.\n" + APP_CREDIT + " · " + dateLabel(todayYmd()) + " 생성"
     };
     if (f && f.overlay) {
       p = f.overlay(p);
@@ -2695,7 +2708,7 @@
       t.push("받는 분 전화가 없는 행 " + fmtNum(W.noTel) + "건(" + rowListText(W.noTelRows, W.noTel) + ").");
     }
     if (W.sBad) {
-      t.push("보내는 분 우편번호를 못 찾은 행 " + fmtNum(W.sBad) + "건(" + rowListText(W.sBadRows, W.sBad) + ") — 원본의 보내는 분 주소를 확인하세요.");
+      t.push("보내는 분 우편번호를 못 찾은 행 " + fmtNum(W.sBad) + "건(" + rowListText(W.sBadRows, W.sBad) + ") · 원본의 보내는 분 주소를 확인하세요.");
     }
     if (W.empty) {
       t.push("주소가 비어 뺀 행 " + fmtNum(W.empty) + "건(" + rowListText(W.emptyRows, W.empty) + ").");
@@ -2716,6 +2729,19 @@
     }
     setMsg(dlMsgEl, t.join(" "), W.nozip || W.longName || W.noTel || W.sBad || W.empty || W.longSender ? "warn" : "ok");
   }
+  function suggestCandidates(f) {
+    if (f.status === "정확" && !f.changed) {
+      return "";
+    }
+    try {
+      var list = S.engine.search(f.addr, 3) || [];
+      return list.slice(0, 3).map(function (c) {
+        return (c.zip || "") + " · " + clean([c.addr1 || c.addr || c.text || "", c.range || ""].filter(Boolean).join(" "));
+      }).join(" / ");
+    } catch (err) {
+      return "";
+    }
+  }
   function downloadReport() {
     var a = S.rows.filter(function (row) {
       return row.status !== "정확" || row.changed;
@@ -2723,10 +2749,10 @@
     if (!a.length) {
       return setMsg(qs("#dlMsg"), "점검할 행이 없습니다. 모두 정확히 찾았습니다.", "ok");
     }
-    var b = [["원본 행", "받는 분", "원본 주소", "기존 우편번호", "입력된 우편번호", "배달 우체국", "검색결과", "근거", "정제 주소"]];
+    var b = [["원본 행", "받는 분", "원본 주소", "기존 우편번호", "입력된 우편번호", "배달 우체국", "검색결과", "근거", "정제 주소", "추천 후보(우편번호 · 구간, 최대 3개)"]];
     var c = ["head"];
     a.forEach(function (f) {
-      b.push([String(f.i + 1), S.cols.name >= 0 ? clean(S.aoa[f.i][S.cols.name]) : "", [f.addr, f.detail].filter(Boolean).join(" "), f.old, f.zip, deliveryOffice(f.zip), f.edited ? "수정" : f.status + (f.conf ? "·" + f.conf : ""), f.note, f.status === "실패" ? "" : [f.r.addr1, f.r.addr2].filter(Boolean).join(" ")]);
+      b.push([String(f.i + 1), S.cols.name >= 0 ? clean(S.aoa[f.i][S.cols.name]) : "", [f.addr, f.detail].filter(Boolean).join(" "), f.old, f.zip, deliveryOffice(f.zip), f.edited ? "수정" : f.status + (f.conf ? "·" + f.conf : ""), f.note, f.status === "실패" ? "" : [f.r.addr1, f.r.addr2].filter(Boolean).join(" "), suggestCandidates(f)]);
       c.push(f.edited ? "edit" : f.status === "정확" ? "" : f.status === "유사" ? f.conf === "하" ? "sim2" : "sim" : "fail");
     });
     var d = {
@@ -2867,21 +2893,21 @@
         return "";
       }
     }
-    var h = "<div class=\"sub-h\">복수배송지 만들기</div><div class=\"grid2\"><div class=\"field\"><label for=\"sdMode\">보내는 분 정하기</label><select id=\"sdMode\">" + "<option value=\"file\"" + sel("file", mode) + (hasS ? "" : " disabled") + ">파일의 보내는 분(주문자) 열 — 행마다 따로</option>" + "<option value=\"self\"" + sel("self", mode) + ">받는 분과 같게 — 본인 수령</option>" + "<option value=\"fixed\"" + sel("fixed", mode) + ">모든 행 같은 보내는 분 — 아래 입력값</option></select>" + (hasS ? "<small class=\"fmsg\">보내는 분 열: " + escHtml([C.sName >= 0 ? "이름 " + colLetter(C.sName) : "", C.sAddr >= 0 ? "주소 " + colLetter(C.sAddr) : "", C.sZip >= 0 ? "우편번호 " + colLetter(C.sZip) : ""].filter(Boolean).join(" · ")) + "열</small>" : "<small class=\"fmsg\">주소록에 보내는 분(주문자) 열이 없습니다. 있으면 「열 확인」에서 지정하세요.</small>") + "</div><div class=\"field\"><label for=\"sdFb\">보내는 분 칸이 빈 행</label><select id=\"sdFb\"" + (mode === "file" ? "" : " disabled") + ">" + "<option value=\"self\"" + sel("self", o.fb || "self") + ">받는 분과 같게(본인 수령)</option>" + "<option value=\"fixed\"" + sel("fixed", o.fb) + ">아래 고정 보내는 분</option></select></div></div>";
+    var h = "<div class=\"sub-h\">복수배송지 만들기</div><div class=\"grid2\"><div class=\"field\"><label for=\"sdMode\">보내는 분 정하기</label><select id=\"sdMode\">" + "<option value=\"file\"" + sel("file", mode) + (hasS ? "" : " disabled") + ">파일의 보내는 분(주문자) 열 · 행마다 따로</option>" + "<option value=\"self\"" + sel("self", mode) + ">받는 분과 같게 · 본인 수령</option>" + "<option value=\"fixed\"" + sel("fixed", mode) + ">모든 행 같은 보내는 분 · 아래 입력값</option></select>" + (hasS ? "<small class=\"fmsg\">보내는 분 열: " + escHtml([C.sName >= 0 ? "이름 " + colLetter(C.sName) : "", C.sAddr >= 0 ? "주소 " + colLetter(C.sAddr) : "", C.sZip >= 0 ? "우편번호 " + colLetter(C.sZip) : ""].filter(Boolean).join(" · ")) + "열</small>" : "<small class=\"fmsg\">주소록에 보내는 분(주문자) 열이 없습니다. 있으면 「열 확인」에서 지정하세요.</small>") + "</div><div class=\"field\"><label for=\"sdFb\">보내는 분 칸이 빈 행</label><select id=\"sdFb\"" + (mode === "file" ? "" : " disabled") + ">" + "<option value=\"self\"" + sel("self", o.fb || "self") + ">받는 분과 같게(본인 수령)</option>" + "<option value=\"fixed\"" + sel("fixed", o.fb) + ">아래 고정 보내는 분</option></select></div></div>";
     h += "<label class=\"chk\" style=\"margin-top:10px\"><input type=\"checkbox\" id=\"optFillTel\"" + (o.fillTel === false ? "" : " checked") + "> 받는 분 전화가 없으면 보내는 분 전화로 채우기</label>";
     if (C.qty >= 0) {
-      h += "<label class=\"chk\" style=\"margin-top:6px\"><input type=\"checkbox\" id=\"optQty\"" + (o.qty === false ? "" : " checked") + "> 수량(" + colLetter(C.qty) + "열)만큼 줄 늘리기 — 1줄 = 1개</label>";
+      h += "<label class=\"chk\" style=\"margin-top:6px\"><input type=\"checkbox\" id=\"optQty\"" + (o.qty === false ? "" : " checked") + "> 수량(" + colLetter(C.qty) + "열)만큼 줄 늘리기 · 1줄 = 1개</label>";
     }
     if (C.item >= 0) {
-      h += "<label class=\"chk\" style=\"margin-top:6px\"><input type=\"checkbox\" id=\"optSplitItem\"" + (o.splitItem === false ? "" : " checked") + "> 상품명(" + colLetter(C.item) + "열)이 다르면 파일 나누기 — 복수배송지 주문은 상품마다 따로 합니다</label>";
+      h += "<label class=\"chk\" style=\"margin-top:6px\"><input type=\"checkbox\" id=\"optSplitItem\"" + (o.splitItem === false ? "" : " checked") + "> 상품명(" + colLetter(C.item) + "열)이 다르면 파일 나누기 · 복수배송지 주문은 상품마다 따로 합니다</label>";
     }
-    h += "<label class=\"chk\" style=\"margin-top:6px\"><input type=\"checkbox\" id=\"optSplitSender\"" + (o.splitSender ? " checked" : "") + "> 보내는 분(주문자)별로 파일 나누기 — 결제·취소를 주문자마다 따로 할 때</label>";
+    h += "<label class=\"chk\" style=\"margin-top:6px\"><input type=\"checkbox\" id=\"optSplitSender\"" + (o.splitSender ? " checked" : "") + "> 보내는 분(주문자)별로 파일 나누기 · 결제·취소를 주문자마다 따로 할 때</label>";
     h += "<p class=\"hint\" style=\"margin:8px 0 14px\">300건이 넘으면 300건씩 자동으로 나눕니다(우체국쇼핑 한 번 업로드 한도). 아래 「보내는 분」 입력값은 「모든 행 같은 보내는 분」이나 빈 행 대체로 쓸 때만 필요합니다.</p>";
     return h;
   }
   function senderFormHtml() {
     var a = settings.get().sender || {};
-    return "<div class=\"sub-h\">보내는 분</div><label class=\"chk\" style=\"margin-bottom:8px\"><input type=\"checkbox\" id=\"sdKeep\"" + (a.name ? " checked" : "") + "> 이 PC에 기억해 두기 <small style=\"color:var(--ink2)\">— 끄면 창을 닫을 때 사라집니다(개인정보 저장 최소화)</small></label><div class=\"grid2\"><div class=\"field\"><label for=\"sdName\">이름 <small>16자 이내</small></label><input type=\"text\" id=\"sdName\" maxlength=\"16\" value=\"" + escHtml(a.name || "") + "\"></div><div class=\"field\"><label for=\"sdTel\">전화</label><input type=\"text\" id=\"sdTel\" value=\"" + escHtml(a.tel || "") + "\" placeholder=\"010-0000-0000\"></div><div class=\"field\" style=\"grid-column:1/-1\"><label for=\"sdLine\">주소 <small>한 줄로 적으면 아래 칸을 자동으로 채웁니다</small></label><input type=\"text\" id=\"sdLine\" value=\"" + escHtml(a.line || "") + "\" placeholder=\"예) 전북특별자치도 정읍시 조곡천1길 27 정읍우체국\"></div><div class=\"field\"><label for=\"sdZip\">우편번호</label><input type=\"text\" id=\"sdZip\" maxlength=\"5\" value=\"" + escHtml(a.zip || "") + "\"></div><div class=\"field\"><label for=\"sdAddr1\">주소1</label><input type=\"text\" id=\"sdAddr1\" value=\"" + escHtml(a.addr1 || "") + "\"></div><div class=\"field\"><label for=\"sdAddr2\">주소2(나머지)</label><input type=\"text\" id=\"sdAddr2\" value=\"" + escHtml(a.addr2 || "") + "\"></div></div>";
+    return "<div class=\"sub-h\">보내는 분</div><label class=\"chk\" style=\"margin-bottom:8px\"><input type=\"checkbox\" id=\"sdKeep\"" + (a.name ? " checked" : "") + "> 이 PC에 기억해 두기 <small style=\"color:var(--ink2)\">(끄면 창을 닫을 때 사라집니다(개인정보 저장 최소화)</small></label><div class=\"grid2\"><div class=\"field\"><label for=\"sdName\">이름 <small>16자 이내</small></label><input type=\"text\" id=\"sdName\" maxlength=\"16\" value=\"" + escHtml(a.name || "") + "\"></div><div class=\"field\"><label for=\"sdTel\">전화</label><input type=\"text\" id=\"sdTel\" value=\"" + escHtml(a.tel || "") + "\" placeholder=\"010-0000-0000\"></div><div class=\"field\" style=\"grid-column:1/-1\"><label for=\"sdLine\">주소 <small>한 줄로 적으면 아래 칸을 자동으로 채웁니다</small></label><input type=\"text\" id=\"sdLine\" value=\"" + escHtml(a.line || "") + "\" placeholder=\"예) 전북특별자치도 정읍시 조곡천1길 27 정읍우체국\"></div><div class=\"field\"><label for=\"sdZip\">우편번호</label><input type=\"text\" id=\"sdZip\" maxlength=\"5\" value=\"" + escHtml(a.zip || "") + "\"></div><div class=\"field\"><label for=\"sdAddr1\">주소1</label><input type=\"text\" id=\"sdAddr1\" value=\"" + escHtml(a.addr1 || "") + "\"></div><div class=\"field\"><label for=\"sdAddr2\">주소2(나머지)</label><input type=\"text\" id=\"sdAddr2\" value=\"" + escHtml(a.addr2 || "") + "\"></div></div>";
   }
   function bindSenderForm() {
     qs("#sdLine").onchange = function () {
@@ -3011,7 +3037,7 @@
         return "phone";
       }
     }
-    if (/성명|이름|수취인|받는|수령|고객명|상호|name/i.test(c) || /^(발송인|보내는분|보내는사람|송하인)명?$/.test(c) || /^(수신자|수신인|대상자|민원인|납세자|세대주)(명|성명|이름)?$/.test(c)) {
+    if (/성명|이름|수취인|받는|수령|고객명|상호|name/i.test(c) || /^(발송인|보내는분|보내는사람|송하인|주문자|주문인|신청인)명?$/.test(c) || /^(수신자|수신인|대상자|민원인|납세자|세대주)(명|성명|이름)?$/.test(c)) {
       if (d) {
         return "senderName";
       } else {
@@ -3440,7 +3466,7 @@
   }
   function dbUpdateNotice() {
     var a = S.engine ? dateLabel(S.engine.date) : "";
-    return ["[우편번호 DB 최신화 안내]", "현재 이 PC의 우편번호 DB 기준일: " + a + " (" + (dbAgeDays() || 0) + "일 지남)", "※ 아래 세 가지 자료는 모두 같습니다. 편한 방법 하나만 쓰시면 됩니다.", "", "■ 방법 1 — 국가법령정보센터에서 받기 (내부망에서도 열립니다)", " 1. " + LAW_NOTICE_URL, "    (국가법령정보센터 ▸ 행정규칙 ▸ 현행행정규칙 ▸ 「도로명주소 연계 우편번호 조정 고시」)", " 2. 고시 본문 아래쪽의 <별표 5 - 참고자료(도로명주소 및 지번주소 범위자료, 사서함)>를 눌러 내려받습니다.", " 3. 우편번호 자동검색기에서 「DB 최신화 ▸ 별표 5 파일 고르기」로 그 압축파일을 그대로(풀지 말고) 넣습니다.", "", "■ 방법 2 — 매월 오는 고시 공문의 붙임 사용", " 1. 우정사업본부 고시 「도로명주소 연계 우편번호 조정 고시」 공문을 엽니다.", " 2. 붙임 가운데 <별표 5> 압축파일을 내려받아 위 3번과 같이 넣습니다.", "    ※ 별표 1~4는 지역별(건물 단위) 주소 자료로, 이 프로그램에서는 쓰지 않습니다.", "", "■ 방법 3 — 외부망 PC에서 인터넷우체국 파일 받아 오기", " 1. " + EPOST_DB_URL, " 2. 「범위주소 DB」(areacd_rangeaddr_DB.zip)와 「사서함주소 DB」(areacd_pobox_DB.zip)를 받습니다.", " 3. USB 등으로 옮긴 뒤 같은 방법으로 넣습니다.", "", "※ 교체한 DB는 이 PC의 브라우저에 저장되어 다음에도 그대로 쓰입니다."].join("\n");
+    return ["[우편번호 DB 최신화 안내]", "현재 이 PC의 우편번호 DB 기준일: " + a + " (" + (dbAgeDays() || 0) + "일 지남)", "※ 아래 세 가지 자료는 모두 같습니다. 편한 방법 하나만 쓰시면 됩니다.", "", "■ 방법 1: 국가법령정보센터에서 받기 (내부망에서도 열립니다)", " 1. " + LAW_NOTICE_URL, "    (국가법령정보센터 ▸ 행정규칙 ▸ 현행행정규칙 ▸ 「도로명주소 연계 우편번호 조정 고시」)", " 2. 고시 본문 아래쪽의 <별표 5 - 참고자료(도로명주소 및 지번주소 범위자료, 사서함)>를 눌러 내려받습니다.", " 3. 우편번호 자동검색기에서 「DB 최신화 ▸ 별표 5 파일 고르기」로 그 압축파일을 그대로(풀지 말고) 넣습니다.", "", "■ 방법 2: 매월 오는 고시 공문의 붙임 사용", " 1. 우정사업본부 고시 「도로명주소 연계 우편번호 조정 고시」 공문을 엽니다.", " 2. 붙임 가운데 <별표 5> 압축파일을 내려받아 위 3번과 같이 넣습니다.", "    ※ 별표 1~4는 지역별(건물 단위) 주소 자료로, 이 프로그램에서는 쓰지 않습니다.", "", "■ 방법 3: 외부망 PC에서 인터넷우체국 파일 받아 오기", " 1. " + EPOST_DB_URL, " 2. 「범위주소 DB」(areacd_rangeaddr_DB.zip)와 「사서함주소 DB」(areacd_pobox_DB.zip)를 받습니다.", " 3. USB 등으로 옮긴 뒤 같은 방법으로 넣습니다.", "", "※ 교체한 DB는 이 PC의 브라우저에 저장되어 다음에도 그대로 쓰입니다."].join("\n");
   }
   function openUpdateDialog(a) {
     var updDlgEl = qs("#updDlg");
@@ -3519,7 +3545,7 @@
     updMsgEl.textContent = a;
   }
   function remindDbUpdate() {
-    if (S.privacyPending) {
+    if (S.privacyPending || /(^|[#&])kiosk\b/.test(location.hash)) {
       return;
     }
     var a = dbAgeDays();
@@ -3761,7 +3787,7 @@
     qs("#btnUpdLaw").onclick = function () {
       window.open(LAW_NOTICE_URL, "_blank", "noopener");
       addLog("법령정보센터 열기", 0, "");
-      setUpdMsg("새 탭에 현행 고시가 열립니다. 본문 아래쪽 「별표 5 — 참고자료(도로명주소 및 지번주소 범위자료, 사서함)」를 내려받아 이 창에 끌어다 놓으세요.", "ok");
+      setUpdMsg("새 탭에 현행 고시가 열립니다. 본문 아래쪽 「별표 5 참고자료(도로명주소 및 지번주소 범위자료, 사서함)」를 내려받아 이 창에 끌어다 놓으세요.", "ok");
     };
     qs("#btnUpdFetch").onclick = downloadDbOnline;
     qs("#btnUpdCopy").onclick = function () {
@@ -3840,7 +3866,7 @@
     qs("#btnSummary").onclick = function () {
       var b = countGrades();
       var c = dateLabel(todayYmd());
-      var d = "[우편번호 검색 결과] " + (S.fileName || "직접 입력") + " · " + c + "\n전체 " + fmtNum(b.all) + "건 / 정확 " + fmtNum(b.ok) + " · 유사 " + fmtNum(b.s1 + b.s2 + b.s3) + "(상 " + fmtNum(b.s1) + "·중 " + fmtNum(b.s2) + "·하 " + fmtNum(b.s3) + ") · 실패 " + fmtNum(b.fail) + "\n우편번호 없음 " + fmtNum(b.nozip) + "건 / 기존 번호와 다름 " + fmtNum(b.changed) + "건 · 우편번호 DB " + dateLabel(S.engine.date) + " 기준\n— " + APP_CREDIT;
+      var d = "[우편번호 검색 결과] " + (S.fileName || "직접 입력") + " · " + c + "\n전체 " + fmtNum(b.all) + "건 / 정확 " + fmtNum(b.ok) + " · 유사 " + fmtNum(b.s1 + b.s2 + b.s3) + "(상 " + fmtNum(b.s1) + "·중 " + fmtNum(b.s2) + "·하 " + fmtNum(b.s3) + ") · 실패 " + fmtNum(b.fail) + "\n우편번호 없음 " + fmtNum(b.nozip) + "건 / 기존 번호와 다름 " + fmtNum(b.changed) + "건 · 우편번호 DB " + dateLabel(S.engine.date) + " 기준\n· " + APP_CREDIT;
       function f() {
         setMsg(qs("#dlMsg"), "결과 요약을 복사했습니다. 보고나 메모에 붙여 넣으세요.", "ok");
       }
@@ -3938,7 +3964,7 @@
         setBusy(false);
         qs("#dbDot").className = "dot err";
         qs("#dbInfo").textContent = "우편번호 DB를 열지 못했습니다";
-        setMsg(qs("#fileMsg"), "DB를 여는 데 실패했습니다: " + (b && b.message ? b.message : b) + " — 엣지·크롬 최신 버전에서 다시 열어 주세요.", "err");
+        setMsg(qs("#fileMsg"), "DB를 여는 데 실패했습니다: " + (b && b.message ? b.message : b) + " · 엣지·크롬 최신 버전에서 다시 열어 주세요.", "err");
       });
     }, 30);
   }

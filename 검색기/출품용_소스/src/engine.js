@@ -1,4 +1,4 @@
-/*! 우편번호 자동검색기 v1.4 (출품본) — 주소 판정 엔진 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본 — 대회 규정에 따른 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.4 (출품본) · 주소 판정 엔진 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function (a, b) {
   if (typeof module === "object" && module.exports) {
     module.exports = b();
@@ -451,7 +451,11 @@
       r = true;
       return w;
     }).replace(/ +/g, " ").trim();
-    b = b.replace(/(\d) ?[·.\u318d\u119e\u30fb\u2022\u2027\u2219\u22c5] ?(?=\d+ ?[가-힣])/g, "$1");
+    b = b.replace(/(\d)[·\u318d\u119e\u30fb\u2022\u2027\u2219\u22c5](?=\d+ ?[가-힣])/g, "$1");
+    b = b.replace(/(\d)\.(\d+)(?=\s|$)/g, "$1-$2");
+    b = b.replace(/(\d)[.·\u318d\u119e\u30fb\u2022\u2027\u2219\u22c5\/]+(?=\s|$)/g, "$1");
+    b = b.replace(/(\d)\/(?=\d+ ?(?:층|호|동))/g, "$1 ");
+    b = b.replace(/-+\s*$/, "");
     var s = "";
     var t = [];
     for (var i = 0; i < b.length; i++) {
