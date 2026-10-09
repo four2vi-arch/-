@@ -152,6 +152,14 @@ def extract_pdf(path):
 def extract_xlsx(path):
     import openpyxl
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        units = _xlsx_units(wb)
+    finally:
+        wb.close()  # 윈도에서는 닫지 않으면 임시 폴더를 지울 수 없다
+    return units
+
+
+def _xlsx_units(wb):
     units = []
     for ws in wb.worksheets:
         lines = []
@@ -230,7 +238,7 @@ def extract_file(path, rel, results, failures, depth=0):
             failures.append({'file': rel, 'reason': '압축이 3겹 이상이라 풀지 않음'})
             return
         try:
-            with zipfile.ZipFile(path) as z, tempfile.TemporaryDirectory() as td:
+            with zipfile.ZipFile(path) as z, tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
                 for info in z.infolist():
                     if info.is_dir():
                         continue
