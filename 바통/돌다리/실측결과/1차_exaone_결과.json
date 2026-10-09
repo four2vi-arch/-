@@ -1,0 +1,1687 @@
+{
+ "summary": {
+  "model": "exaone3.5:7.8b",
+  "url": "http://127.0.0.1:11434/v1/chat/completions",
+  "label": "i5-13500 16GB CPU",
+  "when": "2026-10-09T21:59:59",
+  "machine": "Windows-11-10.0.28120-SP0",
+  "files_total": 36,
+  "files_read": 34,
+  "files_failed": 3,
+  "originals_changed": 0,
+  "calls": 34,
+  "sec_extract": 0.7,
+  "sec_total": 754.8,
+  "sec_model_avg": 22.2,
+  "answers": 36,
+  "draft_items": 86,
+  "hit_with_source": 0,
+  "draft_in_answers": 0,
+  "fabricated": 21,
+  "pct_hit_with_source": 0.0,
+  "pct_draft_in_answers": 0.0,
+  "pct_fabricated": 24.4,
+  "per_type": {
+   "월별 할 일": [
+    0,
+    16
+   ],
+   "협의할 사람": [
+    0,
+    14
+   ],
+   "진행 중 현안": [
+    0,
+    6
+   ]
+  },
+  "errors": [],
+  "gate": {
+   "시간 20분 안": true,
+   "출처까지 맞은 항목 70% 이상": false,
+   "지어낸 항목 5% 이하": false
+  }
+ },
+ "calls": [
+  {
+   "file": "01_공문\\03_행정지원과1023_2025년_상반기_소모품_구매_계획_수립.hwpx",
+   "chunk": 0,
+   "chars": 457,
+   "sec": 19.2,
+   "items": 2,
+   "usage": {
+    "prompt_tokens": 526,
+    "prompt_tokens_details": {
+     "cached_tokens": 525
+    },
+    "completion_tokens": 129,
+    "total_tokens": 655
+   }
+  },
+  {
+   "file": "01_공문\\04_행정지원과1388_2025년_청사_소방안전점검_실시_계획.hwpx",
+   "chunk": 0,
+   "chars": 445,
+   "sec": 27.0,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 520,
+    "prompt_tokens_details": {
+     "cached_tokens": 519
+    },
+    "completion_tokens": 179,
+    "total_tokens": 699
+   }
+  },
+  {
+   "file": "01_공문\\05_행정지원과1720_복합기_임대계약_갱신_검토.hwpx",
+   "chunk": 0,
+   "chars": 464,
+   "sec": 23.9,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 533,
+    "prompt_tokens_details": {
+     "cached_tokens": 532
+    },
+    "completion_tokens": 167,
+    "total_tokens": 700
+   }
+  },
+  {
+   "file": "01_공문\\06_행정지원과2015_2025년_개인정보_보호_자체점검_실시.hwpx",
+   "chunk": 0,
+   "chars": 451,
+   "sec": 26.5,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 528,
+    "prompt_tokens_details": {
+     "cached_tokens": 527
+    },
+    "completion_tokens": 183,
+    "total_tokens": 711
+   }
+  },
+  {
+   "file": "01_공문\\07_행정지원과2301_2026년도_본예산_편성_요구서_제출.hwpx",
+   "chunk": 0,
+   "chars": 451,
+   "sec": 18.9,
+   "items": 2,
+   "usage": {
+    "prompt_tokens": 530,
+    "prompt_tokens_details": {
+     "cached_tokens": 529
+    },
+    "completion_tokens": 131,
+    "total_tokens": 661
+   }
+  },
+  {
+   "file": "01_공문\\08_행정지원과2654_여름철_청사_냉방_운영_및_전기요금_절감_안내.hwpx",
+   "chunk": 0,
+   "chars": 443,
+   "sec": 24.2,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 512,
+    "prompt_tokens_details": {
+     "cached_tokens": 511
+    },
+    "completion_tokens": 168,
+    "total_tokens": 680
+   }
+  },
+  {
+   "file": "01_공문\\09_행정지원과2980_2025년_행정사무감사_자료_제출.hwpx",
+   "chunk": 0,
+   "chars": 432,
+   "sec": 18.1,
+   "items": 2,
+   "usage": {
+    "prompt_tokens": 508,
+    "prompt_tokens_details": {
+     "cached_tokens": 507
+    },
+    "completion_tokens": 125,
+    "total_tokens": 633
+   }
+  },
+  {
+   "file": "01_공문\\10_행정지원과3217_2025년_자체감사_지적사항_조치_계획.hwpx",
+   "chunk": 0,
+   "chars": 438,
+   "sec": 24.3,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 517,
+    "prompt_tokens_details": {
+     "cached_tokens": 516
+    },
+    "completion_tokens": 169,
+    "total_tokens": 686
+   }
+  },
+  {
+   "file": "01_공문\\11_행정지원과3555_2025년_기록물_정리_및_이관_계획.hwpx",
+   "chunk": 0,
+   "chars": 449,
+   "sec": 25.3,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 518,
+    "prompt_tokens_details": {
+     "cached_tokens": 517
+    },
+    "completion_tokens": 176,
+    "total_tokens": 694
+   }
+  },
+  {
+   "file": "01_공문\\12_행정지원과3890_연말_재물조사_실시_계획.hwpx",
+   "chunk": 0,
+   "chars": 424,
+   "sec": 27.3,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 508,
+    "prompt_tokens_details": {
+     "cached_tokens": 507
+    },
+    "completion_tokens": 189,
+    "total_tokens": 697
+   }
+  },
+  {
+   "file": "01_공문\\13_행정지원과0112_2026년_상반기_청사_소방안전점검_사전_협의.hwpx",
+   "chunk": 0,
+   "chars": 449,
+   "sec": 25.4,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 521,
+    "prompt_tokens_details": {
+     "cached_tokens": 520
+    },
+    "completion_tokens": 176,
+    "total_tokens": 697
+   }
+  },
+  {
+   "file": "01_공문\\14_행정지원과0455_2026년_사무관리비_집행_계획_수립.hwpx",
+   "chunk": 0,
+   "chars": 438,
+   "sec": 19.5,
+   "items": 2,
+   "usage": {
+    "prompt_tokens": 522,
+    "prompt_tokens_details": {
+     "cached_tokens": 521
+    },
+    "completion_tokens": 136,
+    "total_tokens": 658
+   }
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\계약_현황.xlsx",
+   "chunk": 0,
+   "chars": 292,
+   "sec": 41.7,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 458,
+    "prompt_tokens_details": {
+     "cached_tokens": 457
+    },
+    "completion_tokens": 279,
+    "total_tokens": 737
+   }
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\소모품_구매대장_2025.xlsx",
+   "chunk": 0,
+   "chars": 846,
+   "sec": 18.2,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 995,
+    "prompt_tokens_details": {
+     "cached_tokens": 994
+    },
+    "completion_tokens": 118,
+    "total_tokens": 1113
+   }
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\업무_연락처(가상).xlsx",
+   "chunk": 0,
+   "chars": 422,
+   "sec": 38.9,
+   "items": 7,
+   "usage": {
+    "prompt_tokens": 515,
+    "prompt_tokens_details": {
+     "cached_tokens": 514
+    },
+    "completion_tokens": 264,
+    "total_tokens": 779
+   }
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "chunk": 0,
+   "chars": 758,
+   "sec": 114.3,
+   "items": 12,
+   "usage": {
+    "prompt_tokens": 795,
+    "prompt_tokens_details": {
+     "cached_tokens": 794
+    },
+    "completion_tokens": 735,
+    "total_tokens": 1530
+   }
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\예산집행현황_2025.xlsx",
+   "chunk": 0,
+   "chars": 161,
+   "sec": 10.4,
+   "items": 1,
+   "usage": {
+    "prompt_tokens": 359,
+    "prompt_tokens_details": {
+     "cached_tokens": 358
+    },
+    "completion_tokens": 71,
+    "total_tokens": 430
+   }
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\2026_서무업무_추진계획안.docx",
+   "chunk": 0,
+   "chars": 222,
+   "sec": 22.9,
+   "items": 4,
+   "usage": {
+    "prompt_tokens": 366,
+    "prompt_tokens_details": {
+     "cached_tokens": 365
+    },
+    "completion_tokens": 153,
+    "total_tokens": 519
+   }
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\과_업무회의_회의록_202510.docx",
+   "chunk": 0,
+   "chars": 461,
+   "sec": 28.3,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 548,
+    "prompt_tokens_details": {
+     "cached_tokens": 547
+    },
+    "completion_tokens": 181,
+    "total_tokens": 729
+   }
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\서무_업무매뉴얼_초안.docx",
+   "chunk": 0,
+   "chars": 292,
+   "sec": 36.1,
+   "items": 4,
+   "usage": {
+    "prompt_tokens": 406,
+    "prompt_tokens_details": {
+     "cached_tokens": 405
+    },
+    "completion_tokens": 217,
+    "total_tokens": 623
+   }
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\인수인계서_2024_전전임자.docx",
+   "chunk": 0,
+   "chars": 250,
+   "sec": 27.4,
+   "items": 3,
+   "usage": {
+    "prompt_tokens": 372,
+    "prompt_tokens_details": {
+     "cached_tokens": 371
+    },
+    "completion_tokens": 174,
+    "total_tokens": 546
+   }
+  },
+  {
+   "file": "04_메일\\20250603_개인정보_자체점검표_배포.eml",
+   "chunk": 0,
+   "chars": 219,
+   "sec": 1.1,
+   "items": 0,
+   "usage": {
+    "prompt_tokens": 352,
+    "prompt_tokens_details": {
+     "cached_tokens": 351
+    },
+    "completion_tokens": 6,
+    "total_tokens": 358
+   }
+  },
+  {
+   "file": "04_메일\\20250901_행감자료_요구.eml",
+   "chunk": 0,
+   "chars": 191,
+   "sec": 4.8,
+   "items": 0,
+   "usage": {
+    "prompt_tokens": 331,
+    "prompt_tokens_details": {
+     "cached_tokens": 178
+    },
+    "completion_tokens": 6,
+    "total_tokens": 337
+   }
+  },
+  {
+   "file": "04_메일\\20251120_기록물_이관목록_반려.eml",
+   "chunk": 0,
+   "chars": 272,
+   "sec": 5.7,
+   "items": 0,
+   "usage": {
+    "prompt_tokens": 382,
+    "prompt_tokens_details": {
+     "cached_tokens": 177
+    },
+    "completion_tokens": 6,
+    "total_tokens": 388
+   }
+  },
+  {
+   "file": "04_메일\\20260114_복합기_임대료_협의.eml",
+   "chunk": 0,
+   "chars": 231,
+   "sec": 1.0,
+   "items": 0,
+   "usage": {
+    "prompt_tokens": 354,
+    "prompt_tokens_details": {
+     "cached_tokens": 353
+    },
+    "completion_tokens": 6,
+    "total_tokens": 360
+   }
+  },
+  {
+   "file": "05_메모\\메모_기타.txt",
+   "chunk": 0,
+   "chars": 50,
+   "sec": 2.2,
+   "items": 0,
+   "usage": {
+    "prompt_tokens": 229,
+    "prompt_tokens_details": {
+     "cached_tokens": 177
+    },
+    "completion_tokens": 6,
+    "total_tokens": 235
+   }
+  },
+  {
+   "file": "05_메모\\메모_누수.txt",
+   "chunk": 0,
+   "chars": 111,
+   "sec": 10.4,
+   "items": 1,
+   "usage": {
+    "prompt_tokens": 276,
+    "prompt_tokens_details": {
+     "cached_tokens": 177
+    },
+    "completion_tokens": 58,
+    "total_tokens": 334
+   }
+  },
+  {
+   "file": "05_메모\\메모_복합기계약.txt",
+   "chunk": 0,
+   "chars": 147,
+   "sec": 12.1,
+   "items": 1,
+   "usage": {
+    "prompt_tokens": 306,
+    "prompt_tokens_details": {
+     "cached_tokens": 177
+    },
+    "completion_tokens": 63,
+    "total_tokens": 369
+   }
+  },
+  {
+   "file": "05_메모\\연간_할일_체크.md",
+   "chunk": 0,
+   "chars": 149,
+   "sec": 27.1,
+   "items": 2,
+   "usage": {
+    "prompt_tokens": 299,
+    "prompt_tokens_details": {
+     "cached_tokens": 298
+    },
+    "completion_tokens": 186,
+    "total_tokens": 485
+   }
+  },
+  {
+   "file": "06_기타\\2026_서무업무_추진계획안.pdf",
+   "chunk": 0,
+   "chars": 183,
+   "sec": 21.1,
+   "items": 4,
+   "usage": {
+    "prompt_tokens": 318,
+    "prompt_tokens_details": {
+     "cached_tokens": 317
+    },
+    "completion_tokens": 148,
+    "total_tokens": 466
+   }
+  },
+  {
+   "file": "06_기타\\서무_업무매뉴얼_초안.pdf",
+   "chunk": 0,
+   "chars": 230,
+   "sec": 26.5,
+   "items": 4,
+   "usage": {
+    "prompt_tokens": 342,
+    "prompt_tokens_details": {
+     "cached_tokens": 341
+    },
+    "completion_tokens": 188,
+    "total_tokens": 530
+   }
+  },
+  {
+   "file": "06_기타\\인수인계서_2024_전전임자.pdf",
+   "chunk": 0,
+   "chars": 229,
+   "sec": 16.8,
+   "items": 2,
+   "usage": {
+    "prompt_tokens": 339,
+    "prompt_tokens_details": {
+     "cached_tokens": 338
+    },
+    "completion_tokens": 119,
+    "total_tokens": 458
+   }
+  },
+  {
+   "file": "06_기타\\행감_제출자료_2025.zip ▸ 제출목록.txt",
+   "chunk": 0,
+   "chars": 62,
+   "sec": 2.6,
+   "items": 0,
+   "usage": {
+    "prompt_tokens": 256,
+    "prompt_tokens_details": {
+     "cached_tokens": 188
+    },
+    "completion_tokens": 6,
+    "total_tokens": 262
+   }
+  },
+  {
+   "file": "06_기타\\행감_제출자료_2025.zip ▸ 사무관리비_집행내역.xlsx",
+   "chunk": 0,
+   "chars": 144,
+   "sec": 4.9,
+   "items": 0,
+   "usage": {
+    "prompt_tokens": 358,
+    "prompt_tokens_details": {
+     "cached_tokens": 188
+    },
+    "completion_tokens": 6,
+    "total_tokens": 364
+   }
+  }
+ ],
+ "draft": [
+  {
+   "file": "01_공문\\03_행정지원과1023_2025년_상반기_소모품_구매_계획_수립.hwpx",
+   "type": "진행 중 현안",
+   "text": "부서별 소모품 수요 취합 및 상반기 구매 계획 수립",
+   "when": "3월 20일까지",
+   "quote": "부서 소모품 수요를 3월 20일까지 취합하여 상반기 구매 계획을 수립합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\03_행정지원과1023_2025년_상반기_소모품_구매_계획_수립.hwpx",
+   "type": "협의할 사람",
+   "text": "강민재와의 협의",
+   "when": "",
+   "quote": "협의 담당: 강민재(한빛군청 재정과 예산담당, 063-000-0101)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\04_행정지원과1388_2025년_청사_소방안전점검_실시_계획.hwpx",
+   "type": "진행 중 현안",
+   "text": "4월 셋째 주 청사 소방안전점검 실시",
+   "when": "4월",
+   "quote": "2. 4월 셋째 주에 한빛소방서 입회 아래 청사 소방안전점검을 실시합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\04_행정지원과1388_2025년_청사_소방안전점검_실시_계획.hwpx",
+   "type": "협의할 사람",
+   "text": "한빛소방서 예방안전과",
+   "when": "",
+   "quote": "협의 담당: 박도윤(한빛소방서 예방안전과, 063-000-0303)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\04_행정지원과1388_2025년_청사_소방안전점검_실시_계획.hwpx",
+   "type": "조치 기한",
+   "text": "점검 결과 지적사항 조치",
+   "when": "4월 30일",
+   "quote": "3. 점검 결과 지적사항은 4월 30일까지 조치하고 총무과에 통보합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\05_행정지원과1720_복합기_임대계약_갱신_검토.hwpx",
+   "type": "진행 중 현안",
+   "text": "복합기 임대계약 갱신 검토 및 결정",
+   "when": "5월 말까지",
+   "quote": "3. 5월 말까지 사용량과 장애 이력을 정리하여 갱신 여부를 결정합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\05_행정지원과1720_복합기_임대계약_갱신_검토.hwpx",
+   "type": "협의할 사람",
+   "text": "임대료 협의",
+   "when": "",
+   "quote": "4. 갱신 시 임대료는 월 180,000원을 넘지 않도록 협의합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\05_행정지원과1720_복합기_임대계약_갱신_검토.hwpx",
+   "type": "협의할 사람",
+   "text": "계약 갱신",
+   "when": "",
+   "quote": "5. 협의 담당: 최우진(주식회사 가온복합기 영업팀, 010-0000-0505)",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\06_행정지원과2015_2025년_개인정보_보호_자체점검_실시.hwpx",
+   "type": "진행 중 현안",
+   "text": "2025년 개인정보 보호 자체점검 실시",
+   "when": "6월 10일~6월 24일",
+   "quote": "2. 6월 10일부터 6월 24일까지 부서 개인정보 처리 현황을 자체점검합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\06_행정지원과2015_2025년_개인정보_보호_자체점검_실시.hwpx",
+   "type": "협의할 사람",
+   "text": "보안 점검 관련 협의",
+   "when": "",
+   "quote": "5. 협의 담당: 한서윤(한빛군청 정보통신과 보안담당, 063-000-0606)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\06_행정지원과2015_2025년_개인정보_보호_자체점검_실시.hwpx",
+   "type": "월별 할 일",
+   "text": "개인정보 파일 대장 갱신",
+   "when": "",
+   "quote": "10. 개인정보 파일 대장을 최신으로 갱신합니다.",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\07_행정지원과2301_2026년도_본예산_편성_요구서_제출.hwpx",
+   "type": "진행 중 현안",
+   "text": "2026년도 본예산 편성 요구서 제출 기한",
+   "when": "7월 18일",
+   "quote": "2026년도 본예산 편성 요구서를 7월 18일까지 재정과에 제출합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\07_행정지원과2301_2026년도_본예산_편성_요구서_제출.hwpx",
+   "type": "협의할 사람",
+   "text": "예산 관련 협의",
+   "when": "",
+   "quote": "협의 담당: 강민재(한빛군청 재정과 예산담당, 063-000-0101)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\08_행정지원과2654_여름철_청사_냉방_운영_및_전기요금_절감_안내.hwpx",
+   "type": "진행 중 현안",
+   "text": "여름철 청사 냉방 온도 설정 및 에너지 절약 조치",
+   "when": "2025년 8월",
+   "quote": "2. 8월 한 달간 청사 냉방 설정 온도를 26도로 유지합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\08_행정지원과2654_여름철_청사_냉방_운영_및_전기요금_절감_안내.hwpx",
+   "type": "진행 중 현안",
+   "text": "전기 사용량 관리",
+   "when": "월별",
+   "quote": "3. 월별 전기 사용량은 총무과 청사관리담당이 집계합니다.",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\08_행정지원과2654_여름철_청사_냉방_운영_및_전기요금_절감_안내.hwpx",
+   "type": "협의할 사람",
+   "text": "에너지 절약 협의 담당자",
+   "when": "",
+   "quote": "5. 협의 담당: 이수현(한빛군청 총무과 청사관리담당, 063-000-0202)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\09_행정지원과2980_2025년_행정사무감사_자료_제출.hwpx",
+   "type": "진행 중 현안",
+   "text": "행정사무감사 자료 제출 완료",
+   "when": "2025년 9월 12일",
+   "quote": "군의회 행정사무감사 요구자료를 9월 12일까지 의회 사무과에 제출합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\09_행정지원과2980_2025년_행정사무감사_자료_제출.hwpx",
+   "type": "협의할 사람",
+   "text": "협의 담당자",
+   "when": "",
+   "quote": "협의 담당: 정하은(한빛군의회 사무과, 063-000-0404)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\10_행정지원과3217_2025년_자체감사_지적사항_조치_계획.hwpx",
+   "type": "진행 중 현안",
+   "text": "소모품 구매대장 기재 누락 보완",
+   "when": "2025년 10월 15일",
+   "quote": "자체감사에서 지적된 소모품 구매대장 기재 누락 3건을 10월 15일까지 보완합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\10_행정지원과3217_2025년_자체감사_지적사항_조치_계획.hwpx",
+   "type": "진행 중 현안",
+   "text": "조치 결과 통보",
+   "when": "",
+   "quote": "조치 결과는 감사실에 서면으로 통보합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\10_행정지원과3217_2025년_자체감사_지적사항_조치_계획.hwpx",
+   "type": "협의할 사람",
+   "text": "윤채원 감사실",
+   "when": "",
+   "quote": "협의 담당: 윤채원(한빛군청 감사실, 063-000-0808)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\11_행정지원과3555_2025년_기록물_정리_및_이관_계획.hwpx",
+   "type": "진행 중 현안",
+   "text": "보존기간 지난 기록물 11월 28일까지 정리 및 이관",
+   "when": "2025년 11월",
+   "quote": "보존기간이 지난 기록물을 11월 28일까지 정리하여 기록관에 이관합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\11_행정지원과3555_2025년_기록물_정리_및_이관_계획.hwpx",
+   "type": "협의할 사람",
+   "text": "기록물 이관 지침 해석",
+   "when": "",
+   "quote": "지침 해석이 필요한 사항은 도 자치행정과에 문의합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\11_행정지원과3555_2025년_기록물_정리_및_이관_계획.hwpx",
+   "type": "협의할 사람",
+   "text": "세부 일정 협의",
+   "when": "",
+   "quote": "협의 담당: 문지호(전북특별자치도 자치행정과, 063-000-0707)",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\12_행정지원과3890_연말_재물조사_실시_계획.hwpx",
+   "type": "진행 중 현안",
+   "text": "부서 비품 재물조사 실시",
+   "when": "12월 8일~12월 12일",
+   "quote": "2. 12월 8일부터 12월 12일까지 부서 비품 재물조사를 실시합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\12_행정지원과3890_연말_재물조사_실시_계획.hwpx",
+   "type": "협의할 사람",
+   "text": "재물조사 관련 협의",
+   "when": "",
+   "quote": "5. 협의 담당: 강민재(한빛군청 재정과 예산담당, 063-000-0101)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\12_행정지원과3890_연말_재물조사_실시_계획.hwpx",
+   "type": "결과 제출",
+   "text": "조사 결과 제출",
+   "when": "12월 19일",
+   "quote": "3. 조사 결과는 12월 19일까지 재정과에 제출합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\13_행정지원과0112_2026년_상반기_청사_소방안전점검_사전_협의.hwpx",
+   "type": "진행 중 현안",
+   "text": "2026년 상반기 청사 소방안전점검 일정 사전 협의",
+   "when": "1월 말",
+   "quote": "2026년 상반기 소방안전점검은 4월 중 실시 예정이며 1월 말까지 소방서와 일정을 사전 협의합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\13_행정지원과0112_2026년_상반기_청사_소방안전점검_사전_협의.hwpx",
+   "type": "협의할 사람",
+   "text": "소방서 예방안전과 담당자와 협의",
+   "when": "",
+   "quote": "협의 담당: 박도윤(한빛소방서 예방안전과, 063-000-0303)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\13_행정지원과0112_2026년_상반기_청사_소방안전점검_사전_협의.hwpx",
+   "type": "월별 할 일",
+   "text": "소화기 충약 상태 확인",
+   "when": "",
+   "quote": "점검 전 소화기 충약 상태를 확인합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\14_행정지원과0455_2026년_사무관리비_집행_계획_수립.hwpx",
+   "type": "진행 중 현안",
+   "text": "2026년 사무관리비 집행 계획 수립 완료",
+   "when": "2026년 2월 20일",
+   "quote": "2026년 사무관리비 집행 계획을 2월 20일까지 수립합니다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "01_공문\\14_행정지원과0455_2026년_사무관리비_집행_계획_수립.hwpx",
+   "type": "협의할 사람",
+   "text": "강민재와의 협의 필요",
+   "when": "",
+   "quote": "협의 담당: 강민재(한빛군청 재정과 예산담당, 063-000-0101)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\계약_현황.xlsx",
+   "type": "진행 중 현안",
+   "text": "현재 계약 현황 확인",
+   "when": "즉시",
+   "quote": "[HB-2023-07 복합기 임대 계약 기간: 2023-07-01~2025-06-30]",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\계약_현황.xlsx",
+   "type": "진행 중 현안",
+   "text": "다음 계약 기간 도래 예정 확인",
+   "when": "2024-02, 2024-11",
+   "quote": "[HB-2024-02 정수기 임대 계약 기간: 2024-02-01~2026-01-31] [HB-2024-11 청사 청소 용역 계약 기간: 2024-11-01~2025-10-31]",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\계약_현황.xlsx",
+   "type": "협의할 사람",
+   "text": "계약 담당자 연락처",
+   "when": "필요시",
+   "quote": "최우진 010-0000-0505\n김예시 010-0000-0909\n박모의 010-0000-1010",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\소모품_구매대장_2025.xlsx",
+   "type": "진행 중 현안",
+   "text": "최근 구매 내역 확인 필요",
+   "when": "2025년",
+   "quote": "없음",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\소모품_구매대장_2025.xlsx",
+   "type": "협의할 사람",
+   "text": "영수증 미첨부된 구매 확인",
+   "when": "없음",
+   "quote": "영수증 미첨부",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\소모품_구매대장_2025.xlsx",
+   "type": "진행 중 현안",
+   "text": "품목별 구매 수량 및 금액 추적",
+   "when": "2025년",
+   "quote": "없음",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\업무_연락처(가상).xlsx",
+   "type": "협의할 사람",
+   "text": "예산 및 시설 관련 협의 담당자",
+   "when": "필요시",
+   "quote": "강민재 (예산 편성·추경 협의), 이수현 (청사 시설·소방 점검 일정 협의)",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\업무_연락처(가상).xlsx",
+   "type": "협의할 사람",
+   "text": "소방안전 관련",
+   "when": "",
+   "quote": "박도윤 (소방안전점검 입회)",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\업무_연락처(가상).xlsx",
+   "type": "협의할 사람",
+   "text": "의회 및 행정사무 관련",
+   "when": "",
+   "quote": "정하은 (행정사무감사 자료 요구)",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\업무_연락처(가상).xlsx",
+   "type": "협의할 사람",
+   "text": "복합기 임대 및 소모품",
+   "when": "",
+   "quote": "최우진 (복합기 임대 계약·소모품)",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\업무_연락처(가상).xlsx",
+   "type": "협의할 사람",
+   "text": "개인정보 보호",
+   "when": "",
+   "quote": "한서윤 (개인정보 보호 자체점검)",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\업무_연락처(가상).xlsx",
+   "type": "협의할 사람",
+   "text": "기록물 이관",
+   "when": "",
+   "quote": "문지호 (기록물 이관 지침 문의)",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\업무_연락처(가상).xlsx",
+   "type": "협의할 사람",
+   "text": "자체감사",
+   "when": "",
+   "quote": "윤채원 (자체감사 지적사항 조치)",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 할 일",
+   "text": "3월 부서 소모품 수요 취합 및 상반기 구매 계획 수립",
+   "when": "2025-03-20",
+   "quote": "3월 20일까지 부서 소모품 수요 취합 후 상반기 구매 계획 수립",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 할 일",
+   "text": "4월 소방안전점검 실시 및 지적사항 조치",
+   "when": "2025-04-30",
+   "quote": "4월 셋째 주 소방안전점검 실시, 지적사항 4월 30일까지 조치",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 할 일",
+   "text": "5월 복합기 임대계약 갱신 결정",
+   "when": "2025-05-31",
+   "quote": "5월 말까지 복합기 임대계약 갱신 여부 결정(6월 30일 만료)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 할 일",
+   "text": "6월 개인정보 자체점검 및 결과 제출",
+   "when": "2025-06-27",
+   "quote": "6월 10일~24일 개인정보 자체점검, 결과 6월 27일까지 제출",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 할 일",
+   "text": "7월 본예산 편성 요구서 제출",
+   "when": "2025-07-18",
+   "quote": "7월 18일까지 2026년도 본예산 편성 요구서 제출",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 할 일",
+   "text": "8월 냉방 온도 유지 및 전기 사용량 집계",
+   "when": "2025-08-31",
+   "quote": "8월 냉방 26도 유지, 전기 사용량 총무과와 집계",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 할 일",
+   "text": "9월 행정사무감사 요구자료 제출",
+   "when": "2025-09-12",
+   "quote": "9월 12일까지 행정사무감사 요구자료 제출",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 할 일",
+   "text": "10월 자체감사 지적사항 보완",
+   "when": "2025-10-15",
+   "quote": "10월 15일까지 자체감사 지적사항(대장 누락 3건) 보완",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 할 일",
+   "text": "11월 기록물 정리 및 이관",
+   "when": "2025-11-28",
+   "quote": "11월 28일까지 기록물 정리·기록관 이관",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 할 일",
+   "text": "12월 재물조사 및 결과 제출",
+   "when": "2025-12-19",
+   "quote": "12월 8일~12일 재물조사, 결과 12월 19일까지 제출",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 협의",
+   "text": "상반기 소방안전점검 일정 협의",
+   "when": "2026-01-30",
+   "quote": "1월 말까지 상반기 소방안전점검 일정 사전 협의",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "type": "월별 계획",
+   "text": "2026년 사무관리비 집행 계획 수립",
+   "when": "2026-02-20",
+   "quote": "2월 20일까지 2026년 사무관리비 집행 계획 수립",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\예산집행현황_2025.xlsx",
+   "type": "진행 중 현안",
+   "text": "예산 집행 현황 확인 필요",
+   "when": "2025-12-31",
+   "quote": "집행률: 사무관리비 71%, 공공운영비 87%, 여비 90%",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\2026_서무업무_추진계획안.docx",
+   "type": "월별 할 일",
+   "text": "소모품 구매대장 월 1회 점검",
+   "when": "매월 말",
+   "quote": "매월 말",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\2026_서무업무_추진계획안.docx",
+   "type": "협의할 사람",
+   "text": "예산 관련 사항",
+   "when": "",
+   "quote": "재정과(예산)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\2026_서무업무_추진계획안.docx",
+   "type": "진행 중 현안",
+   "text": "계약 만료 전 알림",
+   "when": "",
+   "quote": "계약 만료 2개월 전 알림표 운영",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\2026_서무업무_추진계획안.docx",
+   "type": "진행 중 현안",
+   "text": "개인정보 보안 점검",
+   "when": "6월",
+   "quote": "개인정보 자체점검 6월 실시",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\과_업무회의_회의록_202510.docx",
+   "type": "진행 중 현안",
+   "text": "자체감사 지적사항 조치 미완료 건 처리",
+   "when": "2025-11",
+   "quote": "소모품 구매대장 누락 3건 중 1건은 영수증을 찾지 못해 미조치 상태입니다.",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\과_업무회의_회의록_202510.docx",
+   "type": "협의할 사람",
+   "text": "감사실과 협의",
+   "when": "2025-11",
+   "quote": "감사실(윤채원)과 협의하여 11월 중 확인서로 갈음할지 결정하기로 함.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\과_업무회의_회의록_202510.docx",
+   "type": "진행 중 현안",
+   "text": "기록물 이관 목록 초안 작성",
+   "when": "2025-10-31",
+   "quote": "10월 말까지 목록 초안을 만들기로 함.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\서무_업무매뉴얼_초안.docx",
+   "type": "진행 중 현안",
+   "text": "소모품 구매 한도 준수",
+   "when": "없음",
+   "quote": "소모품은 나라장터 종합쇼핑몰에서 구매하고 1회 300만 원을 넘지 않는다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\서무_업무매뉴얼_초안.docx",
+   "type": "진행 중 현안",
+   "text": "계약 갱신 검토",
+   "when": "만료 2개월 전",
+   "quote": "임대·용역 계약은 만료 2개월 전에 갱신 여부를 검토한다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\서무_업무매뉴얼_초안.docx",
+   "type": "진행 중 현안",
+   "text": "예산 집행 관리",
+   "when": "매월 말",
+   "quote": "분기별 집행 목표 25%를 지키고 매월 말 예산집행현황을 갱신한다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\서무_업무매뉴얼_초안.docx",
+   "type": "진행 중 현안",
+   "text": "기록물 이관",
+   "when": "매년 11월",
+   "quote": "보존기간이 지난 기록물은 매년 11월에 기록관으로 이관한다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\인수인계서_2024_전전임자.docx",
+   "type": "진행 중 현안",
+   "text": "연간 주요 일정 준수",
+   "when": "연간",
+   "quote": "3월 소모품 계획, 4월 소방점검, 7월 예산 요구, 9월 행정사무감사, 11월 기록물 이관, 12월 재물조사",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\인수인계서_2024_전전임자.docx",
+   "type": "협의할 사람",
+   "text": "과장과의 검토",
+   "when": "행정사무감사 1주 전",
+   "quote": "행정사무감사 자료는 제출 1주 전 과장 검토를 받을 것",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\인수인계서_2024_전전임자.docx",
+   "type": "진행 중 현안",
+   "text": "복합기 업체 연락 방법",
+   "when": "없음",
+   "quote": "복합기 업체는 연락이 느리니 전화 뒤 문자로 한 번 더 남길 것",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "05_메모\\메모_누수.txt",
+   "type": "진행 중 현안",
+   "text": "청사 2층 복도 누수 지속",
+   "when": "2026.1.22",
+   "quote": "아직 보수 안 됨. 비 오면 확인할 것.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "05_메모\\메모_복합기계약.txt",
+   "type": "진행 중 현안",
+   "text": "복합기 계약 만료 및 연장 협상 미결",
+   "when": "2026년 2월",
+   "quote": "결론 못 냄. 후임자가 2월 안에 결정해야 함.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "05_메모\\연간_할일_체크.md",
+   "type": "월별 할 일",
+   "text": "3월 소모품 계획, 4월 소방점검, 6월 개인정보 점검, 7월 예산요구, 9월 행감, 10월 감사조치, 11월 기록물, 12월 재물조사, 2월 집행계획",
+   "when": "2월, 3월, 4월, 6월, 7월, 9월, 10월, 11월, 12월",
+   "quote": "[없음]",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "05_메모\\연간_할일_체크.md",
+   "type": "협의할 사람",
+   "text": "소방서 박도윤 주임",
+   "when": "없음",
+   "quote": "소방서 박도윤 주임은 오전에 전화 받음(063-000-0303)",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "06_기타\\2026_서무업무_추진계획안.pdf",
+   "type": "월별 할 일",
+   "text": "소모품 구매대장 월 1회 점검",
+   "when": "매월 말",
+   "quote": "매월 말",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "06_기타\\2026_서무업무_추진계획안.pdf",
+   "type": "협의할 사람",
+   "text": "재정과, 총무과, 정보통신과와의 협력",
+   "when": "",
+   "quote": "",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "06_기타\\2026_서무업무_추진계획안.pdf",
+   "type": "진행 중 현안",
+   "text": "계약 만료 2개월 전 알림 운영",
+   "when": "",
+   "quote": "",
+   "grounded": false,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "06_기타\\2026_서무업무_추진계획안.pdf",
+   "type": "진행 중 현안",
+   "text": "6월 개인정보 자체점검 실시",
+   "when": "6월",
+   "quote": "6 월 실시",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "06_기타\\서무_업무매뉴얼_초안.pdf",
+   "type": "진행 중 현안",
+   "text": "소모품 구매 한도 준수",
+   "when": "없음",
+   "quote": "구매 즉시 소모품 구매대장에 적고 영수증을 붙인다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "06_기타\\서무_업무매뉴얼_초안.pdf",
+   "type": "진행 중 현안",
+   "text": "계약 갱신 검토",
+   "when": "계약 만료 2 개월 전",
+   "quote": "임대·용역 계약은 만료 2 개월 전에 갱신 여부를 검토한다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "06_기타\\서무_업무매뉴얼_초안.pdf",
+   "type": "진행 중 현안",
+   "text": "예산 집행 관리",
+   "when": "매월 말",
+   "quote": "매월 말 예산집행현황을 갱신한다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "06_기타\\서무_업무매뉴얼_초안.pdf",
+   "type": "진행 중 현안",
+   "text": "기록물 관리",
+   "when": "매년 11 월",
+   "quote": "보존기간이 지난 기록물은 매년 11 월에 기록관으로 이관한다.",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "06_기타\\인수인계서_2024_전전임자.pdf",
+   "type": "진행 중 현안",
+   "text": "연간 주요 일정 준수",
+   "when": "연간 일정에 따라",
+   "quote": "3 월 소모품 계획, 4 월 소방점검, 7 월 예산 요구, 9 월 행정사무감사, 11 월 기록물 이관, 12 월 재물조사",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  },
+  {
+   "file": "06_기타\\인수인계서_2024_전전임자.pdf",
+   "type": "협의할 사람",
+   "text": "과장",
+   "when": "",
+   "quote": "행정사무감사 자료는 제출 1 주 전 과장 검토를 받을 것",
+   "grounded": true,
+   "match": null,
+   "match_sim": 0.0
+  }
+ ],
+ "failures": [
+  {
+   "file": "06_기타\\손상된_문서.hwp",
+   "reason": "한글 5.0 형식이 아님(한글 97 이하 또는 다른 파일)"
+  },
+  {
+   "file": "06_기타\\암호걸린_안내문.pdf",
+   "reason": "암호가 걸린 PDF(읽기 제한)"
+  },
+  {
+   "file": "06_기타\\옛공문_스캔.jpg",
+   "reason": "지원하지 않는 형식(.jpg)"
+  }
+ ],
+ "fingerprints": [
+  {
+   "file": "01_공문\\03_행정지원과1023_2025년_상반기_소모품_구매_계획_수립.hwpx",
+   "bytes": 21913,
+   "sha256_before": "59e0ce9f46dfca05ede07f0943b8cc858ba053bf7d0b7fc475657e3c73b4c199",
+   "sha256_after": "59e0ce9f46dfca05ede07f0943b8cc858ba053bf7d0b7fc475657e3c73b4c199",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\04_행정지원과1388_2025년_청사_소방안전점검_실시_계획.hwpx",
+   "bytes": 21846,
+   "sha256_before": "90e5be5439fd0529b1baacd52f9c559dde6fee12e49fb66caaea81d7f49db64f",
+   "sha256_after": "90e5be5439fd0529b1baacd52f9c559dde6fee12e49fb66caaea81d7f49db64f",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\05_행정지원과1720_복합기_임대계약_갱신_검토.hwpx",
+   "bytes": 21930,
+   "sha256_before": "ec50ca4c982d6b5171e4fa138c9add68ce3ee52f03bf704d52938b9fd3a4cc95",
+   "sha256_after": "ec50ca4c982d6b5171e4fa138c9add68ce3ee52f03bf704d52938b9fd3a4cc95",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\06_행정지원과2015_2025년_개인정보_보호_자체점검_실시.hwpx",
+   "bytes": 21860,
+   "sha256_before": "361e15f78c5989b3b95b4ed1f578c43b28effb82909464e5273dd487faa4da15",
+   "sha256_after": "361e15f78c5989b3b95b4ed1f578c43b28effb82909464e5273dd487faa4da15",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\07_행정지원과2301_2026년도_본예산_편성_요구서_제출.hwpx",
+   "bytes": 21877,
+   "sha256_before": "b03fab69e023f946c29d05142991aa3dd57ec3b5dff34e3c34e87bdd1b85a98a",
+   "sha256_after": "b03fab69e023f946c29d05142991aa3dd57ec3b5dff34e3c34e87bdd1b85a98a",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\08_행정지원과2654_여름철_청사_냉방_운영_및_전기요금_절감_안내.hwpx",
+   "bytes": 21865,
+   "sha256_before": "02fc7390e2ef9950ca4b03ec8b8faa009383317b8b36913c4464972dadcdd569",
+   "sha256_after": "02fc7390e2ef9950ca4b03ec8b8faa009383317b8b36913c4464972dadcdd569",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\09_행정지원과2980_2025년_행정사무감사_자료_제출.hwpx",
+   "bytes": 21842,
+   "sha256_before": "2595b03ec5e52b35d6425cef8d99db5715bbbe0293c680ca6d1e41cef1f878d3",
+   "sha256_after": "2595b03ec5e52b35d6425cef8d99db5715bbbe0293c680ca6d1e41cef1f878d3",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\10_행정지원과3217_2025년_자체감사_지적사항_조치_계획.hwpx",
+   "bytes": 21880,
+   "sha256_before": "4d8fa6d955ef16ccf5b27f3915c0f8eec81dca1c3b35a39f4937551493d3e261",
+   "sha256_after": "4d8fa6d955ef16ccf5b27f3915c0f8eec81dca1c3b35a39f4937551493d3e261",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\11_행정지원과3555_2025년_기록물_정리_및_이관_계획.hwpx",
+   "bytes": 21875,
+   "sha256_before": "24c9db91a60ee8139a65a873037fb2ef789a937e0708ea67726efc054dc6f0af",
+   "sha256_after": "24c9db91a60ee8139a65a873037fb2ef789a937e0708ea67726efc054dc6f0af",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\12_행정지원과3890_연말_재물조사_실시_계획.hwpx",
+   "bytes": 21803,
+   "sha256_before": "4fbb8d76d4df853fc086ee64eaf6f8eeb734cc4a2882b9eb5de7b2a76bedf02c",
+   "sha256_after": "4fbb8d76d4df853fc086ee64eaf6f8eeb734cc4a2882b9eb5de7b2a76bedf02c",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\13_행정지원과0112_2026년_상반기_청사_소방안전점검_사전_협의.hwpx",
+   "bytes": 21866,
+   "sha256_before": "b5907cc3418ecd8412f0f25b077a8b4a29d024a6b8f147e6e885c45e5912cd4b",
+   "sha256_after": "b5907cc3418ecd8412f0f25b077a8b4a29d024a6b8f147e6e885c45e5912cd4b",
+   "unchanged": true
+  },
+  {
+   "file": "01_공문\\14_행정지원과0455_2026년_사무관리비_집행_계획_수립.hwpx",
+   "bytes": 21811,
+   "sha256_before": "044786d07bf0b4b70efa0912eebd775ccfbadbeaa631bed631b4c79b3f815cce",
+   "sha256_after": "044786d07bf0b4b70efa0912eebd775ccfbadbeaa631bed631b4c79b3f815cce",
+   "unchanged": true
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\계약_현황.xlsx",
+   "bytes": 5268,
+   "sha256_before": "5cb6908980b439a2c070a5c0c3ea50aebf1d08a1dc0a3a0891dac7e110dfc924",
+   "sha256_after": "5cb6908980b439a2c070a5c0c3ea50aebf1d08a1dc0a3a0891dac7e110dfc924",
+   "unchanged": true
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\소모품_구매대장_2025.xlsx",
+   "bytes": 5915,
+   "sha256_before": "1eff83de538fe567b342c12edbf3a5d3b4bc8304166560a72f4bdf84c48c8802",
+   "sha256_after": "1eff83de538fe567b342c12edbf3a5d3b4bc8304166560a72f4bdf84c48c8802",
+   "unchanged": true
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\업무_연락처(가상).xlsx",
+   "bytes": 5613,
+   "sha256_before": "39e2247b0c8667f5a12d9f4c0bcd25165e3c50fc76c2dab4b4e3ec397c5e6e80",
+   "sha256_after": "39e2247b0c8667f5a12d9f4c0bcd25165e3c50fc76c2dab4b4e3ec397c5e6e80",
+   "unchanged": true
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\연간_업무일정표_2025.xlsx",
+   "bytes": 5824,
+   "sha256_before": "1782353183503ebc6d57e24926ac333079caf51edeb387dd1328ffac631ed075",
+   "sha256_after": "1782353183503ebc6d57e24926ac333079caf51edeb387dd1328ffac631ed075",
+   "unchanged": true
+  },
+  {
+   "file": "02_대장·현황(엑셀)\\예산집행현황_2025.xlsx",
+   "bytes": 5072,
+   "sha256_before": "8af26635144250b044e5dc4e7a22cc892cf8027b41aa3f6b78ea019fb5f18e74",
+   "sha256_after": "8af26635144250b044e5dc4e7a22cc892cf8027b41aa3f6b78ea019fb5f18e74",
+   "unchanged": true
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\2026_서무업무_추진계획안.docx",
+   "bytes": 1318,
+   "sha256_before": "229dc52eba1fbafbbea646fd1c156ff60c4c5601974b9949e905bf4e4be595a3",
+   "sha256_after": "229dc52eba1fbafbbea646fd1c156ff60c4c5601974b9949e905bf4e4be595a3",
+   "unchanged": true
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\과_업무회의_회의록_202510.docx",
+   "bytes": 1630,
+   "sha256_before": "91fae00c917296f2510c5375debc748cd5e4402fbf5b834a2516569edfa21655",
+   "sha256_after": "91fae00c917296f2510c5375debc748cd5e4402fbf5b834a2516569edfa21655",
+   "unchanged": true
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\서무_업무매뉴얼_초안.docx",
+   "bytes": 1391,
+   "sha256_before": "461582df742a90a00b1f39a276b0a8145c4fcebdb94554e4914049c0452b2fbb",
+   "sha256_after": "461582df742a90a00b1f39a276b0a8145c4fcebdb94554e4914049c0452b2fbb",
+   "unchanged": true
+  },
+  {
+   "file": "03_계획·매뉴얼(워드)\\인수인계서_2024_전전임자.docx",
+   "bytes": 1362,
+   "sha256_before": "f6414d52666f653df9e85b7b771807035c4ce30bbb7102bf1625187d289d605f",
+   "sha256_after": "f6414d52666f653df9e85b7b771807035c4ce30bbb7102bf1625187d289d605f",
+   "unchanged": true
+  },
+  {
+   "file": "04_메일\\20250603_개인정보_자체점검표_배포.eml",
+   "bytes": 886,
+   "sha256_before": "e7913b416a7cdcdbb76d16f2b3fe3c1a367b07ebcd74c30f7fd082f28604f9c3",
+   "sha256_after": "e7913b416a7cdcdbb76d16f2b3fe3c1a367b07ebcd74c30f7fd082f28604f9c3",
+   "unchanged": true
+  },
+  {
+   "file": "04_메일\\20250901_행감자료_요구.eml",
+   "bytes": 449,
+   "sha256_before": "a81ea766a2ccbf214eec1c8ddc9c2ca39f05a3cd30094ba7c4eafcdabab93cfc",
+   "sha256_after": "a81ea766a2ccbf214eec1c8ddc9c2ca39f05a3cd30094ba7c4eafcdabab93cfc",
+   "unchanged": true
+  },
+  {
+   "file": "04_메일\\20251120_기록물_이관목록_반려.eml",
+   "bytes": 755,
+   "sha256_before": "83d9a080e612ec5564bd147c6a96a2f70b170faed0e215c3f1c1679e3097ee85",
+   "sha256_after": "83d9a080e612ec5564bd147c6a96a2f70b170faed0e215c3f1c1679e3097ee85",
+   "unchanged": true
+  },
+  {
+   "file": "04_메일\\20260114_복합기_임대료_협의.eml",
+   "bytes": 585,
+   "sha256_before": "abec929cdb4d210f132c596c4f7f44a0b09ae587a1bc7b8861ae9b1c0662b090",
+   "sha256_after": "abec929cdb4d210f132c596c4f7f44a0b09ae587a1bc7b8861ae9b1c0662b090",
+   "unchanged": true
+  },
+  {
+   "file": "05_메모\\메모_기타.txt",
+   "bytes": 99,
+   "sha256_before": "ec4bf58f214761b7e3776d996e91f05014344ef7d6dea397d310fdf42da47a77",
+   "sha256_after": "ec4bf58f214761b7e3776d996e91f05014344ef7d6dea397d310fdf42da47a77",
+   "unchanged": true
+  },
+  {
+   "file": "05_메모\\메모_누수.txt",
+   "bytes": 150,
+   "sha256_before": "0eade20e3d813d993eff0f57589504d318fca3288e74984f7e89d3baf34f7207",
+   "sha256_after": "0eade20e3d813d993eff0f57589504d318fca3288e74984f7e89d3baf34f7207",
+   "unchanged": true
+  },
+  {
+   "file": "05_메모\\메모_복합기계약.txt",
+   "bytes": 276,
+   "sha256_before": "a60040dc9b2df2c917af0efabf90149ae1202e24e1b4ad18cbdc52d1f28f2185",
+   "sha256_after": "a60040dc9b2df2c917af0efabf90149ae1202e24e1b4ad18cbdc52d1f28f2185",
+   "unchanged": true
+  },
+  {
+   "file": "05_메모\\연간_할일_체크.md",
+   "bytes": 278,
+   "sha256_before": "b70b403b31eda482140801e232d47f533711cdd705aaadbac8903dd980b16567",
+   "sha256_after": "b70b403b31eda482140801e232d47f533711cdd705aaadbac8903dd980b16567",
+   "unchanged": true
+  },
+  {
+   "file": "06_기타\\2026_서무업무_추진계획안.pdf",
+   "bytes": 22380,
+   "sha256_before": "d89269098c683133e4df44841acb735974d7c35fc626ebba126fed850e8504a9",
+   "sha256_after": "d89269098c683133e4df44841acb735974d7c35fc626ebba126fed850e8504a9",
+   "unchanged": true
+  },
+  {
+   "file": "06_기타\\서무_업무매뉴얼_초안.pdf",
+   "bytes": 23117,
+   "sha256_before": "5e53913dff0994be4a2770723a1abf6956326bed4f4e598022069adbe379160f",
+   "sha256_after": "5e53913dff0994be4a2770723a1abf6956326bed4f4e598022069adbe379160f",
+   "unchanged": true
+  },
+  {
+   "file": "06_기타\\손상된_문서.hwp",
+   "bytes": 4096,
+   "sha256_before": "0c815fb49e04af410a3a8b9b356a98ca4eaca0ea376a9210941044cebe00ace6",
+   "sha256_after": "0c815fb49e04af410a3a8b9b356a98ca4eaca0ea376a9210941044cebe00ace6",
+   "unchanged": true
+  },
+  {
+   "file": "06_기타\\암호걸린_안내문.pdf",
+   "bytes": 828,
+   "sha256_before": "bea120784943c3b06d9413a9c79d4d1d140706c8c33637a8b606f3b723253a57",
+   "sha256_after": "bea120784943c3b06d9413a9c79d4d1d140706c8c33637a8b606f3b723253a57",
+   "unchanged": true
+  },
+  {
+   "file": "06_기타\\옛공문_스캔.jpg",
+   "bytes": 2052,
+   "sha256_before": "cbec6224ac912ef1f40cd6a7def973cf824c043e311f6788ed9b6a7f2209cb6a",
+   "sha256_after": "cbec6224ac912ef1f40cd6a7def973cf824c043e311f6788ed9b6a7f2209cb6a",
+   "unchanged": true
+  },
+  {
+   "file": "06_기타\\인수인계서_2024_전전임자.pdf",
+   "bytes": 22004,
+   "sha256_before": "34ee71bbae305cf3239e071e77ef99f9ebb7bd068a5c4a7c522b4ed2aa43cde9",
+   "sha256_after": "34ee71bbae305cf3239e071e77ef99f9ebb7bd068a5c4a7c522b4ed2aa43cde9",
+   "unchanged": true
+  },
+  {
+   "file": "06_기타\\행감_제출자료_2025.zip",
+   "bytes": 4830,
+   "sha256_before": "bffc4fb483d0087bef0c7f2722ad6c0f92e7381d218b61ff18f43d90ab5adf17",
+   "sha256_after": "bffc4fb483d0087bef0c7f2722ad6c0f92e7381d218b61ff18f43d90ab5adf17",
+   "unchanged": true
+  }
+ ]
+}
