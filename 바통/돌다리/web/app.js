@@ -27,7 +27,7 @@ async function refresh() {
   $('#tables').checked = !!ST.include_tables; $('#recent').value = String(ST.recent_years || 0); $('#maxCalls').value = String(ST.max_calls || 3);
   $('#title').value = ST.title || '';
   $('#log').textContent = (ST.log || []).join('\n');
-  renderFiles(); renderPlan(); renderProgress();
+  renderFiles(); renderSubdirs(); renderPlan(); renderProgress();
   if (ST.step >= 4 && !ITEMS.length) await loadItems();
   if (ST.step === 5) renderExports();
   if (ST.running) { clearTimeout(timer); timer = setTimeout(refresh, 1500); }
@@ -41,6 +41,19 @@ function renderFiles() {
   h += '<table><tr><th>형식</th><th class="num">파일</th><th class="num">글자 수</th></tr>' + Object.keys(kinds).sort().map(k => `<tr><td>.${k}</td><td class="num">${kinds[k].n}</td><td class="num">${kinds[k].c.toLocaleString()}</td></tr>`).join('') + '</table>';
   if (ST.failures.length) h += '<details><summary>못 읽은 파일 ' + ST.failures.length + '개(인수인계서에 「직접 열어 볼 것」으로 적힘)</summary><table>' + ST.failures.map(x => `<tr><td>${esc(x.file)}</td><td>${esc(x.reason)}</td></tr>`).join('') + '</table></details>';
   $('#files').innerHTML = h;
+}
+
+function renderSubdirs() {
+  const box = $('#subdirs');
+  if (!ST.folder || !ST.subdirs || !ST.subdirs.length) { box.innerHTML = ST.warn ? `<div class="note">${esc(ST.warn)}</div>` : ''; return; }
+  const ex = new Set(ST.exclude || []);
+  box.innerHTML = (ST.warn ? `<div class="note">${esc(ST.warn)}</div>` : '') + '<div class="hint">읽을 하위 폴더(체크를 풀면 뺍니다): ' +
+    ST.subdirs.map(d => `<label style="margin-right:12px"><input type="checkbox" class="sub" value="${esc(d)}" ${ex.has(d) ? '' : 'checked'}> ${esc(d)}</label>`).join('') +
+    ' <button class="ghost" id="btnReread" style="padding:4px 10px">다시 읽기</button></div>';
+  $('#btnReread').onclick = async () => {
+    const exclude = [...box.querySelectorAll('.sub')].filter(c => !c.checked).map(c => c.value);
+    try { await api('/api/extract', {folder: $('#folder').value, exclude}); ITEMS = []; DROPPED = []; await refresh(); await loadModels(); await settings(); } catch (e) { alert(e.message); }
+  };
 }
 
 function renderPlan() {
@@ -68,7 +81,8 @@ async function loadItems() {
 
 function itemHtml(it, dropped) {
   const tag = it.src === '규칙' ? '<span class="tag">규칙</span>' : it.src === '직접 입력' ? '<span class="tag man">직접 적음</span>' : it.src.indexOf('보정') >= 0 ? '<span class="tag fix">모델 · 발췌 보정</span>' : it.src.indexOf('복원') >= 0 ? '<span class="tag man">전임자 복원</span>' : '<span class="tag">모델</span>';
-  const src = it.file ? `<div class="src"><b>출처</b> ${esc(it.file)} · 「${esc(String(it.quote || it.quote_raw || '').replace(/\n/g, ' / '))}」</div>` : '<div class="src"><b>출처</b> 전임자가 직접 적음</div>';
+  const also = (it.also || []).length ? `<div class="also">같은 내용 ${it.also.length}곳: ${it.also.slice(0, 4).map(a => esc(a.file)).join(' · ')}${it.also.length > 4 ? ' …' : ''}</div>` : '';
+  const src = (it.file ? `<div class="src"><b>출처</b> ${esc(it.file)} · 「${esc(String(it.quote || it.quote_raw || '').replace(/\n/g, ' / '))}」</div>` : '<div class="src"><b>출처</b> 전임자가 직접 적음</div>') + also;
   return `<div class="item ${it.keep ? '' : 'off'}" data-id="${it.id}">
     <div><input type="checkbox" class="keep" ${it.keep ? 'checked' : ''} title="${dropped ? '체크하면 초안에 넣습니다' : '체크를 풀면 인수인계서에서 뺍니다'}"></div>
     <div><div class="t"><select class="type">${TYPES.map(t => `<option ${t === it.type ? 'selected' : ''}>${t}</option>`).join('')}</select><input class="when" type="text" value="${esc(it.when)}" placeholder="시기"><input class="text" type="text" value="${esc(it.text)}">${tag}</div>

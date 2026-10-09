@@ -15,7 +15,8 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-STATE = {'step': 1, 'folder': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
+SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
+STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
          'recent_years': 0, 'max_calls': 3, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': []}
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
@@ -42,7 +43,7 @@ def load_session():
                 STATE.update(json.load(f))
             STATE['running'] = False; STATE['stop'] = False
             if STATE['files'] and STATE['folder'] and os.path.isdir(STATE['folder']):
-                files, _, _ = EX.extract_folder(STATE['folder'])   # 발췌 확인·재실행을 위해 글자만 다시 읽는다(원본은 읽기만)
+                files, _, _ = EX.extract_folder(STATE['folder'], skip_dirs=SKIP_DIRS | set(STATE.get('exclude', [])))   # 발췌 확인·재실행을 위해 글자만 다시 읽는다(원본은 읽기만)
                 for f in files:
                     _units[f['file'].replace('\\', '/')] = f['units']
             log('이전 작업을 이어서 엽니다: ' + STATE['folder'])
@@ -55,16 +56,21 @@ def year_of(f):
     return int(m.group(1)) if m else None
 
 
-def do_extract(folder):
+def do_extract(folder, exclude=None):
     t0 = time.time()
-    files, failures, fps = EX.extract_folder(folder)
+    exclude = set(exclude or [])
+    subdirs = sorted(d for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d)) and d not in SKIP_DIRS and not d.startswith('.'))
+    warn = ''
+    if any(os.path.exists(os.path.join(folder, x)) for x in ('server.py', 'core.py', '돌다리_실행.bat')):
+        warn = '이 폴더에는 돌다리 프로그램 파일이 들어 있습니다. 업무 폴더는 보통 그 안의 하위 폴더(예: 모의 폴더)입니다. 아래에서 뺄 폴더를 고르거나 폴더를 다시 지정하세요.'
+    files, failures, fps = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | exclude)
     for f in files:
         f['file'] = f['file'].replace('\\', '/')
         _units[f['file']] = f['units']
     for x in failures + fps:
         x['file'] = x['file'].replace('\\', '/')
     with LOCK:
-        STATE.update({'folder': folder, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'year': year_of(f)} for f in files],
+        STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'year': year_of(f)} for f in files],
                       'failures': failures, 'fingerprints': fps, 'items': [], 'dropped': [], 'errors': [], 'calls': [], 'exports': [], 'step': 2, 'progress': None})
         STATE['plan'] = make_plan()
     log('추출 %.1f초: 읽음 %d · 못 읽음 %d · 원본 변경 %d' % (time.time() - t0, len(files), len(failures), sum(1 for x in fps if not x['unchanged'])))
@@ -93,6 +99,7 @@ def run_draft():
     try:
         draft, dropped, calls, errors = core.build_draft(files, STATE['model'] or 'none', STATE['url'], '', 6000, include_tables=STATE['include_tables'],
                                                          only_files=only, progress=progress, should_stop=lambda: STATE['stop'], max_calls_per_file=int(STATE.get('max_calls') or 3))
+        draft = core.merge_similar(draft)
         with LOCK:
             n = 0
             for d in draft:
@@ -103,7 +110,7 @@ def run_draft():
             if calls:
                 STATE['avg_sec'] = round(sum(c['sec'] for c in calls) / len(calls), 1)
             STATE['step'] = 4
-        log('초안 %d항목(규칙 %d·모델 %d), 불확실 %d, 오류 %d, %.0f초' % (len(draft), sum(1 for d in draft if d['src'] == '규칙'), sum(1 for d in draft if d['src'] != '규칙'), len(dropped), len(errors), time.time() - t0))
+        log('초안 %d항목(규칙 %d·모델 %d, 같은 내용 %d건 묶음), 불확실 %d, 오류 %d, %.0f초' % (len(draft), sum(1 for d in draft if d['src'] == '규칙'), sum(1 for d in draft if d['src'] != '규칙'), sum(len(d.get('also', [])) for d in draft), len(dropped), len(errors), time.time() - t0))
     except Exception as e:
         with LOCK:
             STATE['errors'] = [{'file': '', 'chunk': 0, 'reason': str(e)[:200]}]
@@ -209,7 +216,7 @@ class H(BaseHTTPRequestHandler):
                 return self._send(400, {'error': '폴더를 찾지 못했습니다: ' + folder})
             if STATE['running']:
                 return self._send(409, {'error': '초안을 만드는 중입니다'})
-            do_extract(folder)
+            do_extract(folder, [str(x) for x in body.get('exclude', [])])
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:

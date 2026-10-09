@@ -51,6 +51,8 @@ def to_markdown(session):
                 out.append('  - 메모: %s' % it['note'])
             if it.get('file'):
                 out.append('  - 출처: %s · 「%s」' % (it['file'], str(it.get('quote', '')).replace('\n', ' / ')))
+                for al in it.get('also', [])[:5]:
+                    out.append('  - 같은 내용: %s · 「%s」' % (al['file'], str(al.get('quote', '')).replace('\n', ' / ')[:80]))
             elif it.get('src') == '직접 입력':
                 out.append('  - 출처: 전임자가 직접 적음')
         out.append('')
@@ -107,6 +109,8 @@ def to_docx(session, path):
                 body.append(_p('메모: ' + it['note'], size=9, indent=720))
             if it.get('file'):
                 body.append(_p('출처: %s · 「%s」' % (it['file'], str(it.get('quote', '')).replace('\n', ' / ')), size=8, color='666666', indent=720))
+                for al in it.get('also', [])[:5]:
+                    body.append(_p('같은 내용: %s · 「%s」' % (al['file'], str(al.get('quote', '')).replace('\n', ' / ')[:80]), size=8, color='888888', indent=720))
             elif it.get('src') == '직접 입력':
                 body.append(_p('출처: 전임자가 직접 적음', size=8, color='666666', indent=720))
     failures = session.get('failures', [])

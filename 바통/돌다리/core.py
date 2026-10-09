@@ -205,14 +205,23 @@ def call_model(url, model, key, text, timeout=600, json_mode=True):
 def rule_items(fobj):
     items = []
     seen = set()
-    year_hint = ''
+    year_hint, month_hint = '', 0
 
     def add(kind, text, when, raw, loc):
         key = (kind, norm(raw))
         if key in seen:
             return
         seen.add(key)
+        text = re.sub(r'^(?:[-•*·]\s*|\[[^\]]{1,12}\]\s*|\d+\.\s*|[가-힣]\.\s*|\d+\)\s*|[ㅇ○]\s*|※\s*)+', '', text)  # 글머리 기호·항목 부호 제거
+        text = re.sub(r'\s*<small>.*?</small>', '', text)
         items.append({'type': kind, 'text': re.sub(r'\s+', ' ', text).strip()[:80], 'when': when, 'quote': raw, 'loc': loc, 'src': '규칙'})
+
+    def when_of(mon):
+        """문서 날짜(연·월)로 기한의 연도를 추정: 문서 월보다 이른 달이면 이듬해."""
+        if not year_hint:
+            return '%d월' % mon
+        y = int(year_hint) + (1 if month_hint and mon < month_hint - 1 else 0)
+        return '%d년 %d월' % (y, mon)
 
     for u in fobj['units']:
         for line in re.split(r'\n+', u['text']):
@@ -220,9 +229,9 @@ def rule_items(fobj):
             if not raw:
                 continue
             line_body = re.sub(r'^\d+행:\s*', '', raw)  # 엑셀 줄 머리 제거
-            ym = re.search(r'(20\d{2})\.\s*(\d{1,2})\.', raw)
-            if ym:
-                year_hint = ym.group(1)
+            ym = re.search(r'(20\d{2})\.\s*(\d{1,2})\.', raw) or re.search(r'(20\d{2})-(\d{2})-\d{2}', raw) or re.search(r'(20\d{2})(\d{2})\d{2}', fobj.get('file', ''))
+            if ym and not year_hint:
+                year_hint, month_hint = ym.group(1), int(ym.group(2))
             # 협의할 사람: 「협의 담당: 이름(소속, 전화)」 또는 전화번호가 든 줄
             m = re.search(r'협의 담당:\s*([가-힣]{2,4})\(([^,()]+(?:\([^()]*\)[^,()]*)?),\s*(0\d{1,2}-\d{3,4}-\d{4})\)', raw)
             if m:
@@ -238,24 +247,51 @@ def rule_items(fobj):
             # 월별 할 일: 「○월 ○일/말/초까지」·「○월 ○일~○일」·「2025-09-11」(제출·기한과 함께)·「○개월/○주 전」이 든 문장
             d = DUE.search(line_body) or DUE_RANGE.search(line_body)
             if d and ACTION.search(line_body):
-                mon = int(d.group(1))
-                add('월별 할 일', re.sub(r'^\d+\.\s*', '', line_body), ('%s년 ' % year_hint if year_hint else '') + '%d월' % mon, raw, u['loc'])
+                add('월별 할 일', line_body, when_of(int(d.group(1))), raw, u['loc'])
                 continue
             f = DATE_FULL.search(line_body)
             if f and re.search(r'제출|기한|마감|까지|완료|예정', line_body) and not PHONE.search(line_body):
-                add('월별 할 일', re.sub(r'^\d+\.\s*', '', line_body), '%s년 %d월' % (f.group(1), int(f.group(2))), raw, u['loc'])
+                add('월별 할 일', line_body, '%s년 %d월' % (f.group(1), int(f.group(2))), raw, u['loc'])
                 continue
             if REL_DUE.search(line_body) and ACTION.search(line_body):
-                add('월별 할 일', re.sub(r'^\d+\.\s*', '', line_body), '', raw, u['loc'])
+                add('월별 할 일', line_body, '', raw, u['loc'])
                 continue
             e = DUE_EVERY.search(line_body)
             if e and ACTION.search(line_body) and len(norm(line_body)) >= 8:
-                add('월별 할 일', re.sub(r'^\d+\.\s*', '', line_body), e.group(1), raw, u['loc'])
+                add('월별 할 일', line_body, e.group(1), raw, u['loc'])
                 continue
             # 진행 중 현안: 현안 신호어가 든 줄(전화번호 줄은 위에서 처리)
             if ISSUE.search(line_body) and len(norm(line_body)) >= 8 and not PHONE.search(line_body):
-                add('진행 중 현안', re.sub(r'^\d+\.\s*', '', line_body), '', raw, u['loc'])
+                add('진행 중 현안', line_body, '', raw, u['loc'])
     return items
+
+
+def merge_similar(draft):
+    """같은 유형에서 발췌 줄이 서로 포함되거나 요약이 비슷한 항목(같은 공문이 일정표·메모·초안에 되풀이된 것)을 한 항목으로 묶는다.
+    첫 항목이 대표가 되고 나머지 출처는 also 목록에 들어간다. 문장 파일(공문·보고서) 출처를 대표로 우선한다."""
+    order = {k: i for i, k in enumerate(['odt', 'hwp', 'hwpx', 'docx', 'pdf', 'eml', 'txt', 'md', 'xlsx', 'xlsm', 'csv'])}
+    def kind_of(f):
+        return os.path.splitext(f.split(' ▸ ')[-1])[1].lower().lstrip('.')
+    groups = []
+    for d in draft:
+        hit = None
+        for g in groups:
+            if g['type'] != d['type']:
+                continue
+            if line_overlap(g['quote'], d['quote']) or sim(g['text'], d['text']) >= 0.6 or contain(g['quote'], d['quote']) >= 0.8:
+                hit = g
+                break
+        if hit is None:
+            d = dict(d); d['also'] = []
+            groups.append(d)
+        else:
+            # 문장 파일이 대표가 되도록 자리를 바꾼다
+            if order.get(kind_of(d['file']), 99) < order.get(kind_of(hit['file']), 99) and d['src'] == hit['src']:
+                also = hit['also'] + [{'file': hit['file'], 'quote': hit['quote']}]
+                hit.update({k: d[k] for k in ('file', 'text', 'when', 'quote', 'src')}); hit['also'] = also
+            else:
+                hit['also'].append({'file': d['file'], 'quote': d['quote']})
+    return groups
 
 
 # ---------------------------------------------------------------- 부하 계획·초안 만들기(화면·실측 공용)

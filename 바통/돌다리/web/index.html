@@ -44,6 +44,7 @@ td.num,th.num{text-align:right;white-space:nowrap}
 .item input.when{width:120px}
 .item .src{font-size:13px;color:var(--mute);word-break:break-all}
 .item .src b{color:#333;font-weight:600}
+.item .also{font-size:12px;color:#8a919c;margin-top:2px}
 .item .tag{font-size:12px;padding:1px 7px;border-radius:10px;background:#eef1f5;color:#444;white-space:nowrap}
 .item .tag.fix{background:#fff1d6;color:#7a4b00}
 .item .tag.man{background:#e4f3ff;color:#0b4f8a}
@@ -65,6 +66,7 @@ footer{color:var(--mute);font-size:12px;text-align:center;margin-top:30px}
 <div class="row"><input type="text" id="folder" class="wide" placeholder="예) C:\업무\서무  (폴더 주소를 붙여 넣거나 「찾기」)"><button class="ghost" id="btnBrowse">찾기…</button><button id="btnExtract">읽기</button></div>
 <div class="hint">읽을 수 있는 파일: 한글(.hwp 5.0·.hwpx), 워드(.docx), PDF(글자 있는 것), 엑셀(.xlsx), 메일(.eml), 메모(.txt·.md·.csv), 압축(.zip 안의 파일). 원본은 읽기만 하고 바꾸지 않습니다(처리 전후 지문 대조). 옛 한글 2.x·3.x 문서, 암호 문서, 스캔 이미지는 「못 읽은 파일」로 따로 적힙니다.</div>
 <div id="extractMsg"></div>
+<div id="subdirs"></div>
 </section>
 
 <section class="step" id="s2"><h2><span class="n">2</span>읽은 결과와 처리 계획</h2>
