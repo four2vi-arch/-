@@ -341,12 +341,14 @@ def extract_file(path, rel, results, failures, depth=0):
         failures.append({'file': rel, 'reason': '%s(파일 손상 가능: %s)' % ({'.hwp': '한글 5.0 구조를 읽지 못함', '.hwpx': 'hwpx 구조를 읽지 못함', '.pdf': 'PDF 구조를 읽지 못함', '.xlsx': '엑셀 구조를 읽지 못함', '.docx': '워드 구조를 읽지 못함', '.odt': 'ODT 구조를 읽지 못함'}.get(ext, '읽지 못함'), (str(e)[:80] or type(e).__name__))})
 
 
-def extract_folder(folder, skip_dirs=None, skip_names=None):
+def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=False):
     """skip_dirs: 건너뛸 폴더 이름(어느 깊이든 같은 이름). skip_names: 건너뛸 파일 이름 정규식. 숨김 폴더(.으로 시작)는 늘 건너뛴다."""
     results, failures, fps = [], [], []
     skip = set(skip_dirs or ())
     for root, dirs, files in os.walk(folder):
         dirs[:] = sorted(d for d in dirs if d not in skip and not d.startswith('.'))
+        if skip_root_files and os.path.abspath(root) == os.path.abspath(folder):
+            continue   # 프로그램 폴더를 골랐을 때: 최상위의 README·설정 파일은 업무 문서가 아니다
         for name in sorted(files):
             if skip_names and re.search(skip_names, name):
                 continue

@@ -379,6 +379,8 @@ def build_draft(files, model, url='http://127.0.0.1:11434/v1/chat/completions', 
                 if not text:
                     continue
                 q2, how = ground_fix(q, text, texts[f['file']], lines[f['file']])
+                if fix_type(it.get('type'), text, q) == '협의할 사람' and not (PHONE.search(text + ' ' + (q2 or q)) or TITLE.search(text + ' ' + (q2 or q)) or TITLE2.search(text + ' ' + (q2 or q))):
+                    continue   # 「우편영업실장」「과장」처럼 누구인지 특정되지 않는 사람 항목은 싣지 않는다
                 rec = {'file': f['file'], 'type': fix_type(it.get('type'), text, q), 'text': text, 'when': str(it.get('when') or ''),
                        'quote': q2 if q2 is not None else q, 'grounded': q2 is not None,
                        'src': '모델' if how == '원문' else ('모델(발췌 보정)' if how else '모델'), 'quote_raw': q}
