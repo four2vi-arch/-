@@ -148,7 +148,21 @@ async function settings() {
   ST.model = $('#model').value; ST.include_tables = $('#tables').checked; ST.recent_years = +$('#recent').value; ST.plan = j.plan; renderPlan();
 }
 
-$('#btnBrowse').onclick = async () => { const j = await api('/api/browse', {}); if (j.folder) $('#folder').value = j.folder; else $('#extractMsg').innerHTML = '<div class="note">폴더 고르기 창을 열지 못했습니다. 탐색기 주소창의 경로를 복사해 붙여 넣어 주세요.</div>'; };
+let pkCur = '';
+async function pkLoad(path) {
+  const j = await api('/api/ls?path=' + encodeURIComponent(path || ''));
+  if (j.error) { alert(j.error); return; }
+  pkCur = j.path; $('#picker').hidden = false;
+  $('#pkPath').textContent = j.path ? `${j.path} (파일 ${j.files}개)` : '드라이브·자주 쓰는 폴더';
+  $('#pkUp').disabled = !j.parent && !j.path; $('#pkUse').disabled = !j.path;
+  $('#pkList').innerHTML = j.dirs.length ? j.dirs.map(d => `<span class="d" data-p="${esc(d.path)}">📁 ${esc(d.name)}</span>`).join('') : '<span class="hint">하위 폴더가 없습니다. 「이 폴더로」를 누르세요.</span>';
+  $('#pkList').querySelectorAll('.d').forEach(el => el.onclick = () => pkLoad(el.dataset.p));
+  $('#pkUp').onclick = () => pkLoad(j.parent || '');
+}
+$('#btnPick').onclick = () => pkLoad($('#folder').value.trim() || '').catch(e => alert(e.message));
+$('#pkClose').onclick = () => { $('#picker').hidden = true; };
+$('#pkUse').onclick = () => { $('#folder').value = pkCur; $('#picker').hidden = true; $('#btnExtract').click(); };
+$('#btnBrowse').onclick = async () => { const j = await api('/api/browse', {}); if (j.folder) { $('#folder').value = j.folder; $('#extractMsg').innerHTML = ''; } else $('#extractMsg').innerHTML = '<div class="note">윈도 폴더 창을 열지 못했거나 취소했습니다. 「찾기…」로 화면 안에서 고르거나, 탐색기 주소창의 경로를 복사해 붙여 넣은 뒤 「읽기」를 누르세요.</div>'; };
 $('#btnExtract').onclick = async () => {
   $('#extractMsg').innerHTML = '<div class="hint">읽는 중…</div>'; $('#btnExtract').disabled = true;
   try { await api('/api/extract', {folder: $('#folder').value}); ITEMS = []; DROPPED = []; $('#extractMsg').innerHTML = ''; await refresh(); await loadModels(); await settings(); }

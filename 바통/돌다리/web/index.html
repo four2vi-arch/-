@@ -26,6 +26,9 @@ button.ghost{background:#fff;color:var(--acc)}
 button.danger{background:#fff;color:var(--warn);border-color:var(--warn)}
 button:disabled{opacity:.45;cursor:default}
 .hint{color:var(--mute);font-size:14px}
+.picker{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:6px 0;background:#fbfcfe}
+.picker .d{display:inline-block;margin:3px 6px 3px 0;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer}
+.picker .d:hover{border-color:var(--acc);color:var(--acc)}
 .note{background:var(--warnbg);border-left:4px solid var(--warn);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:14px}
 .good{background:var(--okbg);border-left:4px solid var(--ok);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:14px}
 table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}
@@ -67,7 +70,8 @@ footer{color:var(--mute);font-size:12px;text-align:center;margin-top:30px}
 <main>
 
 <section class="step" id="s1"><h2><span class="n">1</span>업무 폴더 고르기</h2>
-<div class="row"><input type="text" id="folder" class="wide" placeholder="예) C:\업무\서무  (폴더 주소를 붙여 넣거나 「찾기」)"><button class="ghost" id="btnBrowse">찾기…</button><button id="btnExtract">읽기</button></div>
+<div class="row"><input type="text" id="folder" class="wide" placeholder="예) C:\업무\서무  (폴더 주소를 붙여 넣거나 「찾기」)"><button class="ghost" id="btnPick">찾기…</button><button class="ghost" id="btnBrowse" title="윈도 폴더 창">창으로 찾기</button><button id="btnExtract">읽기</button></div>
+<div id="picker" class="picker" hidden><div class="row"><b>폴더 고르기</b> <span id="pkPath" class="hint"></span><button class="ghost" id="pkUp" style="padding:4px 10px">위로</button><button id="pkUse" style="padding:4px 10px">이 폴더로</button><button class="ghost" id="pkClose" style="padding:4px 10px">닫기</button></div><div id="pkList"></div></div>
 <div class="hint">읽을 수 있는 파일: 한글(.hwp 5.0·.hwpx), 워드(.docx), PDF(글자 있는 것), 엑셀(.xlsx), 메일(.eml), 메모(.txt·.md·.csv), 압축(.zip 안의 파일). 원본은 읽기만 하고 바꾸지 않습니다(처리 전후 지문 대조). 옛 한글 2.x·3.x 문서, 암호 문서, 스캔 이미지는 「못 읽은 파일」로 따로 적힙니다.</div>
 <div id="extractMsg"></div>
 <div id="subdirs"></div>

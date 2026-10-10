@@ -15,7 +15,7 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.0 (2026-10-11.i)'
+VERSION = '1.0 (2026-10-11.j)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
@@ -145,13 +145,54 @@ def ollama_models(url):
 
 
 def browse_folder():
-    """윈도 폴더 고르기 창(tkinter)을 별도 프로세스로 띄운다. 안 되면 빈 문자열."""
+    """OS 폴더 고르기 창. 윈도는 PowerShell 창을 먼저, 안 되면 tkinter. 둘 다 안 되면 빈 문자열(화면의 폴더 목록으로 고른다)."""
+    cmds = []
+    if sys.platform.startswith('win'):
+        ps = ('Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; '
+              '$d.Description = "업무 폴더 고르기"; $d.ShowNewFolderButton = $false; '
+              'if ($d.ShowDialog((New-Object System.Windows.Forms.Form -Property @{TopMost = $true})) -eq "OK") { Write-Output $d.SelectedPath }')
+        cmds.append(['powershell', '-NoProfile', '-STA', '-Command', ps])
     code = 'import tkinter,tkinter.filedialog as d;r=tkinter.Tk();r.withdraw();r.attributes("-topmost",1);print(d.askdirectory(title="업무 폴더 고르기") or "")'
+    cmds.append([sys.executable, '-c', code])
+    for cmd in cmds:
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=300, encoding='utf-8', errors='replace')
+            if out.stdout.strip():
+                return out.stdout.strip()
+            if out.returncode != 0:
+                log('폴더 창 실패(%s): %s' % (cmd[0], (out.stderr or '').strip()[:120]))
+        except Exception as e:
+            log('폴더 창 실패(%s): %s' % (cmd[0], str(e)[:120]))
+    return ''
+
+
+def list_dir(path):
+    """화면 안 폴더 고르기용: 드라이브 목록(빈 경로) 또는 하위 폴더 목록. 숨김·시스템 폴더는 뺀다."""
+    if not path:
+        if sys.platform.startswith('win'):
+            import string
+            roots = [d + ':\\' for d in string.ascii_uppercase if os.path.exists(d + ':\\')]
+        else:
+            roots = ['/']
+        home = os.path.expanduser('~')
+        return {'path': '', 'parent': None, 'dirs': [{'name': r, 'path': r} for r in roots] + [{'name': '바탕 화면', 'path': os.path.join(home, 'Desktop')}, {'name': '문서', 'path': os.path.join(home, 'Documents')}, {'name': '내 폴더(%s)' % os.path.basename(home), 'path': home}], 'files': 0}
+    path = os.path.abspath(path)
+    if not os.path.isdir(path):
+        return {'error': '폴더가 없습니다: ' + path}
+    dirs, nfiles = [], 0
     try:
-        out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=300, encoding='utf-8')
-        return out.stdout.strip()
-    except Exception:
-        return ''
+        for name in sorted(os.listdir(path), key=str.lower):
+            full = os.path.join(path, name)
+            if name.startswith('.') or name.startswith('$') or name in SKIP_DIRS:
+                continue
+            if os.path.isdir(full):
+                dirs.append({'name': name, 'path': full})
+            else:
+                nfiles += 1
+    except PermissionError:
+        return {'error': '접근 권한이 없는 폴더입니다: ' + path}
+    parent = os.path.dirname(path.rstrip('\\/'))
+    return {'path': path, 'parent': parent if parent and parent != path else '', 'dirs': dirs, 'files': nfiles}
 
 
 class H(BaseHTTPRequestHandler):
@@ -197,6 +238,8 @@ class H(BaseHTTPRequestHandler):
         if p.path == '/api/items':
             with LOCK:
                 return self._send(200, {'items': STATE['items'], 'dropped': STATE['dropped']})
+        if p.path == '/api/ls':
+            return self._send(200, list_dir(urllib.parse.parse_qs(p.query).get('path', [''])[0]))
         if p.path == '/api/models':
             return self._send(200, {'models': ollama_models(STATE['url'])})
         if p.path == '/api/download':
