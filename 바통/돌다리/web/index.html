@@ -96,7 +96,7 @@ footer{color:var(--mute);font-size:12px;text-align:center;margin-top:30px}
 <div class="row"><select id="addType"><option>진행 중 현안</option><option>월별 할 일</option><option>협의할 사람</option></select><input type="text" id="addWhen" placeholder="시기(예: 2026년 2월)" style="width:150px"><input type="text" id="addText" class="wide" placeholder="내용"><input type="text" id="addNote" placeholder="메모(선택)" style="width:200px"><button id="btnAdd">추가</button></div></div>
 <details id="droppedBox"><summary>불확실(제외): 발췌가 원문에서 확인되지 않아 뺀 모델 항목 <span class="count" id="nDropped"></span></summary><div id="dropped"></div></details>
 <details id="errBox"><summary>처리 중 오류 <span class="count" id="nErr"></span></summary><div id="errs" class="hint"></div></details>
-<div class="row"><button id="btnExport">인수인계서 내보내기(.md + .docx)</button><button class="ghost" onclick="window.print()">이 화면 인쇄</button></div>
+<div class="row"><button id="btnExport">인수인계서 내보내기(.md + .docx)</button><button class="ghost" id="btnPrint">이 화면 인쇄</button></div>
 </section>
 
 <section class="step" id="s5"><h2><span class="n">5</span>내보낸 파일</h2>

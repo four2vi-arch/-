@@ -160,6 +160,7 @@ $('#btnModels').onclick = loadModels;
 $('#btnDraft').onclick = async () => { try { await settings(); await api('/api/draft', {}); ITEMS = []; DROPPED = []; await refresh(); } catch (e) { alert(e.message); } };
 $('#btnStop').onclick = () => api('/api/stop', {});
 $('#btnSave').onclick = () => save().catch(e => alert(e.message));
+$('#btnPrint').onclick = () => window.print();   // 화면 안 onclick은 CSP(script-src 'self')에 막히므로 여기서 묶는다
 $('#btnAdd').onclick = async () => {
   const text = $('#addText').value.trim(); if (!text) { $('#addText').focus(); return; }
   tab = $('#addType').value;
