@@ -15,8 +15,11 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+VERSION = '1.0 (2026-10-10.d)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
-STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
+SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|정답표\.xlsx)$'   # 돌다리 자신의 산출물은 읽지 않는다
+PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
+STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'suggest': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
          'recent_years': 0, 'max_calls': 3, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': []}
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
@@ -43,7 +46,7 @@ def load_session():
                 STATE.update(json.load(f))
             STATE['running'] = False; STATE['stop'] = False
             if STATE['files'] and STATE['folder'] and os.path.isdir(STATE['folder']):
-                files, _, _ = EX.extract_folder(STATE['folder'], skip_dirs=SKIP_DIRS | set(STATE.get('exclude', [])))   # 발췌 확인·재실행을 위해 글자만 다시 읽는다(원본은 읽기만)
+                files, _, _ = EX.extract_folder(STATE['folder'], skip_dirs=SKIP_DIRS | set(STATE.get('exclude', [])), skip_names=SKIP_NAMES)   # 발췌 확인·재실행을 위해 글자만 다시 읽는다(원본은 읽기만)
                 for f in files:
                     _units[f['file'].replace('\\', '/')] = f['units']
             log('이전 작업을 이어서 엽니다: ' + STATE['folder'])
@@ -60,17 +63,24 @@ def do_extract(folder, exclude=None):
     t0 = time.time()
     exclude = set(exclude or [])
     subdirs = sorted(d for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d)) and d not in SKIP_DIRS and not d.startswith('.'))
-    warn = ''
-    if any(os.path.exists(os.path.join(folder, x)) for x in ('server.py', 'core.py', '돌다리_실행.bat')):
-        warn = '이 폴더에는 돌다리 프로그램 파일이 들어 있습니다. 업무 폴더는 보통 그 안의 하위 폴더(예: 모의 폴더)입니다. 아래에서 뺄 폴더를 고르거나 폴더를 다시 지정하세요.'
-    files, failures, fps = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | exclude)
+    warn, suggest = '', ''
+    if any(os.path.exists(os.path.join(folder, x)) for x in PROGRAM_FILES):
+        # 프로그램 폴더를 골랐다: 결과·web 폴더는 기본으로 빼고, 업무 폴더로 보이는 하위 폴더가 하나면 바꾸기를 제안한다
+        auto = {d for d in subdirs if d == 'web' or re.match(r'^(결과|실측결과|시험|도구|모의데이터_v1)', d)}
+        exclude |= auto
+        cand = [d for d in subdirs if d not in auto]
+        if len(cand) == 1:
+            suggest = os.path.join(folder, cand[0])
+        warn = ('이 폴더에는 돌다리 프로그램 파일이 들어 있습니다. 업무 폴더는 보통 그 안의 하위 폴더입니다. '
+                + ('「%s」 폴더로 바꾸는 것을 권합니다.' % cand[0] if suggest else '아래에서 뺄 폴더를 고르거나 폴더를 다시 지정하세요.'))
+    files, failures, fps = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | exclude, skip_names=SKIP_NAMES)
     for f in files:
         f['file'] = f['file'].replace('\\', '/')
         _units[f['file']] = f['units']
     for x in failures + fps:
         x['file'] = x['file'].replace('\\', '/')
     with LOCK:
-        STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'year': year_of(f)} for f in files],
+        STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'year': year_of(f)} for f in files],
                       'failures': failures, 'fingerprints': fps, 'items': [], 'dropped': [], 'errors': [], 'calls': [], 'exports': [], 'step': 2, 'progress': None})
         STATE['plan'] = make_plan()
     log('추출 %.1f초: 읽음 %d · 못 읽음 %d · 원본 변경 %d' % (time.time() - t0, len(files), len(failures), sum(1 for x in fps if not x['unchanged'])))
@@ -182,7 +192,7 @@ class H(BaseHTTPRequestHandler):
                 st = {k: v for k, v in STATE.items() if k not in ('items', 'dropped', 'fingerprints')}
                 st['n_items'] = len(STATE['items']); st['n_dropped'] = len(STATE['dropped'])
                 st['originals_changed'] = sum(1 for x in STATE['fingerprints'] if not x.get('unchanged', True))
-                st['work'] = WORK
+                st['work'] = WORK; st['version'] = VERSION
             return self._send(200, st)
         if p.path == '/api/items':
             with LOCK:
@@ -265,7 +275,7 @@ class H(BaseHTTPRequestHandler):
         if p == '/api/export':
             with LOCK:
                 session = {'folder': STATE['folder'], 'files': STATE['files'], 'failures': STATE['failures'], 'fingerprints': STATE['fingerprints'],
-                           'items': STATE['items'], 'model': STATE['model'] or '없음(규칙층만)', 'title': STATE['title'] or '전임자 확인 후 확정'}
+                           'items': STATE['items'], 'model': STATE['model'] or '없음(규칙층만)', 'title': STATE['title'] or '전임자 확인 후 확정', 'version': VERSION}
             stem = '인수인계서_' + datetime.datetime.now().strftime('%Y%m%d_%H%M')
             paths = export.write_all(session, WORK, stem)
             with open(os.path.join(WORK, stem + '_원본지문.csv'), 'w', encoding='utf-8-sig', newline='') as f:
@@ -293,7 +303,7 @@ def main():
     load_session()
     srv = ThreadingHTTPServer(('127.0.0.1', a.port), H)
     url = 'http://127.0.0.1:%d/' % a.port
-    print('돌다리 v1.0 · %s (이 PC 안에서만 열립니다. 끝내려면 이 창을 닫거나 Ctrl+C)' % url, flush=True)
+    print('돌다리 v%s · %s (이 PC 안에서만 열립니다. 끝내려면 이 창을 닫거나 Ctrl+C)' % (VERSION, url), flush=True)
     print('작업 폴더: %s' % WORK, flush=True)
     if not a.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()

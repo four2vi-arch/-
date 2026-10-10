@@ -22,7 +22,7 @@ def header_lines(session):
     failures = session.get('failures', [])
     fps = session.get('fingerprints', [])
     changed = sum(1 for x in fps if not x.get('unchanged', True))
-    return ['작성 기준: %s' % datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
+    return ['작성 기준: %s · 돌다리 v%s' % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), session.get('version', '1.0')),
             '업무 폴더: %s' % session.get('folder', ''),
             '읽은 파일 %d개 · 못 읽은 파일 %d개 · 원본 변경 %d개(처리 전후 SHA-256 대조)' % (len(files), len(failures), changed),
             '모델: %s · 규칙 항목 %d · 모델 항목 %d · 직접 적은 항목 %d' % (

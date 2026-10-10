@@ -21,7 +21,7 @@ function setSteps(step) {
 
 async function refresh() {
   ST = await api('/api/state');
-  setSteps(ST.step);
+  setSteps(ST.step); if (ST.version) $('#ver').textContent = 'v' + ST.version;
   if (ST.folder && !$('#folder').value) $('#folder').value = ST.folder;
   if (!$('#url').value) $('#url').value = ST.url;
   $('#tables').checked = !!ST.include_tables; $('#recent').value = String(ST.recent_years || 0); $('#maxCalls').value = String(ST.max_calls || 3);
@@ -45,15 +45,21 @@ function renderFiles() {
 
 function renderSubdirs() {
   const box = $('#subdirs');
-  if (!ST.folder || !ST.subdirs || !ST.subdirs.length) { box.innerHTML = ST.warn ? `<div class="note">${esc(ST.warn)}</div>` : ''; return; }
+  const warn = ST.warn ? `<div class="note">${esc(ST.warn)}${ST.suggest ? ` <button id="btnSuggest" style="padding:4px 10px;margin-left:8px">이 폴더로 바꿔 읽기</button>` : ''}</div>` : '';
+  if (!ST.folder || !ST.subdirs || !ST.subdirs.length) { box.innerHTML = warn; bindSuggest(); return; }
   const ex = new Set(ST.exclude || []);
-  box.innerHTML = (ST.warn ? `<div class="note">${esc(ST.warn)}</div>` : '') + '<div class="hint">읽을 하위 폴더(체크를 풀면 뺍니다): ' +
+  box.innerHTML = warn + '<div class="hint">읽을 하위 폴더(체크를 풀면 뺍니다): ' +
     ST.subdirs.map(d => `<label style="margin-right:12px"><input type="checkbox" class="sub" value="${esc(d)}" ${ex.has(d) ? '' : 'checked'}> ${esc(d)}</label>`).join('') +
     ' <button class="ghost" id="btnReread" style="padding:4px 10px">다시 읽기</button></div>';
   $('#btnReread').onclick = async () => {
     const exclude = [...box.querySelectorAll('.sub')].filter(c => !c.checked).map(c => c.value);
     try { await api('/api/extract', {folder: $('#folder').value, exclude}); ITEMS = []; DROPPED = []; await refresh(); await loadModels(); await settings(); } catch (e) { alert(e.message); }
   };
+  bindSuggest();
+}
+function bindSuggest() {
+  const b = $('#btnSuggest'); if (!b) return;
+  b.onclick = async () => { $('#folder').value = ST.suggest; try { await api('/api/extract', {folder: ST.suggest}); ITEMS = []; DROPPED = []; await refresh(); await loadModels(); await settings(); } catch (e) { alert(e.message); } };
 }
 
 function renderPlan() {
