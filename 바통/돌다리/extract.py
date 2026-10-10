@@ -58,12 +58,69 @@ def _hwp_para_text(data):
     return ''.join(out)
 
 
+# ---------------------------------------------------------------- 한글 97(2.x·3.x) 문서: 어림 읽기
+# 글자는 2바이트 상용 조합형(KSSM: 1+초성5+중성5+종성5)과 ASCII 2바이트다. 문단 구조를 다 풀지 않고
+# 글자 줄기만 긁어 모은다(줄기 사이의 서식 자료는 글자로 안 풀리므로 끊긴다). 기호·한자는 ?로 남는다.
+_KS_CHO = [None, '', 'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
+_KS_JUNG = {2: '', 3: 'ㅏ', 4: 'ㅐ', 5: 'ㅑ', 6: 'ㅒ', 7: 'ㅓ', 10: 'ㅔ', 11: 'ㅕ', 12: 'ㅖ', 13: 'ㅗ', 14: 'ㅘ', 15: 'ㅙ', 18: 'ㅚ', 19: 'ㅛ', 20: 'ㅜ', 21: 'ㅝ', 22: 'ㅞ', 23: 'ㅟ', 26: 'ㅠ', 27: 'ㅡ', 28: 'ㅢ', 29: 'ㅣ'}
+_KS_JONG = [None, '', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', None, 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
+_L = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
+_V = 'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ'
+_T = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
+
+
+def _kssm_char(w):
+    """상용 조합형 2바이트 → 글자. 완성 음절, 홑자모(ㅇ·ㅁ 등), ASCII. 모르면 None."""
+    if 0x20 <= w <= 0x7E:
+        return chr(w)
+    if not (w & 0x8000):
+        return None
+    c, j, g = (w >> 10) & 31, (w >> 5) & 31, w & 31
+    if not (1 <= c <= 20) or j not in _KS_JUNG or g < 1 or g > 29 or _KS_JONG[g] is None:
+        return None
+    cho, jung, jong = _KS_CHO[c], _KS_JUNG[j], _KS_JONG[g]
+    if cho and jung:
+        return chr(0xAC00 + _L.index(cho) * 588 + _V.index(jung) * 28 + _T.index(jong))
+    if cho and not jung and not jong:   # 홑자모 ㅇ, ㅁ …
+        return cho
+    if jung and not cho and not jong:
+        return jung
+    return None
+
+
+def extract_hwp3(path, ver=''):
+    with open(path, 'rb') as fh:
+        b = fh.read()
+    start = 30 + 128 + 1008   # 서명·문서 정보·요약 정보(작성자·날짜)는 건너뛴다
+    units, run, n_unknown = [], [], 0
+    i = start
+    while i + 1 < len(b):
+        w = b[i] | (b[i + 1] << 8)
+        ch = _kssm_char(w)
+        if ch is None:
+            if w >= 0x8000 and run and (w & 0x3FF) not in (0, 0x3FF):   # 글자 줄기 안의 모르는 기호(한자·특수문자)
+                run.append('?'); n_unknown += 1
+            else:
+                if len(run) >= 4 and len(set(run)) >= 3:
+                    units.append({'loc': '문단 %d(옛 한글 어림)' % (len(units) + 1), 'text': ''.join(run).strip('? ')})
+                run = []
+        else:
+            run.append(ch)
+        i += 2
+    if len(run) >= 4 and len(set(run)) >= 3:
+        units.append({'loc': '문단 %d(옛 한글 어림)' % (len(units) + 1), 'text': ''.join(run).strip('? ')})
+    units = [u for u in units if re.search(r'[가-힣]', u['text']) or re.search(r'\d', u['text'])]
+    if not units:
+        raise ValueError('한글 %s 형식(옛 한글 2.x·3.x 문서)에서 글자를 찾지 못함(압축 저장본일 수 있음). 한글에서 열어 .hwpx로 저장하면 읽습니다' % ver)
+    return units
+
+
 def extract_hwp(path):
     import olefile
     with open(path, 'rb') as fh:
         head = fh.read(32)
     if head.startswith(b'HWP Document File V'):
-        raise ValueError('한글 %s 형식(옛 한글 2.x·3.x 문서). 한글에서 열어 .hwp(5.0) 또는 .hwpx로 다시 저장하면 읽습니다' % head[19:23].decode('ascii', 'ignore').strip())
+        return extract_hwp3(path, head[19:23].decode('ascii', 'ignore').strip())
     if not olefile.isOleFile(path):
         raise ValueError('한글 5.0 형식이 아님(다른 파일이거나 손상)')
     try:
