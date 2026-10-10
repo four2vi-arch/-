@@ -160,7 +160,23 @@ $('#btnModels').onclick = loadModels;
 $('#btnDraft').onclick = async () => { try { await settings(); await api('/api/draft', {}); ITEMS = []; DROPPED = []; await refresh(); } catch (e) { alert(e.message); } };
 $('#btnStop').onclick = () => api('/api/stop', {});
 $('#btnSave').onclick = () => save().catch(e => alert(e.message));
-$('#btnPrint').onclick = () => window.print();   // 화면 안 onclick은 CSP(script-src 'self')에 막히므로 여기서 묶는다
+$('#btnPrint').onclick = () => { renderPrintView(); window.print(); };   // 화면 안 onclick은 CSP(script-src 'self')에 막히므로 여기서 묶는다
+function renderPrintView() {
+  // 인쇄는 입력칸이 잘리므로 세 유형 전부를 글로 풀어 쓴다(체크 푼 항목은 줄 긋기)
+  const kept = ITEMS.filter(i => i.keep).length;
+  let h = `<h2>업무 인수인계 검토본 · ${esc($('#title').value || '전임자 확인 전')}</h2><div class="hint">남길 항목 ${kept}개 / 전체 ${ITEMS.length}개 · ${new Date().toLocaleString('ko-KR')} · 돌다리 ${esc(ST.version || '')}</div>`;
+  for (const t of TYPES) {
+    const rows = ITEMS.filter(i => i.type === t);
+    if (t === '월별 할 일') rows.sort((a, b) => (mon(a.when) - mon(b.when)) || a.file.localeCompare(b.file));
+    h += `<h3>${t} (${rows.filter(i => i.keep).length})</h3>`;
+    for (const it of rows) {
+      h += `<div class="pi ${it.keep ? '' : 'off'}">${it.when ? `<span class="w">[${esc(it.when)}]</span>` : ''}${esc(it.text)} <span class="tag">${esc(it.src)}</span>` +
+        (it.note ? `<span class="n">메모: ${esc(it.note)}</span>` : '') +
+        `<span class="s">출처: ${it.file ? esc(it.file) + ' · 「' + esc(String(it.quote || '').replace(/\n/g, ' / ')) + '」' : '전임자가 직접 적음'}${(it.also || []).length ? ' · 같은 내용 ' + it.also.length + '곳' : ''}</span></div>`;
+    }
+  }
+  $('#printView').innerHTML = h;
+}
 $('#btnAdd').onclick = async () => {
   const text = $('#addText').value.trim(); if (!text) { $('#addText').focus(); return; }
   tab = $('#addType').value;

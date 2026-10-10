@@ -55,7 +55,11 @@ summary{cursor:pointer;color:var(--acc)}
 #log{font-family:Consolas,monospace;font-size:12px;color:var(--mute);white-space:pre-wrap;max-height:120px;overflow:auto;background:#f7f8fa;padding:8px;border-radius:6px}
 .add{background:var(--acc2);border-radius:8px;padding:10px 12px;margin-top:10px}
 footer{color:var(--mute);font-size:12px;text-align:center;margin-top:30px}
-@media print{header,button,.tabs,#s1,#s2,#s3,#s5,details,footer,#log{display:none !important} .item{break-inside:avoid}}
+#printView{display:none}
+@media print{header,button,.tabs,#s1,#s2,#s3,#s5,details,footer,#log,#s4 .row,#s4 .hint,#items,.add{display:none !important} #printView{display:block} .item{break-inside:avoid}
+#printView h2{font-size:18px;margin:0 0 8px}#printView h3{font-size:15px;margin:16px 0 6px;border-bottom:1px solid #999;padding-bottom:3px}
+#printView .pi{padding:6px 0;border-bottom:1px dotted #ccc;font-size:13px}#printView .pi.off{color:#999;text-decoration:line-through}
+#printView .pi .w{font-weight:600;margin-right:6px}#printView .pi .s{color:#555;font-size:11px;display:block;margin-top:2px}#printView .pi .n{color:#0b4f8a;font-size:12px;display:block}}
 </style>
 </head>
 <body>
@@ -94,6 +98,7 @@ footer{color:var(--mute);font-size:12px;text-align:center;margin-top:30px}
 <div id="items"></div>
 <div class="add"><b>직접 적기</b> <span class="hint">(문서에 없거나 모델이 못 잡은 현안·할 일·사람. 출처는 「전임자가 직접 적음」으로 남습니다)</span>
 <div class="row"><select id="addType"><option>진행 중 현안</option><option>월별 할 일</option><option>협의할 사람</option></select><input type="text" id="addWhen" placeholder="시기(예: 2026년 2월)" style="width:150px"><input type="text" id="addText" class="wide" placeholder="내용"><input type="text" id="addNote" placeholder="메모(선택)" style="width:200px"><button id="btnAdd">추가</button></div></div>
+<div id="printView"></div>
 <details id="droppedBox"><summary>불확실(제외): 발췌가 원문에서 확인되지 않아 뺀 모델 항목 <span class="count" id="nDropped"></span></summary><div id="dropped"></div></details>
 <details id="errBox"><summary>처리 중 오류 <span class="count" id="nErr"></span></summary><div id="errs" class="hint"></div></details>
 <div class="row"><button id="btnExport">인수인계서 내보내기(.md + .docx)</button><button class="ghost" id="btnPrint">이 화면 인쇄</button></div>
