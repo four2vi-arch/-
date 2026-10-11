@@ -43,7 +43,8 @@ DUE_RANGE = re.compile(r'(\d{1,2})월\s*\d{1,2}일\s*[~∼～-]\s*(?:\d{1,2}월\
 DATE_FULL = re.compile(r'(20\d{2})[-.]\s?(\d{1,2})[-.]\s?(\d{1,2})')
 REL_DUE = re.compile(r'\d+\s*(?:개월|주|일)\s*전')
 ACTION = re.compile(r'합니다|한다|할 것|제출|수립|실시|협의|조치|이관|정리|보완|결정|검토|점검|제출일|기한|마감|통보|안내|채용|납부|독촉|배정|정산|회신|보고|작성|접수|발송|게시|확인|신청|제출|갱신|이동|교환')
-ISSUE = re.compile(r'미조치|미결|미완료|미이행|미납|미확정|미해결|반려|보류|지연|끝나지 않|결론 못|안 됨|못 냄|재협의|협의 중|이견|고장|누수|파손|분실')
+ISSUE = re.compile(r'미조치|미결|미완료|미이행|미납|미확정|미해결|반려|보류 중|보류됨|보류하|지연되|지연 중|지연됨|끝나지 않|결론 못|안 됨|못 냄|재협의|협의 중|이견|고장|누수')
+REFERENCE_NAME = re.compile(r'지침|매뉴얼|길라잡이|규정|서식|편람|가이드|안내서|업무처리|FAQ', re.I)   # 절차를 설명하는 참고 문서: 현안 규칙을 적용하지 않는다
 TITLE = re.compile(r'([가-힣]{2,4})\s+(?:담당|주무관|과장|팀장|실장|계장|대리|주임|사원)')
 TITLE2 = re.compile(r'(?:담당|주무관|과장|팀장|실장|계장|대리|주임|사원|국장)\s+([가-힣]{2,4})(?![가-힣])')
 NOT_NAME = re.compile(r'과$|팀$|실$|부$|처$|국$|군청|시청|도청|구청|사무소|소방서|담당|요청|업체|연락|전화|번호|협의|문의|총괄|업무|서무|예산|보안|청사|관리|기록|감사|계약|현안|회의|참석|발견|보수')
@@ -63,7 +64,8 @@ def name_near_phone(line_body, phone):
     for tok in reversed(re.findall(r'(?<![가-힣])([가-힣]{2,4})(?![가-힣])', before)):  # 번호 앞 낱말들 가운데 이름꼴
         if not NOT_NAME.search(tok):
             return tok
-    return '담당자'
+    org = re.findall(r'[가-힣]{2,8}(?:과|팀|실|센터|국|소|원|부서)', before)   # 이름이 없으면 소속(○○과·○○팀)으로
+    return org[-1] if org else '담당자'
 
 
 def norm(s):
@@ -206,6 +208,8 @@ def rule_items(fobj):
     items = []
     seen = set()
     year_hint, month_hint = '', 0
+    is_table = fobj.get('kind') in TABLE_KINDS                      # 표 파일(엑셀·csv): 담당자·「○월 ○일까지」만 규칙 적용
+    is_reference = bool(REFERENCE_NAME.search(os.path.basename(fobj.get('file', ''))))   # 지침·매뉴얼: 현안 규칙 제외
 
     def add(kind, text, when, raw, loc):
         key = (kind, norm(raw))
@@ -250,18 +254,18 @@ def rule_items(fobj):
                 add('월별 할 일', line_body, when_of(int(d.group(1))), raw, u['loc'])
                 continue
             f = DATE_FULL.search(line_body)
-            if f and re.search(r'제출|기한|마감|까지|완료|예정', line_body) and not PHONE.search(line_body):
+            if f and not is_table and re.search(r'제출|기한|마감|까지|완료|예정', line_body) and not PHONE.search(line_body):
                 add('월별 할 일', line_body, '%s년 %d월' % (f.group(1), int(f.group(2))), raw, u['loc'])
                 continue
-            if REL_DUE.search(line_body) and ACTION.search(line_body):
+            if REL_DUE.search(line_body) and ACTION.search(line_body) and not is_table:
                 add('월별 할 일', line_body, '', raw, u['loc'])
                 continue
             e = DUE_EVERY.search(line_body)
-            if e and ACTION.search(line_body) and len(norm(line_body)) >= 8:
+            if e and ACTION.search(line_body) and len(norm(line_body)) >= 8 and not is_table:
                 add('월별 할 일', line_body, e.group(1), raw, u['loc'])
                 continue
             # 진행 중 현안: 현안 신호어가 든 줄(전화번호 줄은 위에서 처리)
-            if ISSUE.search(line_body) and len(norm(line_body)) >= 8 and not PHONE.search(line_body):
+            if ISSUE.search(line_body) and 8 <= len(norm(line_body)) <= 150 and not PHONE.search(line_body) and not is_table and not is_reference:
                 add('진행 중 현안', line_body, '', raw, u['loc'])
     return items
 

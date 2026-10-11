@@ -214,6 +214,12 @@ def extract_pdf(path):
 
 # ---------------------------------------------------------------- 엑셀
 def extract_xlsx(path):
+    with open(path, 'rb') as fh:
+        head = fh.read(8)
+    if head.startswith(b'\xd0\xcf\x11\xe0'):
+        raise ValueError('옛 엑셀(.xls, 97-2003) 형식입니다. 엑셀에서 열어 .xlsx로 다시 저장하면 읽습니다')
+    if head.startswith(b'<') or head.lower().startswith(b'<!doc'):
+        raise ValueError('이름만 .xlsx인 웹(HTML) 파일입니다. 엑셀에서 열어 .xlsx로 다시 저장하면 읽습니다')
     import openpyxl
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
