@@ -358,7 +358,14 @@ def extract_odt(path):
     return units
 
 
+def _old_office(kind):
+    def fn(path):
+        raise ValueError('옛 %s 형식입니다. 해당 프로그램에서 열어 새 형식(.docx/.xlsx/.pptx)으로 다시 저장하면 읽습니다' % kind)
+    return fn
+
+
 HANDLERS = {'.hwp': extract_hwp, '.hwpx': extract_hwpx, '.pdf': extract_pdf, '.xlsx': extract_xlsx, '.xlsm': extract_xlsx,
+            '.doc': _old_office('워드(97-2003, .doc)'), '.xls': _old_office('엑셀(97-2003, .xls)'), '.ppt': _old_office('파워포인트(97-2003, .ppt)'),
             '.docx': extract_docx, '.eml': extract_eml, '.txt': extract_text, '.md': extract_text, '.csv': extract_text,
             '.odt': extract_odt, '.ods': extract_odt}
 
