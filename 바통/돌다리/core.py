@@ -205,6 +205,7 @@ def call_model(url, model, key, text, timeout=600, json_mode=True):
 
 # ---------------------------------------------------------------- 규칙층: 구조가 뚜렷한 사실은 규칙으로(발췌 = 원문 줄 그대로)
 TABLE_CONTACT_CAP = 30   # 표 파일 하나에서 싣는 연락처 상한(그 이상은 명단으로 보고 한 줄로 알림)
+DOC_ROW_CONTACT_CAP = 5  # 문서 속 표 행(수신처·업체 명단)에서 싣는 연락처 상한
 
 
 def rule_items(fobj):
@@ -238,7 +239,8 @@ def rule_items(fobj):
                 continue
             line_body = re.sub(r'^\d+행:\s*', '', raw)  # 엑셀 줄 머리 제거
             long_para = len(line_body) > 300                 # 매뉴얼의 긴 문단: 한 줄짜리 할 일이 아니다(전화번호만 본다)
-            md_table = line_body.startswith('|')             # 마크다운 표 줄: 표 파일처럼 다룬다
+            md_table = line_body.startswith('|')
+            md_table = md_table or line_body.count('\t') >= 3             # 마크다운 표 줄: 표 파일처럼 다룬다
             ym = re.search(r'(20\d{2})\.\s*(\d{1,2})\.', raw) or re.search(r'(20\d{2})-(\d{2})-\d{2}', raw) or re.search(r'(20\d{2})(\d{2})\d{2}', fobj.get('file', ''))
             if ym and not year_hint:
                 year_hint, month_hint = ym.group(1), int(ym.group(2))
@@ -249,11 +251,16 @@ def rule_items(fobj):
                     seen.add(('p', m.group(3)))
                     add('협의할 사람', '%s · %s · %s' % (m.group(1), m.group(2).strip(), m.group(3)), '', raw, u['loc'])
                 continue
-            for ph in PHONE.findall(line_body):
+            is_row = line_body.count('\t') >= 3 or md_table          # 문서 안의 표 행(수신처·업체 명단): 실제 폴더에서 사람 항목 1,063개 중 599개가 여기서 나왔다
+            cap = TABLE_CONTACT_CAP if is_table else (DOC_ROW_CONTACT_CAP if is_row else 10 ** 9)
+            for m_ph in PHONE.finditer(line_body):
+                ph = m_ph.group(0)
                 if ('p', ph) in seen:
                     continue
                 seen.add(('p', ph))
-                if is_table and n_contacts >= TABLE_CONTACT_CAP:   # 명단 성격의 표(계약업체·고객 목록)는 앞 몇 건만 싣고 나머지는 파일을 직접 보게 한다
+                if re.search(r'팩스|FAX|fax|Fax', line_body[max(0, m_ph.start() - 12):m_ph.start()]):   # 팩스 번호는 협의 상대가 아니다
+                    continue
+                if n_contacts >= cap:   # 명단 성격(표 파일·문서 속 표)은 앞 몇 건만 싣고 나머지는 파일을 직접 보게 한다
                     n_contacts += 1
                     continue
                 n_contacts += 1
@@ -279,8 +286,9 @@ def rule_items(fobj):
             # 진행 중 현안: 현안 신호어가 든 줄(전화번호 줄은 위에서 처리)
             if ISSUE.search(line_body) and 8 <= len(norm(line_body)) <= 150 and not PHONE.search(line_body) and not is_table and not is_reference:
                 add('진행 중 현안', line_body, '', raw, u['loc'])
-    if is_table and n_contacts > TABLE_CONTACT_CAP:
-        items.append({'type': '협의할 사람', 'text': '(이 표에 연락처가 %d건 더 있음 — 명단은 파일에서 직접 볼 것)' % (n_contacts - TABLE_CONTACT_CAP), 'when': '', 'quote': '', 'loc': '', 'src': '규칙', 'nomerge': True})
+    cap_used = TABLE_CONTACT_CAP if is_table else DOC_ROW_CONTACT_CAP
+    if n_contacts > cap_used:
+        items.append({'type': '협의할 사람', 'text': '(이 %s에 연락처가 %d건 더 있음 — 명단은 파일에서 직접 볼 것)' % ('표' if is_table else '문서의 표', n_contacts - cap_used), 'when': '', 'quote': '', 'loc': '', 'src': '규칙', 'nomerge': True})
     return items
 
 
@@ -309,6 +317,10 @@ def merge_similar(draft, progress=None, time_budget=180, bucket_cap=400):
         nq, nt = norm(d['quote']), norm(d['text'])
         gq, gt = grams(d['quote']), grams(d['text'])
         keys = [(d['type'], 'q', nq[:12]), (d['type'], 't', nt[:12])]
+        if d['type'] == '협의할 사람':
+            m_ph = PHONE.search(str(d.get('text') or ''))
+            if m_ph:
+                keys.append((d['type'], 'p', m_ph.group(0)))   # 같은 번호는 같은 사람(여러 문서에 되풀이된 연락처를 한 항목으로)
         cand = set()
         if not over_budget:
             for k in keys:
@@ -328,11 +340,13 @@ def merge_similar(draft, progress=None, time_budget=180, bucket_cap=400):
             g = groups[gi]
             if g['type'] != d['type'] or g.get('nomerge') or d.get('nomerge'):
                 continue
-            if (min(len(g['_nq']), len(nq)) >= 6 and (g['_nq'] in nq or nq in g['_nq'])) or jacc(g['_gt'], gt) >= 0.6 or cont(g['_gq'], gq) >= 0.8:
+            if (d['type'] == '협의할 사람' and g.get('_ph') and PHONE.search(str(d.get('text') or '')) and g['_ph'] == PHONE.search(str(d.get('text') or '')).group(0)) \
+               or (min(len(g['_nq']), len(nq)) >= 6 and (g['_nq'] in nq or nq in g['_nq'])) or jacc(g['_gt'], gt) >= 0.6 or cont(g['_gq'], gq) >= 0.8:
                 hit = g
                 break
         if hit is None:
             g = dict(d); g['also'] = []; g['_nq'], g['_nt'], g['_gq'], g['_gt'] = nq, nt, gq, gt
+            g['_ph'] = (PHONE.search(str(d.get('text') or '')).group(0) if d['type'] == '협의할 사람' and PHONE.search(str(d.get('text') or '')) else None)
             groups.append(g); gi = len(groups) - 1
             for k in keys:
                 by_key.setdefault(k, []).append(gi)
@@ -348,7 +362,7 @@ def merge_similar(draft, progress=None, time_budget=180, bucket_cap=400):
         if progress and i % 500 == 0:
             progress({'phase': '같은 내용 묶는 중', 'index': i, 'total': len(draft)})
     for g in groups:
-        for k in ('_nq', '_nt', '_gq', '_gt'):
+        for k in ('_nq', '_nt', '_gq', '_gt', '_ph'):
             g.pop(k, None)
     if over_budget:
         print('같은 내용 묶기: %d초 예산을 넘겨 나머지는 묶지 않음' % time_budget, flush=True)

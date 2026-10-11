@@ -24,7 +24,7 @@ def header_lines(session):
     changed = sum(1 for x in fps if not x.get('unchanged', True))
     return ['작성 기준: %s · 돌다리 v%s' % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), session.get('version', '1.0')),
             '업무 폴더: %s' % session.get('folder', ''),
-            '읽은 파일 %d개 · 못 읽은 파일 %d개 · 원본 변경 %d개(처리 전후 SHA-256 대조)' % (len(files), len(failures), changed),
+            '읽은 파일 %d개 · 못 읽은 문서 %d개 · 읽지 않는 형식(그림·프로그램 등) %d개 · 원본 변경 %d개(처리 전후 SHA-256 대조)' % (len(files), sum(1 for x in failures if not x.get('skip')), sum(1 for x in failures if x.get('skip')), changed),
             '모델: %s · 규칙 항목 %d · 모델 항목 %d · 직접 적은 항목 %d' % (
                 session.get('model', '없음'),
                 sum(1 for it in kept_items(session) if it.get('src') == '규칙'),
