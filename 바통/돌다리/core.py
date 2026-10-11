@@ -204,12 +204,16 @@ def call_model(url, model, key, text, timeout=600, json_mode=True):
 
 
 # ---------------------------------------------------------------- 규칙층: 구조가 뚜렷한 사실은 규칙으로(발췌 = 원문 줄 그대로)
+TABLE_CONTACT_CAP = 30   # 표 파일 하나에서 싣는 연락처 상한(그 이상은 명단으로 보고 한 줄로 알림)
+
+
 def rule_items(fobj):
     items = []
     seen = set()
     year_hint, month_hint = '', 0
     is_table = fobj.get('kind') in TABLE_KINDS                      # 표 파일(엑셀·csv): 담당자·「○월 ○일까지」만 규칙 적용
     is_reference = bool(REFERENCE_NAME.search(os.path.basename(fobj.get('file', ''))))   # 지침·매뉴얼: 현안 규칙 제외
+    n_contacts = 0
 
     def add(kind, text, when, raw, loc):
         key = (kind, norm(raw))
@@ -249,6 +253,10 @@ def rule_items(fobj):
                 if ('p', ph) in seen:
                     continue
                 seen.add(('p', ph))
+                if is_table and n_contacts >= TABLE_CONTACT_CAP:   # 명단 성격의 표(계약업체·고객 목록)는 앞 몇 건만 싣고 나머지는 파일을 직접 보게 한다
+                    n_contacts += 1
+                    continue
+                n_contacts += 1
                 add('협의할 사람', '%s · %s · %s' % (name_near_phone(line_body, ph), ph, re.sub(r'\s+', ' ', line_body)[:50]), '', raw, u['loc'])
             # 월별 할 일: 「○월 ○일/말/초까지」·「○월 ○일~○일」·「2025-09-11」(제출·기한과 함께)·「○개월/○주 전」이 든 문장
             if long_para or md_table:
@@ -271,6 +279,8 @@ def rule_items(fobj):
             # 진행 중 현안: 현안 신호어가 든 줄(전화번호 줄은 위에서 처리)
             if ISSUE.search(line_body) and 8 <= len(norm(line_body)) <= 150 and not PHONE.search(line_body) and not is_table and not is_reference:
                 add('진행 중 현안', line_body, '', raw, u['loc'])
+    if is_table and n_contacts > TABLE_CONTACT_CAP:
+        items.append({'type': '협의할 사람', 'text': '(이 표에 연락처가 %d건 더 있음 — 명단은 파일에서 직접 볼 것)' % (n_contacts - TABLE_CONTACT_CAP), 'when': '', 'quote': '', 'loc': '', 'src': '규칙', 'nomerge': True})
     return items
 
 
@@ -307,7 +317,7 @@ def merge_similar(draft, progress=None):
         hit = None
         for gi in cand:
             g = groups[gi]
-            if g['type'] != d['type']:
+            if g['type'] != d['type'] or g.get('nomerge') or d.get('nomerge'):
                 continue
             if (min(len(g['_nq']), len(nq)) >= 6 and (g['_nq'] in nq or nq in g['_nq'])) or jacc(g['_gt'], gt) >= 0.6 or cont(g['_gq'], gq) >= 0.8:
                 hit = g

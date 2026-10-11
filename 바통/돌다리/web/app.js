@@ -30,14 +30,15 @@ async function refresh() {
   renderFiles(); renderSubdirs(); renderPlan(); renderProgress();
   if (ST.step >= 4 && !ITEMS.length) await loadItems();
   if (ST.step === 5) renderExports();
-  if (ST.running) { clearTimeout(timer); timer = setTimeout(refresh, 1500); }
+  if (ST.running || ST.reloading) { clearTimeout(timer); timer = setTimeout(refresh, ST.reloading ? 3000 : 1500); }
 }
 
 function renderFiles() {
   if (!ST.files || !ST.files.length) { $('#files').innerHTML = ''; return; }
   const kinds = {};
   ST.files.forEach(f => { kinds[f.kind] = kinds[f.kind] || {n: 0, c: 0}; kinds[f.kind].n++; kinds[f.kind].c += f.chars; });
-  let h = `<div class="good">읽음 <b>${ST.files.length}</b>개 · 못 읽음 <b>${ST.failures.length}</b>개 · 원본 변경 <b>${ST.originals_changed}</b>개(처리 전후 지문 대조)</div>`;
+  let h = ST.reloading ? '<div class="note">이전 작업의 폴더 글자를 뒤에서 되읽는 중입니다(큰 폴더는 몇 분). 끝나면 ③을 누를 수 있습니다.</div>' : '';
+  h += `<div class="good">읽음 <b>${ST.files.length}</b>개 · 못 읽음 <b>${ST.failures.length}</b>개 · 원본 변경 <b>${ST.originals_changed}</b>개(처리 전후 지문 대조)</div>`;
   h += '<table><tr><th>형식</th><th class="num">파일</th><th class="num">글자 수</th></tr>' + Object.keys(kinds).sort().map(k => `<tr><td>.${k}</td><td class="num">${kinds[k].n}</td><td class="num">${kinds[k].c.toLocaleString()}</td></tr>`).join('') + '</table>';
   if (ST.failures.length) h += '<details><summary>못 읽은 파일 ' + ST.failures.length + '개(인수인계서에 「직접 열어 볼 것」으로 적힘)</summary><table>' + ST.failures.map(x => `<tr><td>${esc(x.file)}</td><td>${esc(x.reason)}</td></tr>`).join('') + '</table></details>';
   $('#files').innerHTML = h;

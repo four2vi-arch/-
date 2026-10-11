@@ -15,7 +15,7 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.0 (2026-10-11.o)'
+VERSION = '1.0 (2026-10-11.p)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
@@ -33,9 +33,24 @@ def log(msg):
 
 
 def save_session():
-    keep = {k: v for k, v in STATE.items() if k not in ('running', 'stop', 'log')}
+    keep = {k: v for k, v in STATE.items() if k not in ('running', 'stop', 'log', 'reloading')}
     with open(os.path.join(WORK, '세션.json'), 'w', encoding='utf-8') as f:
         json.dump(keep, f, ensure_ascii=False, indent=1)
+
+
+def _reload_units():
+    """이전 세션의 폴더를 뒤에서 다시 읽어 발췌 확인·재실행에 쓸 글자를 채운다(원본은 읽기만). 끝날 때까지 ③은 기다리라고 답한다."""
+    t0 = time.time(); folder = STATE['folder']
+    try:
+        files, _, _ = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | set(STATE.get('exclude', [])), skip_names=SKIP_NAMES)
+        if STATE['folder'] == folder:   # 되읽는 사이에 다른 폴더를 읽었으면 버린다
+            for f in files:
+                _units[f['file'].replace('\\', '/')] = f['units']
+        log('이전 폴더 되읽기 끝: %d개, %.0f초' % (len(files), time.time() - t0))
+    except Exception as e:
+        log('이전 폴더 되읽기 실패(다시 「읽기」를 누르세요): %s' % e)
+    finally:
+        STATE['reloading'] = False
 
 
 def load_session():
@@ -46,9 +61,8 @@ def load_session():
                 STATE.update(json.load(f))
             STATE['running'] = False; STATE['stop'] = False
             if STATE['files'] and STATE['folder'] and os.path.isdir(STATE['folder']):
-                files, _, _ = EX.extract_folder(STATE['folder'], skip_dirs=SKIP_DIRS | set(STATE.get('exclude', [])), skip_names=SKIP_NAMES)   # 발췌 확인·재실행을 위해 글자만 다시 읽는다(원본은 읽기만)
-                for f in files:
-                    _units[f['file'].replace('\\', '/')] = f['units']
+                STATE['reloading'] = True
+                threading.Thread(target=_reload_units, daemon=True).start()   # 화면은 바로 열고, 글자 되읽기는 뒤에서(큰 폴더는 몇 분 걸림)
             log('이전 작업을 이어서 엽니다: ' + STATE['folder'])
         except Exception as e:
             log('세션 파일을 읽지 못해 새로 시작합니다: %s' % e)
@@ -313,6 +327,8 @@ class H(BaseHTTPRequestHandler):
         if p == '/api/draft':
             if STATE['running']:
                 return self._send(409, {'error': '이미 만드는 중'})
+            if STATE.get('reloading'):
+                return self._send(409, {'error': '이전 폴더의 글자를 아직 되읽는 중입니다(큰 폴더는 몇 분). 잠시 뒤 다시 누르거나, ①에서 폴더를 다시 「읽기」 하세요.'})
             if not STATE['files']:
                 return self._send(400, {'error': '먼저 폴더를 읽어야 합니다'})
             with LOCK:
