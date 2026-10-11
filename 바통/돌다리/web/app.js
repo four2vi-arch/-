@@ -54,7 +54,8 @@ async function refresh() {
   renderFiles(); renderSubdirs(); renderPlan(); renderProgress(); renderExports();
   if (ST.step >= 4 && !ITEMS.length) await loadItems();
   navState();
-  if (ST.running || ST.reloading) { clearTimeout(timer); timer = setTimeout(refresh, ST.reloading ? 3000 : 1500); }
+  if (ST.extracting) { renderExtracting(); $('#btnExtract').disabled = true; } else if ($('#btnExtract').disabled && !ST.running) { $('#btnExtract').disabled = false; }
+  if (ST.running || ST.reloading || ST.extracting) { clearTimeout(timer); timer = setTimeout(refresh, ST.reloading ? 3000 : 1500); }
 }
 
 // ---------------------------------------------------------------- 1. 폴더
@@ -102,9 +103,20 @@ function bindSuggest() { const b = $('#btnSuggest'); if (b) b.onclick = () => { 
 async function doExtract(folder, exclude) {
   if (ITEMS.length && !confirm(`지금 초안 ${ITEMS.length}개가 있습니다. 폴더를 다시 읽으면 검토 화면이 비워집니다(이전 초안은 작업 폴더에 백업됩니다). 계속할까요?\n아직 내보내지 않았다면 「취소」를 누르고 먼저 내보내세요.`)) return;
   $('#extractMsg').innerHTML = '<div class="hint">읽는 중… 큰 폴더는 몇 분 걸립니다. 이 화면을 닫지 마세요.</div>'; $('#btnExtract').disabled = true;
-  try { await api('/api/extract', {folder, exclude: exclude || []}); ITEMS = []; DROPPED = []; pending = {}; $('#extractMsg').innerHTML = ''; await refresh(); await loadModels(); await settings(); }
-  catch (e) { $('#extractMsg').innerHTML = '<div class="bad">' + esc(e.message) + '</div>'; }
+  try {
+    await api('/api/extract', {folder, exclude: exclude || []}); ITEMS = []; DROPPED = []; pending = {};
+    // 서버가 뒤에서 읽는다. 끝날 때까지 2초마다 상태를 물어 진행을 보인다(11분 넘는 요청을 브라우저가 끊는 일을 피함)
+    for (;;) { await sleep(2000); ST = await api('/api/state'); if (!ST.extracting) break; renderExtracting(); }
+    $('#extractMsg').innerHTML = ST.extract_error ? '<div class="bad">' + esc(ST.extract_error) + '</div>' : '';
+    await refresh(); await loadModels(); await settings();
+  } catch (e) { $('#extractMsg').innerHTML = '<div class="bad">' + esc(e.message) + '</div>'; }
   $('#btnExtract').disabled = false;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function renderExtracting() {
+  const x = ST.extracting; if (!x) return;
+  const pct = x.total ? Math.round(100 * x.index / x.total) : 0;
+  $('#extractMsg').innerHTML = `<div class="hint">읽는 중 ${x.index}/${x.total} (${pct}%) · ${secText(x.sec || 0)} · ${esc(x.file || '')}</div><div class="bar"><i style="width:${pct}%"></i></div>`;
 }
 let pkCur = '';
 async function pkLoad(path) {

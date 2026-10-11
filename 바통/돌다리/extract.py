@@ -545,10 +545,17 @@ def extract_file(path, rel, results, failures, depth=0):
         failures.append({'file': clean_text(rel), 'reason': '%s(파일 손상 가능: %s)' % ({'.hwp': '한글 5.0 구조를 읽지 못함', '.hwpx': 'hwpx 구조를 읽지 못함', '.pdf': 'PDF 구조를 읽지 못함', '.xlsx': '엑셀 구조를 읽지 못함', '.docx': '워드 구조를 읽지 못함', '.odt': 'ODT 구조를 읽지 못함'}.get(ext, '읽지 못함'), (str(e)[:80] or type(e).__name__))})
 
 
-def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=False):
-    """skip_dirs: 건너뛸 폴더 이름(어느 깊이든 같은 이름). skip_names: 건너뛸 파일 이름 정규식. 숨김 폴더(.으로 시작)는 늘 건너뛴다."""
+def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=False, progress=None):
+    """skip_dirs: 건너뛸 폴더 이름(어느 깊이든 같은 이름). skip_names: 건너뛸 파일 이름 정규식. 숨김 폴더(.으로 시작)는 늘 건너뛴다.
+    progress(dict): 파일마다 {'index','total','file'}로 불린다(화면 진행 표시용)."""
     results, failures, fps = [], [], []
     skip = set(skip_dirs or ())
+    total = 0
+    if progress:
+        for root, dirs, files in os.walk(folder):
+            dirs[:] = [d for d in dirs if d not in skip and not d.startswith('.')]
+            total += len(files)
+    done = 0
     walk_root = folder
     if os.name == 'nt' and not str(folder).startswith('\\\\?\\'):
         walk_root = '\\\\?\\' + os.path.abspath(folder)   # 260자 넘는 경로도 열리게(윈도 긴 경로 접두)
@@ -561,6 +568,9 @@ def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=Fals
                 continue
             p = os.path.join(root, name)
             rel = os.path.relpath(p, walk_root)
+            done += 1
+            if progress and (done % 5 == 0 or done == total):
+                progress({'index': done, 'total': total, 'file': clean_text(rel)})
             try:
                 before = sha256(p)
                 extract_file(p, rel, results, failures)

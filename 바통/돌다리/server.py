@@ -15,7 +15,7 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.1 (2026-10-12)'
+VERSION = '1.1.1 (2026-10-12)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
@@ -36,7 +36,7 @@ def log(msg):
 
 
 def save_session():
-    keep = {k: v for k, v in STATE.items() if k not in ('running', 'stop', 'log', 'reloading')}
+    keep = {k: v for k, v in STATE.items() if k not in ('running', 'stop', 'log', 'reloading', 'extracting', 'extract_error')}
     try:
         with open(os.path.join(WORK, '세션.json'), 'w', encoding='utf-8', errors='replace') as f:
             json.dump(keep, f, ensure_ascii=False, indent=1)
@@ -103,7 +103,10 @@ def do_extract(folder, exclude=None):
             suggest = os.path.join(folder, cand[0])
         warn = ('이 폴더에는 돌다리 프로그램 파일이 들어 있습니다. 업무 폴더는 보통 그 안의 하위 폴더입니다. '
                 + ('「%s」 폴더로 바꾸는 것을 권합니다.' % cand[0] if suggest else '아래에서 뺄 폴더를 고르거나 폴더를 다시 지정하세요.'))
-    files, failures, fps = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | exclude, skip_names=SKIP_NAMES, skip_root_files=bool(warn))
+    def prog(p):
+        STATE['extracting'] = dict(p, sec=round(time.time() - t0))
+    STATE['extracting'] = {'index': 0, 'total': 0, 'file': '', 'sec': 0}
+    files, failures, fps = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | exclude, skip_names=SKIP_NAMES, skip_root_files=bool(warn), progress=prog)
     for f in files:
         f['file'] = f['file'].replace('\\', '/')
         _units[f['file']] = f['units']
@@ -303,6 +306,7 @@ class H(BaseHTTPRequestHandler):
                 st['originals_changed'] = sum(1 for x in STATE['fingerprints'] if not x.get('unchanged', True))
                 st['work'] = WORK; st['version'] = VERSION
                 st['checkpoint'] = checkpoint_info()
+                st['extracting'] = STATE.get('extracting') if _extracting else None; st['extract_error'] = STATE.get('extract_error', '')
                 st['areas_text'] = core.areas_text(STATE.get('areas') or core.DEFAULT_AREAS)
                 st['n_skip'] = sum(1 for x in STATE['failures'] if x.get('skip')); st['n_fail'] = len(STATE['failures']) - st['n_skip']
             return self._send(200, st)
@@ -344,13 +348,17 @@ class H(BaseHTTPRequestHandler):
             if _extracting:
                 return self._send(409, {'error': '폴더를 읽는 중입니다. 끝날 때까지 기다리세요(큰 폴더는 몇 분).'})
             _extracting = True
-            try:
-                do_extract(folder, [str(x) for x in body.get('exclude', [])])
-            except Exception as e:
-                log('폴더 읽기 실패: %s' % str(e)[:160])
-                return self._send(500, {'error': '폴더를 읽다가 실패했습니다: ' + str(e)[:160]})
-            finally:
-                _extracting = False
+            STATE['extracting'] = {'index': 0, 'total': 0, 'file': '', 'sec': 0}; STATE['extract_error'] = ''
+            def run():   # 11분 넘는 읽기를 HTTP 요청 안에서 기다리지 않는다(브라우저가 끊어도 서버는 계속, 화면은 진행을 묻는다)
+                global _extracting
+                try:
+                    do_extract(folder, [str(x) for x in body.get('exclude', [])])
+                except Exception as e:
+                    log('폴더 읽기 실패: %s' % str(e)[:160]); STATE['extract_error'] = '폴더를 읽다가 실패했습니다: ' + str(e)[:160]
+                finally:
+                    _extracting = False; STATE['extracting'] = None
+            threading.Thread(target=run, daemon=True).start()
+            return self._send(200, {'ok': True, 'started': True})
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:
