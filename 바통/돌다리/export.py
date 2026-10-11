@@ -69,42 +69,69 @@ STATUS_LABEL = {'진행': '진행 중', '대기': '회신·결정 대기', '완�
 
 
 def chapters(session):
-    """인수인계서의 뼈대. (종류, 글) 목록. 종류: h1·h2·h3·p·li·sub(들여 쓴 작은 글).
-    표지(업무 목록·개요) → 월별 일정표 → 업무별 장(개요·달력·진행 중인 일·연락할 사람·꼭 봐야 할 파일) → 못 읽은 파일."""
+    """인수인계서 여덟 절. (종류, 글) 목록. 종류: h1·h2·h3·p·li·sub.
+    1 업무 현황 → 2 주요 현안 및 미결 사항 → 3 연간 업무 일정 → 4 업무별 인수인계 사항 → 5 관계자 연락처 → 6 계정·물품·예산 → 7 주요 자료 목록 → 8 확인하지 못한 자료."""
     out = []
-    items = kept_items(session)
+    items = [it for it in kept_items(session) if it.get('decided', True)]
     overview = session.get('overview') or {}
+    assets = session.get('assets') or {}
     areas = [a['name'] for a in (session.get('areas') or [])] + ['기타']
     used = [a for a in areas if any((it.get('area') or '기타') == a for it in items)]
-    out.append(('h1', '1. 업무 요약'))
+    def src(it):
+        if it.get('file'):
+            return '출처: %s · 「%s」' % (it['file'], str(it.get('quote', '')).replace('\n', ' / ')[:120]) + ((' · 같은 내용 %d곳' % len(it['also'])) if it.get('also') else '')
+        return '출처: 전임자가 직접 적음'
+    def person(it):
+        return it.get('text', '') + ((' — ' + it['note']) if it.get('note') else '')
+    out.append(('h1', '1. 업무 현황'))
     if session.get('handover_from') or session.get('handover_to'):
         out.append(('p', '인계자: %s · 인수자: %s' % (session.get('handover_from') or '', session.get('handover_to') or '')))
     for a in used:
         rows = [it for it in items if (it.get('area') or '기타') == a]
         n = lambda t: sum(1 for it in rows if it.get('type') == t)
-        out.append(('li', '%s — 할 일 %d · 진행 중인 일 %d · 연락할 사람 %d' % (a, n('월별 할 일'), n('진행 중 현안'), n('협의할 사람'))))
-        if overview.get(a):
-            out.append(('sub', overview[a]))
+        out.append(('li', '%s — 할 일 %d · 현안 %d · 연락처 %d' % (a, n('월별 할 일'), n('진행 중 현안'), n('협의할 사람'))))
+        ov = overview.get(a) or {}
+        if isinstance(ov, dict) and ov.get('q1'):
+            out.append(('sub', '처음 한 달에 꼭: ' + ov['q1']))
+    issues = [it for it in items if it.get('type') == '진행 중 현안']
+    out.append(('h1', '2. 주요 현안 및 미결 사항'))
+    if not issues:
+        out.append(('p', '(없음)'))
+    for a in used:
+        rows = [it for it in issues if (it.get('area') or '기타') == a]
+        if not rows:
+            continue
+        out.append(('h2', a))
+        for it in rows:
+            out.append(('li', '[%s] %s' % (STATUS_LABEL.get(it.get('status') or '진행', '진행 중'), it.get('text', ''))))
+            if it.get('next'):
+                out.append(('sub', '다음에 할 일: ' + it['next']))
+            if it.get('note'):
+                out.append(('sub', '메모: ' + it['note']))
+            out.append(('sub', src(it)))
     cal = calendar_lines(items)
+    out.append(('h1', '3. 연간 업무 일정'))
     if cal:
-        out.append(('h1', '2. 월별 일정표(전체)'))
         for l in cal:
             if l.startswith('### '):
                 out.append(('h3', l[4:]))
             elif l.startswith('- '):
                 out.append(('li', l[2:]))
-    def src(it):
-        if it.get('file'):
-            return '출처: %s · 「%s」' % (it['file'], str(it.get('quote', '')).replace('\n', ' / ')[:120]) + ((' · 같은 내용 %d곳' % len(it['also'])) if it.get('also') else '')
-        return '출처: 전임자가 직접 적음'
-    for ci, a in enumerate(used, 3):
+    else:
+        out.append(('p', '(없음)'))
+    out.append(('h1', '4. 업무별 인수인계 사항'))
+    QS = [('q1', '처음 한 달 안에 꼭 해야 하는 것'), ('q2', '자주 틀리거나 조심할 것'), ('q3', '이 일로 연락 오는 사람과 이유')]
+    for a in used:
         rows = [it for it in items if (it.get('area') or '기타') == a]
-        out.append(('h1', '%d. %s' % (ci, a)))
-        out.append(('h2', '업무 개요'))
-        out.append(('p', overview.get(a) or '(전임자가 적지 않음)'))
+        out.append(('h2', a))
+        ov = overview.get(a) or {}
+        if not isinstance(ov, dict):
+            ov = {'q1': str(ov)}
+        for k, label in QS:
+            out.append(('p', '%s: %s' % (label, ov.get(k) or '(적지 않음)')))
         standing, months, none = calendar_buckets(rows)
         if standing or any(months.values()) or none:
-            out.append(('h2', '이 업무의 달력'))
+            out.append(('h3', '이 업무의 달력'))
             for it in standing:
                 out.append(('li', '%s · %s' % (it.get('cycle'), it.get('text', '')))); out.append(('sub', src(it)))
             for m in range(1, 13):
@@ -112,42 +139,43 @@ def chapters(session):
                     out.append(('li', '[%s] %s' % (it.get('when'), it.get('text', '')))); out.append(('sub', src(it)))
             for it in none:
                 out.append(('li', it.get('text', ''))); out.append(('sub', src(it)))
-        issues = [it for it in rows if it.get('type') == '진행 중 현안']
-        if issues:
-            out.append(('h2', '진행 중인 일'))
-            for it in issues:
-                st = STATUS_LABEL.get(it.get('status') or '진행', '진행 중')
-                out.append(('li', '[%s] %s' % (st, it.get('text', ''))))
-                if it.get('next'):
-                    out.append(('sub', '다음에 할 일: ' + it['next']))
-                if it.get('note'):
-                    out.append(('sub', '메모: ' + it['note']))
-                out.append(('sub', src(it)))
         people = [it for it in rows if it.get('type') == '협의할 사람']
         if people:
-            out.append(('h2', '연락할 사람'))
+            out.append(('h3', '연락할 사람'))
             for it in people:
-                out.append(('li', it.get('text', '') + ((' — ' + it['note']) if it.get('note') else '')))
-                out.append(('sub', src(it)))
-        files = {}
-        for it in rows:
-            if it.get('file'):
-                files[it['file']] = files.get(it['file'], 0) + 1
-            for al in it.get('also', []):
-                files[al['file']] = files.get(al['file'], 0) + 1
-        top = sorted(files.items(), key=lambda x: -x[1])[:8]
-        if top:
-            out.append(('h2', '꼭 봐야 할 파일'))
-            for f, n in top:
-                out.append(('li', '%s (항목 %d개의 출처)' % (f, n)))
+                out.append(('li', person(it))); out.append(('sub', src(it)))
+    people = [it for it in items if it.get('type') == '협의할 사람']
+    out.append(('h1', '5. 관계자 연락처'))
+    if not people:
+        out.append(('p', '(없음)'))
+    for it in people:
+        out.append(('li', '%s · %s' % (it.get('area') or '기타', person(it))))
+    out.append(('h1', '6. 계정·물품·예산 등 인계 물품'))
+    AS = [('acct', '계정·비밀번호 보관처'), ('goods', '열쇠·물품·비품'), ('budget', '예산·미지급·정산'), ('etc', '그 밖의 당부')]
+    for k, label in AS:
+        out.append(('p', '%s: %s' % (label, assets.get(k) or '(적지 않음)')))
+    out.append(('h1', '7. 주요 자료 목록'))
+    keyfiles = session.get('keyfiles') or []
+    files = {}
+    for it in items:
+        if it.get('file'):
+            files[it['file']] = files.get(it['file'], 0) + 1
+        for al in it.get('also', []):
+            files[al['file']] = files.get(al['file'], 0) + 1
+    listed = keyfiles or [f for f, n in sorted(files.items(), key=lambda x: -x[1])[:15]]
+    if not listed:
+        out.append(('p', '(없음)'))
+    for f in listed:
+        out.append(('li', '%s (항목 %d개의 출처)' % (f, files.get(f, 0))))
     failures = [x for x in session.get('failures', []) if not x.get('skip')]
     skipped = [x for x in session.get('failures', []) if x.get('skip')]
-    if failures or skipped:
-        out.append(('h1', '%d. 못 읽은 파일(후임자가 직접 열어 볼 것)' % (len(used) + 3)))
-        for x in failures:
-            out.append(('li', '%s: %s' % (x['file'], x['reason'])))
-        if skipped:
-            out.append(('p', '그 밖에 그림·영상·프로그램·글꼴·임시 파일 %d개는 읽지 않았다(문서가 아님).' % len(skipped)))
+    out.append(('h1', '8. 확인하지 못한 자료(후임자가 직접 열어 볼 것)'))
+    for x in failures:
+        out.append(('li', '%s: %s' % (x['file'], x['reason'])))
+    if skipped:
+        out.append(('p', '그 밖에 그림·영상·프로그램·글꼴·임시 파일 %d개는 읽지 않았다(문서가 아님).' % len(skipped)))
+    if not failures and not skipped:
+        out.append(('p', '(없음)'))
     return out
 
 

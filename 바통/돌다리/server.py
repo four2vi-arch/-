@@ -22,7 +22,7 @@ PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', '
 STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'suggest': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
          'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': [],
-         'areas': core.DEFAULT_AREAS, 'overview': {}, 'handover_from': '', 'handover_to': ''}
+         'areas': core.DEFAULT_AREAS, 'overview': {}, 'handover_from': '', 'handover_to': '', 'assets': {}, 'keyfiles': []}
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
 CHECKPOINT = '모델응답_이어하기.jsonl'   # 모델 응답을 호출마다 바로 적어 두는 파일. 같은 폴더·모델이면 다음 「초안 만들기」가 재사용한다(죽어도 한 호출만 잃음)
 _extracting = False
@@ -313,6 +313,28 @@ class H(BaseHTTPRequestHandler):
         if p.path == '/api/items':
             with LOCK:
                 return self._send(200, {'items': STATE['items'], 'dropped': STATE['dropped']})
+        if p.path == '/api/search':   # 물어보기(1안): 파일 이름·본문 검색. 모델 없이 즉시. 이 PC 안에서만.
+            q = urllib.parse.parse_qs(p.query).get('q', [''])[0].strip().lower()
+            if len(q) < 2:
+                return self._send(200, {'hits': []})
+            hits = []
+            for f in STATE['files']:
+                name = f['file']; units = _units.get(name, [])
+                n_name = name.lower().count(q)
+                lines = []
+                for u in units:
+                    for line in u['text'].split('\n'):
+                        if q in line.lower():
+                            lines.append(line.strip()[:140])
+                            if len(lines) >= 3:
+                                break
+                    if len(lines) >= 3:
+                        break
+                n_body = sum(u['text'].lower().count(q) for u in units)
+                if n_name or n_body:
+                    hits.append({'file': name, 'name_hits': n_name, 'body_hits': n_body, 'lines': lines, 'kind': f['kind']})
+            hits.sort(key=lambda h: (-h['name_hits'], -h['body_hits']))
+            return self._send(200, {'hits': hits[:20], 'total': len(hits)})
         if p.path == '/api/ls':
             return self._send(200, list_dir(urllib.parse.parse_qs(p.query).get('path', [''])[0]))
         if p.path == '/api/models':
@@ -362,7 +384,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:
-                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to'):
+                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles'):
                     if k in body:
                         STATE[k] = body[k]
                 if 'areas_text' in body:
@@ -397,7 +419,7 @@ class H(BaseHTTPRequestHandler):
                     it = by_id.get(ch.get('id'))
                     if not it:
                         continue
-                    for k in ('keep', 'text', 'when', 'type', 'note', 'status', 'seen', 'next'):
+                    for k in ('keep', 'text', 'when', 'type', 'note', 'status', 'seen', 'next', 'decided'):
                         if k in ch:
                             it[k] = ch[k]
                     if 'area' in ch:
@@ -410,7 +432,7 @@ class H(BaseHTTPRequestHandler):
                     for i in b.get('ids', []):
                         it = by_id.get(i)
                         if it is not None and it in STATE['items']:
-                            it['keep'] = bool(b.get('keep'))
+                            it['keep'] = bool(b.get('keep')); it['decided'] = True
                 for new in body.get('add', []):
                     nid = max([0] + [it['id'] for it in STATE['items'] + STATE['dropped']]) + 1
                     rec = {'id': nid, 'file': '', 'type': new.get('type') if new.get('type') in core.TYPES else '진행 중 현안',
@@ -427,7 +449,9 @@ class H(BaseHTTPRequestHandler):
                 return self._send(400, {'error': '초안이 없습니다. ③ 초안 만들기를 먼저 하거나, 폴더를 다시 읽었다면 초안을 다시 만드세요(이전 초안은 작업 폴더의 초안_백업 파일에 있습니다)'})
             with LOCK:
                 session = {'folder': STATE['folder'], 'files': STATE['files'], 'failures': STATE['failures'], 'fingerprints': STATE['fingerprints'],
-                           'items': STATE['items'], 'model': STATE['model'] or '없음(규칙층만)', 'title': STATE['title'] or '전임자 확인 후 확정', 'version': VERSION}
+                           'items': STATE['items'], 'model': STATE['model'] or '없음(규칙층만)', 'title': STATE['title'] or '전임자 확인 후 확정', 'version': VERSION,
+                           'overview': STATE.get('overview') or {}, 'assets': STATE.get('assets') or {}, 'keyfiles': STATE.get('keyfiles') or [], 'areas': STATE.get('areas') or core.DEFAULT_AREAS,
+                           'handover_from': STATE.get('handover_from', ''), 'handover_to': STATE.get('handover_to', '')}
             stem = '인수인계서_' + datetime.datetime.now().strftime('%Y%m%d_%H%M')
             paths = export.write_all(session, WORK, stem)
             with open(os.path.join(WORK, stem + '_원본지문.csv'), 'w', encoding='utf-8-sig', newline='') as f:
