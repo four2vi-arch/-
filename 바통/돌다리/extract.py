@@ -374,6 +374,17 @@ HANDLERS = {'.hwp': extract_hwp, '.hwpx': extract_hwpx, '.pdf': extract_pdf, '.x
             '.odt': extract_odt, '.ods': extract_odt}
 
 
+def clean_text(s):
+    """PDF(UniKS-UTF16 대체 디코딩)·깨진 파일에서 나온 서러게이트 문자를 정리한다. 짝이 맞는 것은 합치고, 홀로 남은 것은 �로. 그대로 두면 JSON 저장(utf-8)에서 죽는다."""
+    if not s or not isinstance(s, str):
+        return s or ''
+    try:
+        s.encode('utf-8')
+        return s
+    except UnicodeEncodeError:
+        return s.encode('utf-16', 'surrogatepass').decode('utf-16', 'replace')
+
+
 def extract_file(path, rel, results, failures, depth=0):
     ext = os.path.splitext(path)[1].lower()
     if ext == '.zip':
@@ -408,11 +419,13 @@ def extract_file(path, rel, results, failures, depth=0):
         if not units:
             failures.append({'file': rel, 'reason': '글자가 없음'})
             return
-        results.append({'file': rel, 'kind': ext[1:], 'chars': sum(len(u['text']) for u in units), 'units': units})
+        for u in units:
+            u['text'] = clean_text(u.get('text', '')); u['loc'] = clean_text(str(u.get('loc', '')))
+        results.append({'file': clean_text(rel), 'kind': ext[1:], 'chars': sum(len(u['text']) for u in units), 'units': units})
     except ValueError as e:
-        failures.append({'file': rel, 'reason': str(e)[:160]})
+        failures.append({'file': clean_text(rel), 'reason': clean_text(str(e)[:160])})
     except Exception as e:
-        failures.append({'file': rel, 'reason': '%s(파일 손상 가능: %s)' % ({'.hwp': '한글 5.0 구조를 읽지 못함', '.hwpx': 'hwpx 구조를 읽지 못함', '.pdf': 'PDF 구조를 읽지 못함', '.xlsx': '엑셀 구조를 읽지 못함', '.docx': '워드 구조를 읽지 못함', '.odt': 'ODT 구조를 읽지 못함'}.get(ext, '읽지 못함'), (str(e)[:80] or type(e).__name__))})
+        failures.append({'file': clean_text(rel), 'reason': '%s(파일 손상 가능: %s)' % ({'.hwp': '한글 5.0 구조를 읽지 못함', '.hwpx': 'hwpx 구조를 읽지 못함', '.pdf': 'PDF 구조를 읽지 못함', '.xlsx': '엑셀 구조를 읽지 못함', '.docx': '워드 구조를 읽지 못함', '.odt': 'ODT 구조를 읽지 못함'}.get(ext, '읽지 못함'), (str(e)[:80] or type(e).__name__))})
 
 
 def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=False):
@@ -431,7 +444,7 @@ def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=Fals
             before = sha256(p)
             extract_file(p, rel, results, failures)
             after = sha256(p)
-            fps.append({'file': rel, 'bytes': os.path.getsize(p), 'sha256_before': before, 'sha256_after': after, 'unchanged': before == after})
+            fps.append({'file': clean_text(rel), 'bytes': os.path.getsize(p), 'sha256_before': before, 'sha256_after': after, 'unchanged': before == after})
     return results, failures, fps
 
 

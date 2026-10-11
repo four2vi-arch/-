@@ -15,7 +15,7 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.0 (2026-10-11.q)'
+VERSION = '1.0 (2026-10-11.r)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
@@ -34,8 +34,11 @@ def log(msg):
 
 def save_session():
     keep = {k: v for k, v in STATE.items() if k not in ('running', 'stop', 'log', 'reloading')}
-    with open(os.path.join(WORK, '세션.json'), 'w', encoding='utf-8') as f:
-        json.dump(keep, f, ensure_ascii=False, indent=1)
+    try:
+        with open(os.path.join(WORK, '세션.json'), 'w', encoding='utf-8', errors='replace') as f:
+            json.dump(keep, f, ensure_ascii=False, indent=1)
+    except Exception as e:
+        log('세션 저장 실패(화면은 계속 됨): %s' % str(e)[:120])
 
 
 def _reload_units():
@@ -133,11 +136,19 @@ def run_draft():
     try:
         draft, dropped, calls, errors = core.build_draft(files, STATE['model'] or 'none', STATE['url'], '', 6000, include_tables=STATE['include_tables'],
                                                          only_files=only, progress=progress, should_stop=lambda: STATE['stop'], max_calls_per_file=int(STATE.get('max_calls') or 3), skip_reference=bool(STATE.get('skip_reference', True)))
-        with open(os.path.join(WORK, '초안_원본_최근.json'), 'w', encoding='utf-8') as f:   # 묶기 전 초안을 먼저 남긴다(묶기 도중 끊겨도 잃지 않게)
-            json.dump({'folder': STATE['folder'], 'model': STATE['model'], 'draft': draft, 'dropped': dropped, 'calls': calls, 'errors': errors}, f, ensure_ascii=False)
+        try:   # 묶기 전 초안을 먼저 남긴다(묶기 도중 끊겨도 잃지 않게). 저장이 실패해도 초안은 계속 간다.
+            with open(os.path.join(WORK, '초안_원본_최근.json'), 'w', encoding='utf-8', errors='replace') as f:
+                json.dump({'folder': STATE['folder'], 'model': STATE['model'], 'draft': draft, 'dropped': dropped, 'calls': calls, 'errors': errors}, f, ensure_ascii=False)
+        except Exception as e:
+            log('묶기 전 초안 저장 실패(초안은 계속 진행): %s' % str(e)[:120])
         with LOCK:
             STATE['progress'] = dict(STATE['progress'] or {}, phase='같은 내용 묶는 중', sec=round(time.time() - t0))
-        draft = core.merge_similar(draft, progress=lambda p: progress(dict(STATE['progress'] or {}, **p)))
+        try:
+            draft = core.merge_similar(draft, progress=lambda p: progress(dict(STATE['progress'] or {}, **p)))
+        except Exception as e:   # 묶기가 실패하면 묶지 않은 채로 검토 화면을 연다
+            log('같은 내용 묶기 실패(묶지 않고 엽니다): %s' % str(e)[:120])
+            for d in draft:
+                d.setdefault('also', [])
         with LOCK:
             n = 0
             for d in draft:

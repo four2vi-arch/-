@@ -284,7 +284,7 @@ def rule_items(fobj):
     return items
 
 
-def merge_similar(draft, progress=None):
+def merge_similar(draft, progress=None, time_budget=180, bucket_cap=400):
     """같은 유형에서 발췌 줄이 서로 포함되거나 요약이 비슷한 항목(같은 공문이 일정표·메모·초안에 되풀이된 것)을 한 항목으로 묶는다.
     첫 항목이 대표가 되고 나머지 출처는 also 목록에 들어간다. 문장 파일(공문·보고서) 출처를 대표로 우선한다.
     수천~수만 항목에서도 끝나도록 2-gram 집합을 한 번만 만들고, 후보는 (유형, 발췌 앞 12자)·(유형, 요약 앞 12자)·공유 2-gram이 많은 묶음으로 좁힌다."""
@@ -304,16 +304,25 @@ def merge_similar(draft, progress=None):
         return len(A & B) / min(len(A), len(B))
 
     groups, by_key, by_gram = [], {}, {}
+    t_start = time.time(); over_budget = False
     for i, d in enumerate(draft):
         nq, nt = norm(d['quote']), norm(d['text'])
         gq, gt = grams(d['quote']), grams(d['text'])
         keys = [(d['type'], 'q', nq[:12]), (d['type'], 't', nt[:12])]
         cand = set()
-        for k in keys:
-            cand.update(by_key.get(k, ()))
-        # 공유 2-gram이 많은 묶음(요약 기준): 2-gram 8개를 표본으로 뽑아 색인을 본다
-        for g in list(gt)[:8]:
-            cand.update(by_gram.get((d['type'], g), ()))
+        if not over_budget:
+            for k in keys:
+                b = by_key.get(k, ())
+                cand.update(b[-bucket_cap:])                 # 같은 앞머리가 수천이면(명단·같은 서식) 최근 것만 본다
+            # 공유 2-gram이 많은 묶음(요약 기준): 흔치 않은 2-gram 8개를 골라 색인을 본다(「우편」처럼 어디에나 있는 조각은 가려내지 못함)
+            seen_g = [g for g in gt if (d['type'], g) in by_gram]          # 아직 색인에 없는 조각은 후보를 못 내므로 뺀다
+            rare = sorted(seen_g, key=lambda g: len(by_gram[(d['type'], g)]))[:8]
+            for g in rare:
+                b = by_gram.get((d['type'], g), ())
+                if len(b) <= bucket_cap:
+                    cand.update(b)
+        if time.time() - t_start > time_budget and not over_budget:   # 시간 예산을 넘기면 남은 항목은 묶지 않고 그대로 싣는다
+            over_budget = True
         hit = None
         for gi in cand:
             g = groups[gi]
@@ -341,6 +350,8 @@ def merge_similar(draft, progress=None):
     for g in groups:
         for k in ('_nq', '_nt', '_gq', '_gt'):
             g.pop(k, None)
+    if over_budget:
+        print('같은 내용 묶기: %d초 예산을 넘겨 나머지는 묶지 않음' % time_budget, flush=True)
     return groups
 
 
