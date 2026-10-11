@@ -13,6 +13,10 @@
 의존: olefile(BSD), pypdf(BSD), openpyxl(MIT). 나머지는 파이썬 표준 라이브러리. 재배포 제한 없음.
 """
 import os, sys, io, re, json, zlib, struct, hashlib, zipfile, csv, tempfile, email, email.policy
+import warnings, logging
+warnings.filterwarnings('ignore')                      # openpyxl·pypdf의 서식·글꼴 경고는 검은 창에 찍지 않는다(못 읽은 파일은 따로 집계)
+for _n in ('pypdf', 'pypdf._reader', 'pypdf.generic', 'pypdf._cmap'):
+    logging.getLogger(_n).setLevel(logging.ERROR)
 from xml.etree import ElementTree as ET
 
 HWP_NS = {'hp': 'http://www.hancom.co.kr/hwpml/2011/paragraph'}
