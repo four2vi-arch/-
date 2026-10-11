@@ -15,14 +15,16 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.0 (2026-10-11.r)'
+VERSION = '1.0 (2026-10-11.s)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
-SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
+SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
 STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'suggest': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
          'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': []}
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
+CHECKPOINT = '모델응답_이어하기.jsonl'   # 모델 응답을 호출마다 바로 적어 두는 파일. 같은 폴더·모델이면 다음 「초안 만들기」가 재사용한다(죽어도 한 호출만 잃음)
+_extracting = False
 LOCK = threading.Lock()
 WORK = ''
 
@@ -114,6 +116,15 @@ def do_extract(folder, exclude=None):
     save_session()
 
 
+def checkpoint_info():
+    """이전 회차 모델 응답이 지금 폴더·모델에 맞게 남아 있으면 그 수(화면 ② 안내용)."""
+    try:
+        prev = core.load_checkpoint(os.path.join(WORK, CHECKPOINT), STATE['folder'], STATE['model'], 6000)
+        return {'reusable': len(prev)}
+    except Exception:
+        return {'reusable': 0}
+
+
 def make_plan():
     only = None
     if STATE['recent_years']:
@@ -135,7 +146,11 @@ def run_draft():
 
     try:
         draft, dropped, calls, errors = core.build_draft(files, STATE['model'] or 'none', STATE['url'], '', 6000, include_tables=STATE['include_tables'],
-                                                         only_files=only, progress=progress, should_stop=lambda: STATE['stop'], max_calls_per_file=int(STATE.get('max_calls') or 3), skip_reference=bool(STATE.get('skip_reference', True)))
+                                                         only_files=only, progress=progress, should_stop=lambda: STATE['stop'], max_calls_per_file=int(STATE.get('max_calls') or 3), skip_reference=bool(STATE.get('skip_reference', True)),
+                                                         checkpoint=os.path.join(WORK, CHECKPOINT), folder=STATE['folder'])
+        n_reused = sum(1 for c in calls if c.get('reused'))
+        if n_reused:
+            log('이전 회차의 모델 응답 %d회를 다시 부르지 않고 재사용' % n_reused)
         try:   # 묶기 전 초안을 먼저 남긴다(묶기 도중 끊겨도 잃지 않게). 저장이 실패해도 초안은 계속 간다.
             with open(os.path.join(WORK, '초안_원본_최근.json'), 'w', encoding='utf-8', errors='replace') as f:
                 json.dump({'folder': STATE['folder'], 'model': STATE['model'], 'draft': draft, 'dropped': dropped, 'calls': calls, 'errors': errors}, f, ensure_ascii=False)
@@ -285,6 +300,7 @@ class H(BaseHTTPRequestHandler):
                 st['n_items'] = len(STATE['items']); st['n_dropped'] = len(STATE['dropped'])
                 st['originals_changed'] = sum(1 for x in STATE['fingerprints'] if not x.get('unchanged', True))
                 st['work'] = WORK; st['version'] = VERSION
+                st['checkpoint'] = checkpoint_info()
             return self._send(200, st)
         if p.path == '/api/items':
             with LOCK:
@@ -315,12 +331,22 @@ class H(BaseHTTPRequestHandler):
         if p == '/api/browse':
             return self._send(200, {'folder': browse_folder()})
         if p == '/api/extract':
+            global _extracting
             folder = os.path.abspath(os.path.expanduser(str(body.get('folder', '')).strip().strip('"')))
             if not os.path.isdir(folder):
                 return self._send(400, {'error': '폴더를 찾지 못했습니다: ' + folder})
             if STATE['running']:
                 return self._send(409, {'error': '초안을 만드는 중입니다'})
-            do_extract(folder, [str(x) for x in body.get('exclude', [])])
+            if _extracting:
+                return self._send(409, {'error': '폴더를 읽는 중입니다. 끝날 때까지 기다리세요(큰 폴더는 몇 분).'})
+            _extracting = True
+            try:
+                do_extract(folder, [str(x) for x in body.get('exclude', [])])
+            except Exception as e:
+                log('폴더 읽기 실패: %s' % str(e)[:160])
+                return self._send(500, {'error': '폴더를 읽다가 실패했습니다: ' + str(e)[:160]})
+            finally:
+                _extracting = False
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:

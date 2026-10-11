@@ -271,6 +271,8 @@ def extract_docx(path):
 def extract_eml(path):
     with open(path, 'rb') as f:
         msg = email.message_from_binary_file(f, policy=email.policy.default)
+    if not (msg['From'] or msg['Subject'] or msg['Date']):
+        raise ValueError('메일 형식이 아님(보낸 사람·제목·날짜가 없음)')
     head = ['보낸 사람: %s' % (msg['From'] or ''), '받는 사람: %s' % (msg['To'] or ''), '날짜: %s' % (msg['Date'] or ''), '제목: %s' % (msg['Subject'] or '')]
     body = ''
     part = msg.get_body(preferencelist=('plain', 'html'))
@@ -441,10 +443,13 @@ def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=Fals
                 continue
             p = os.path.join(root, name)
             rel = os.path.relpath(p, folder)
-            before = sha256(p)
-            extract_file(p, rel, results, failures)
-            after = sha256(p)
-            fps.append({'file': clean_text(rel), 'bytes': os.path.getsize(p), 'sha256_before': before, 'sha256_after': after, 'unchanged': before == after})
+            try:
+                before = sha256(p)
+                extract_file(p, rel, results, failures)
+                after = sha256(p)
+                fps.append({'file': clean_text(rel), 'bytes': os.path.getsize(p), 'sha256_before': before, 'sha256_after': after, 'unchanged': before == after})
+            except Exception as e:   # 권한 없음·너무 긴 경로·읽는 중 삭제 등: 그 파일만 못 읽음으로
+                failures.append({'file': clean_text(rel), 'reason': '열지 못함(%s)' % clean_text(str(e)[:100] or type(e).__name__)})
     return results, failures, fps
 
 

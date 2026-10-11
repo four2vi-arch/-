@@ -69,7 +69,7 @@ function renderPlan() {
   const model = ST.model;
   let h = '';
   if (!model) h = `<div class="note">모델 없이 규칙만으로 뽑습니다(몇 초). 전화번호·기한·현안 신호어가 있는 줄만 나옵니다. 모델을 고르면 문장 파일 ${p.files_model}개를 더 읽어 항목을 보탭니다.</div>`;
-  else h = `<div class="note">모델 <b>${esc(model)}</b>에 문장 파일 <b>${p.files_model}</b>개(호출 ${p.calls}회)를 보내고, 나머지 ${p.files_rule_only}개는 규칙만 적용합니다. 예상 시간 <b>약 ${secText(p.est_sec)}</b>(호출당 ${p.avg_sec}초 기준, 이 PC에서 잰 값으로 갱신됨. 긴 공문은 호출당 2분을 넘기도 합니다). 짧은 파일부터 보내므로 「여기까지만」으로 끊어도 많은 파일이 모델을 거칩니다.</div>`;
+  else h = `<div class="note">모델 <b>${esc(model)}</b>에 문장 파일 <b>${p.files_model}</b>개(호출 ${p.calls}회)를 보내고, 나머지 ${p.files_rule_only}개는 규칙만 적용합니다. 예상 시간 <b>약 ${secText(p.est_sec)}</b>(호출당 ${p.avg_sec}초 기준, 이 PC에서 잰 값으로 갱신됨. 긴 공문은 호출당 2분을 넘기도 합니다). 짧은 파일부터 보내므로 「여기까지만」으로 끊어도 많은 파일이 모델을 거칩니다.${ST.checkpoint && ST.checkpoint.reusable ? ` <b>이전 회차의 모델 응답 ${ST.checkpoint.reusable}회가 남아 있어 그만큼은 다시 부르지 않습니다.</b>` : ''} 모델 응답은 호출마다 작업 폴더에 바로 저장되어, 중간에 꺼져도 다음 「초안 만들기」가 이어서 갑니다.</div>`;
   $('#plan').innerHTML = h;
   $('#planHint').textContent = model ? '' : '모델이 없어도 됩니다.';
 }
@@ -78,7 +78,9 @@ function renderProgress() {
   const p = ST.progress; if (!p) return;
   const done = p.calls_total ? p.calls_done / p.calls_total : (p.index / Math.max(1, p.total));
   $('#barFill').style.width = Math.round(done * 100) + '%';
-  const left = p.calls_total && p.calls_done ? (p.sec / p.calls_done) * (p.calls_total - p.calls_done) : (p.calls_total - p.calls_done) * (ST.avg_sec || 22);
+  // 남은 시간: 짧은 파일부터 처리하므로 호출 수가 아니라 글자 수로 잰다(호출 수 기준은 늘 적게 나온다)
+  const left = p.chars_total && p.chars_done > 0 ? (p.sec / p.chars_done) * (p.chars_total - p.chars_done)
+             : p.calls_total && p.calls_done ? (p.sec / p.calls_done) * (p.calls_total - p.calls_done) : (p.calls_total - p.calls_done) * (ST.avg_sec || 22);
   $('#progText').textContent = !ST.running ? '' : p.phase ? `${p.phase}… ${p.index || 0}/${p.total || 0} 항목 · 지난 시간 ${secText(p.sec || 0)} (모델 호출은 끝났습니다. 잠시 기다리세요)` : `파일 ${p.index}/${p.total} · 모델 호출 ${p.calls_done}/${p.calls_total} · 지난 시간 ${secText(p.sec || 0)} · 남은 시간 약 ${secText(left)} · ${esc(p.file || '')}`;
   $('#btnStop').disabled = !ST.running;
 }
@@ -97,14 +99,20 @@ function itemHtml(it, dropped) {
     ${src}<input class="note" type="text" value="${esc(it.note || '')}" placeholder="후임자에게 남길 메모(선택)"></div></div>`;
 }
 
+const PAGE_STEP = 300; const PAGE = {};
 function renderItems() {
   const counts = {}; TYPES.forEach(t => counts[t] = ITEMS.filter(i => i.type === t && i.keep).length);
   $('#tabs').innerHTML = TYPES.map(t => `<button data-t="${t}" class="${t === tab ? 'on' : ''}">${t} (${counts[t]})</button>`).join('');
   $('#tabs').querySelectorAll('button').forEach(b => b.onclick = () => { tab = b.dataset.t; renderItems(); });
   const rows = ITEMS.filter(i => i.type === tab);
   if (tab === '월별 할 일') rows.sort((a, b) => (mon(a.when) - mon(b.when)) || a.file.localeCompare(b.file));
-  $('#items').innerHTML = rows.map(i => itemHtml(i, false)).join('') || '<div class="hint">이 유형의 항목이 없습니다. 아래 「직접 적기」로 보탤 수 있습니다.</div>';
-  $('#dropped').innerHTML = DROPPED.map(i => itemHtml(i, true)).join('') || '<div class="hint">없음</div>';
+  // 수천 항목이면 한 번에 다 그리지 않는다(브라우저가 멈춤). 300개씩 「더 보기」. 내보내기는 화면과 무관하게 전부 나간다.
+  const lim = PAGE[tab] || PAGE_STEP;
+  const shown = rows.slice(0, lim);
+  $('#items').innerHTML = (shown.map(i => itemHtml(i, false)).join('') || '<div class="hint">이 유형의 항목이 없습니다. 아래 「직접 적기」로 보탤 수 있습니다.</div>')
+    + (rows.length > lim ? `<div class="hint" style="margin:8px 0"><button id="btnMore" style="padding:6px 14px">더 보기 (${rows.length - lim}개 남음, ${PAGE_STEP}개씩)</button> 화면에 ${lim}개만 그렸습니다. 내보내기에는 전부 들어갑니다.</div>` : '');
+  const bm = $('#btnMore'); if (bm) bm.onclick = () => { PAGE[tab] = lim + PAGE_STEP; renderItems(); };
+  $('#dropped').innerHTML = DROPPED.slice(0, PAGE_STEP).map(i => itemHtml(i, true)).join('') + (DROPPED.length > PAGE_STEP ? `<div class="hint">…외 ${DROPPED.length - PAGE_STEP}개(인수인계서에는 「불확실」 수만 적힘)</div>` : '') || '<div class="hint">없음</div>';
   $('#nDropped').textContent = DROPPED.length; $('#nErr').textContent = (ST.errors || []).length;
   $('#errs').innerHTML = (ST.errors || []).map(e => esc(e.file + ' · ' + e.reason)).join('<br>') || '없음';
   $('#counts').textContent = `남길 항목 ${ITEMS.filter(i => i.keep).length}개 / 전체 ${ITEMS.length}개`;

@@ -378,82 +378,152 @@ def make_prompt(fobj, chunk):
             '표(엑셀)는 「n행: …」 줄 전체를 복사한다.)\n---\n%s' % (fobj['file'], chunk))
 
 
+def load_checkpoint(path, folder, model, max_chars):
+    """이전 회차의 모델 응답(jsonl). 첫 줄 머리글의 폴더·모델·토막 크기가 같을 때만 쓴다. 손상된 줄은 건너뛴다."""
+    out = {}
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            head = json.loads(f.readline() or '{}')
+            if not (head.get('folder') == folder and head.get('model') == model and head.get('max_chars') == max_chars):
+                return {}
+            for line in f:
+                try:
+                    r = json.loads(line)
+                    out[(r['file'], r['chunk'], r['chars'])] = r['content']
+                except Exception:
+                    continue
+    except Exception:
+        return {}
+    return out
+
+
 def build_draft(files, model, url='http://127.0.0.1:11434/v1/chat/completions', key='', max_chars=6000,
-                include_tables=False, only_files=None, fake=None, replay=None, progress=None, should_stop=None, max_calls_per_file=3, skip_reference=True):
+                include_tables=False, only_files=None, fake=None, replay=None, progress=None, should_stop=None, max_calls_per_file=3, skip_reference=True,
+                checkpoint=None, folder='', max_consecutive_failures=5):
     """출처 달린 초안을 만든다. 반환: draft, dropped, calls, errors.
     model='none'이면 규칙층만. fake(fobj)->JSON 문자열이면 모델 대신 쓴다(시험용). replay=이전 결과 dict이면 그때의 모델 답을 다시 쓴다.
-    progress(dict)는 파일마다 불린다. should_stop()이 True면 남은 모델 호출을 건너뛴다(규칙 항목은 모두 남음)."""
+    progress(dict)는 파일마다 불린다. should_stop()이 True면 남은 모델 호출을 건너뛴다(규칙 항목은 모두 남음).
+    checkpoint=jsonl 경로이면 모델 응답을 호출마다 바로 적고, 같은 폴더·모델·토막 크기의 이전 응답은 다시 부르지 않고 재사용한다(중간에 죽어도 호출 한 번만 잃음).
+    모델 서버가 max_consecutive_failures회 연속 응답하지 않으면 남은 파일은 규칙만으로 간다.
+    파일 하나에서 무슨 예외가 나도 그 파일만 오류로 남기고 계속 간다."""
     if model not in ('none',) and fake is None and replay is None and not is_local_url(url):
         raise ValueError('모델 주소는 127.0.0.1 또는 localhost만 허용합니다: ' + url)
     texts = {f['file']: '\n'.join(u['text'] for u in f['units']) for f in files}
     lines = {k: source_lines(v) for k, v in texts.items()}
     plan = plan_load(files, max_chars, include_tables, only_files=only_files, max_calls_per_file=max_calls_per_file, skip_reference=skip_reference)
     to_model = {r['file'] for r in plan['rows'] if r['to_model']}
+    chars_total = sum(min(r['chars'], max_chars * max_calls_per_file) for r in plan['rows'] if r['to_model'])
     draft, dropped, calls, errors = [], [], [], []
-    done_calls, stopped = 0, False
+    by_file = {}                                   # 파일 → draft 인덱스(같은 파일 안에서만 중복을 본다; 전체를 훑으면 항목 수의 제곱)
+    done_calls, stopped, chars_done, consecutive_fail = 0, False, 0, 0
+    prev = {}
+    ck = None
+    if checkpoint and replay is None and fake is None and model != 'none':
+        prev = load_checkpoint(checkpoint, folder, model, max_chars)
+        try:
+            mode = 'a' if prev else 'w'
+            ck = open(checkpoint, mode, encoding='utf-8', errors='replace')
+            if mode == 'w':
+                ck.write(json.dumps({'folder': folder, 'model': model, 'max_chars': max_chars, 'started': time.strftime('%Y-%m-%d %H:%M:%S')}, ensure_ascii=False) + '\n'); ck.flush()
+        except Exception:
+            ck = None
+
+    def add_draft(rec):
+        by_file.setdefault(rec['file'], []).append(len(draft)); draft.append(rec)
+
     # 규칙층은 전 파일에 먼저, 모델은 짧은 파일부터(중간에 끊어도 더 많은 파일이 모델을 거치도록)
     for f in files:
-        for it in rule_items(f):
-            draft.append({'file': f['file'], 'type': it['type'], 'text': it['text'], 'when': it['when'], 'quote': it['quote'], 'grounded': True, 'src': '규칙'})
+        try:
+            for it in rule_items(f):
+                add_draft({'file': f['file'], 'type': it['type'], 'text': it['text'], 'when': it['when'], 'quote': it['quote'], 'grounded': True, 'src': '규칙', **({'nomerge': True} if it.get('nomerge') else {})})
+        except Exception as e:
+            errors.append({'file': f['file'], 'chunk': -1, 'reason': '규칙 처리 실패: ' + str(e)[:120]})
     order = sorted(files, key=lambda f: (f['file'] not in to_model, f.get('chars', 0)))
     for fi, f in enumerate(order):
-        if model == 'none' or (f['file'] not in to_model and replay is None):
+        def report(**kw):
             if progress:
-                progress({'file': f['file'], 'index': fi + 1, 'total': len(files), 'calls_done': done_calls, 'calls_total': plan['calls'], 'skipped': True})
+                progress(dict({'file': f['file'], 'index': fi + 1, 'total': len(files), 'calls_done': done_calls, 'calls_total': plan['calls'],
+                               'chars_done': chars_done, 'chars_total': chars_total, 'stopped': stopped}, **kw))
+        if model == 'none' or (f['file'] not in to_model and replay is None):
+            report(skipped=True)
             continue
-        if replay is not None:
-            items_all = [{'type': d['type'], 'text': d['text'], 'when': d['when'], 'quote': d.get('quote_raw', d['quote'])}
-                         for d in replay['draft'] + replay['dropped'] if d['file'] == f['file'] and d['src'].startswith('모델')]
-            chunks = ['(재채점)']
-        else:
-            full = '\n'.join('[%s] %s' % (u['loc'], u['text']) for u in f['units'])
-            chunks = ([full[i:i + max_chars] for i in range(0, len(full), max_chars)] or [''])[:max_calls_per_file]
         if stopped or (should_stop and should_stop()):   # 중단: 남은 파일은 규칙층만(모델 호출 없음)
             stopped = True
-            if progress:
-                progress({'file': f['file'], 'index': fi + 1, 'total': len(files), 'calls_done': done_calls, 'calls_total': plan['calls'], 'skipped': True, 'stopped': True})
+            report(skipped=True)
             continue
-        for ci, chunk in enumerate(chunks):
-            if should_stop and should_stop():
-                stopped = True
-                break
-            t0 = time.time()
-            usage = {}
-            try:
-                if replay is not None:
-                    items = items_all
-                else:
-                    if fake is not None:
-                        content = fake(f)
+        try:
+            if replay is not None:
+                items_all = [{'type': d['type'], 'text': d['text'], 'when': d['when'], 'quote': d.get('quote_raw', d['quote'])}
+                             for d in replay['draft'] + replay['dropped'] if d['file'] == f['file'] and d['src'].startswith('모델')]
+                chunks = ['(재채점)']
+            else:
+                full = '\n'.join('[%s] %s' % (u['loc'], u['text']) for u in f['units'])
+                chunks = ([full[i:i + max_chars] for i in range(0, len(full), max_chars)] or [''])[:max_calls_per_file]
+            for ci, chunk in enumerate(chunks):
+                if should_stop and should_stop():
+                    stopped = True
+                    break
+                t0 = time.time()
+                usage = {}; reused = False
+                try:
+                    if replay is not None:
+                        items = items_all
                     else:
-                        content, usage = call_model(url, model, key, make_prompt(f, chunk))
-                    obj = parse_json_loose(content)
-                    items = (obj or {}).get('items') if isinstance(obj, dict) else None
-                    if items is None:
-                        errors.append({'file': f['file'], 'chunk': ci, 'reason': 'JSON 아님', 'head': str(content)[:200]}); items = []
-            except urllib.error.HTTPError as e:
-                errors.append({'file': f['file'], 'chunk': ci, 'reason': 'HTTP %d' % e.code}); items = []
-            except Exception as e:
-                errors.append({'file': f['file'], 'chunk': ci, 'reason': str(e)[:160]}); items = []
-            if replay is None:
-                calls.append({'file': f['file'], 'chunk': ci, 'chars': len(chunk), 'sec': round(time.time() - t0, 1), 'items': len(items), 'usage': usage})
-            done_calls += 1
-            for it in items:
-                if not isinstance(it, dict):
-                    continue
-                q = str(it.get('quote') or '').strip()
-                text = str(it.get('text') or '').strip()
-                if not text:
-                    continue
-                q2, how = ground_fix(q, text, texts[f['file']], lines[f['file']])
-                if fix_type(it.get('type'), text, q) == '협의할 사람' and not (PHONE.search(text + ' ' + (q2 or q)) or TITLE.search(text + ' ' + (q2 or q)) or TITLE2.search(text + ' ' + (q2 or q))):
-                    continue   # 「우편영업실장」「과장」처럼 누구인지 특정되지 않는 사람 항목은 싣지 않는다
-                rec = {'file': f['file'], 'type': fix_type(it.get('type'), text, q), 'text': text, 'when': str(it.get('when') or ''),
-                       'quote': q2 if q2 is not None else q, 'grounded': q2 is not None,
-                       'src': '모델' if how == '원문' else ('모델(발췌 보정)' if how else '모델'), 'quote_raw': q}
-                if any(d['file'] == rec['file'] and d['type'] == rec['type'] and (sim(d['text'], rec['text']) >= 0.5 or sim(d['quote'], rec['quote']) >= 0.6 or line_overlap(d['quote'], rec['quote'])) for d in draft):
-                    continue
-                (draft if rec['grounded'] else dropped).append(rec)
-        if progress:
-            progress({'file': f['file'], 'index': fi + 1, 'total': len(files), 'calls_done': done_calls, 'calls_total': plan['calls'], 'skipped': False, 'stopped': stopped})
+                        if fake is not None:
+                            content = fake(f)
+                        elif (f['file'], ci, len(chunk)) in prev:
+                            content = prev[(f['file'], ci, len(chunk))]; reused = True
+                        else:
+                            content, usage = call_model(url, model, key, make_prompt(f, chunk))
+                            if ck is not None:
+                                try:
+                                    ck.write(json.dumps({'file': f['file'], 'chunk': ci, 'chars': len(chunk), 'content': content}, ensure_ascii=False) + '\n'); ck.flush()
+                                except Exception:
+                                    pass
+                        consecutive_fail = 0
+                        obj = parse_json_loose(content)
+                        items = (obj or {}).get('items') if isinstance(obj, dict) else None
+                        if items is None:
+                            errors.append({'file': f['file'], 'chunk': ci, 'reason': 'JSON 아님', 'head': str(content)[:200]}); items = []
+                except urllib.error.HTTPError as e:
+                    errors.append({'file': f['file'], 'chunk': ci, 'reason': 'HTTP %d' % e.code}); items = []
+                    consecutive_fail += 1
+                except Exception as e:
+                    errors.append({'file': f['file'], 'chunk': ci, 'reason': str(e)[:160]}); items = []
+                    consecutive_fail += 1
+                if replay is None:
+                    calls.append({'file': f['file'], 'chunk': ci, 'chars': len(chunk), 'sec': round(time.time() - t0, 1), 'items': len(items), 'usage': usage, 'reused': reused})
+                done_calls += 1; chars_done += len(chunk)
+                if consecutive_fail >= max_consecutive_failures:
+                    errors.append({'file': '', 'chunk': -1, 'reason': '모델 서버가 %d회 연속 응답하지 않아 남은 파일은 규칙만 적용했습니다(모델 주소·Ollama 실행 여부를 확인하세요)' % consecutive_fail})
+                    stopped = True
+                    break
+                mine = by_file.get(f['file'], [])
+                for it in items:
+                    if not isinstance(it, dict):
+                        continue
+                    q = str(it.get('quote') or '').strip()
+                    text = str(it.get('text') or '').strip()
+                    if not text:
+                        continue
+                    q2, how = ground_fix(q, text, texts[f['file']], lines[f['file']])
+                    if fix_type(it.get('type'), text, q) == '협의할 사람' and not (PHONE.search(text + ' ' + (q2 or q)) or TITLE.search(text + ' ' + (q2 or q)) or TITLE2.search(text + ' ' + (q2 or q))):
+                        continue   # 「우편영업실장」「과장」처럼 누구인지 특정되지 않는 사람 항목은 싣지 않는다
+                    rec = {'file': f['file'], 'type': fix_type(it.get('type'), text, q), 'text': text, 'when': str(it.get('when') or ''),
+                           'quote': q2 if q2 is not None else q, 'grounded': q2 is not None,
+                           'src': '모델' if how == '원문' else ('모델(발췌 보정)' if how else '모델'), 'quote_raw': q}
+                    if any(draft[k]['type'] == rec['type'] and (sim(draft[k]['text'], rec['text']) >= 0.5 or sim(draft[k]['quote'], rec['quote']) >= 0.6 or line_overlap(draft[k]['quote'], rec['quote'])) for k in mine):
+                        continue
+                    if rec['grounded']:
+                        add_draft(rec); mine = by_file.get(f['file'], [])
+                    else:
+                        dropped.append(rec)
+        except Exception as e:   # 파일 하나의 예상 못 한 예외: 그 파일만 오류로 남기고 계속
+            errors.append({'file': f['file'], 'chunk': -1, 'reason': '파일 처리 실패: ' + str(e)[:140]})
+        report(skipped=False)
+    if ck is not None:
+        try:
+            ck.close()
+        except Exception:
+            pass
     return draft, dropped, calls, errors
