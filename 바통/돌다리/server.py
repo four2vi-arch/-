@@ -15,13 +15,13 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.0 (2026-10-11.k)'
+VERSION = '1.0 (2026-10-11.l)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
 STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'suggest': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
-         'recent_years': 0, 'max_calls': 3, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': []}
+         'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': []}
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
 LOCK = threading.Lock()
 WORK = ''
@@ -93,7 +93,7 @@ def make_plan():
         lim = datetime.date.today().year - STATE['recent_years']
         only = {f['file'] for f in STATE['files'] if f.get('year') is None or f['year'] >= lim}
     files = [dict(f, units=[]) for f in STATE['files']]
-    return core.plan_load(files, include_tables=STATE['include_tables'], avg_sec=STATE['avg_sec'], only_files=only, max_calls_per_file=int(STATE.get('max_calls') or 3))
+    return core.plan_load(files, include_tables=STATE['include_tables'], avg_sec=STATE['avg_sec'], only_files=only, max_calls_per_file=int(STATE.get('max_calls') or 3), skip_reference=bool(STATE.get('skip_reference', True)))
 
 
 def run_draft():
@@ -108,7 +108,7 @@ def run_draft():
 
     try:
         draft, dropped, calls, errors = core.build_draft(files, STATE['model'] or 'none', STATE['url'], '', 6000, include_tables=STATE['include_tables'],
-                                                         only_files=only, progress=progress, should_stop=lambda: STATE['stop'], max_calls_per_file=int(STATE.get('max_calls') or 3))
+                                                         only_files=only, progress=progress, should_stop=lambda: STATE['stop'], max_calls_per_file=int(STATE.get('max_calls') or 3), skip_reference=bool(STATE.get('skip_reference', True)))
         draft = core.merge_similar(draft)
         with LOCK:
             n = 0
@@ -273,7 +273,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:
-                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls'):
+                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference'):
                     if k in body:
                         STATE[k] = body[k]
                 if 'url' in body:

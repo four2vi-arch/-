@@ -299,11 +299,14 @@ def merge_similar(draft):
 
 
 # ---------------------------------------------------------------- 부하 계획·초안 만들기(화면·실측 공용)
-def plan_load(files, max_chars=6000, include_tables=False, avg_sec=22.0, only_files=None, max_calls_per_file=3):
-    """파일별 모델 호출 횟수와 예상 시간. 추출은 수 초 안이라 부하는 거의 모델 호출(호출당 avg_sec초, CPU 미니PC 실측 21~23초)."""
+def plan_load(files, max_chars=6000, include_tables=False, avg_sec=22.0, only_files=None, max_calls_per_file=3, skip_reference=True):
+    """파일별 모델 호출 횟수와 예상 시간. 추출은 수 초 안이라 부하는 거의 모델 호출(호출당 avg_sec초; 모의 폴더 21~23초, 실제 긴 공문은 2분 넘기도 함).
+    skip_reference: 지침·매뉴얼·길라잡이 같은 참고 문서는 모델에 보내지 않는다(길고, 할 일·담당은 규칙으로 충분히 잡힘)."""
     rows = []
     for f in files:
         to_model = (f['kind'] in SENTENCE_KINDS or (include_tables and f['kind'] in TABLE_KINDS))
+        if skip_reference and REFERENCE_NAME.search(os.path.basename(f['file'].split(' ▸ ')[0])):
+            to_model = False
         if only_files is not None:
             to_model = to_model and f['file'] in only_files
         calls = min(max_calls_per_file, max(1, math.ceil(f['chars'] / max_chars))) if to_model else 0  # 긴 파일은 앞부분 max_calls_per_file 토막까지만
@@ -319,7 +322,7 @@ def make_prompt(fobj, chunk):
 
 
 def build_draft(files, model, url='http://127.0.0.1:11434/v1/chat/completions', key='', max_chars=6000,
-                include_tables=False, only_files=None, fake=None, replay=None, progress=None, should_stop=None, max_calls_per_file=3):
+                include_tables=False, only_files=None, fake=None, replay=None, progress=None, should_stop=None, max_calls_per_file=3, skip_reference=True):
     """출처 달린 초안을 만든다. 반환: draft, dropped, calls, errors.
     model='none'이면 규칙층만. fake(fobj)->JSON 문자열이면 모델 대신 쓴다(시험용). replay=이전 결과 dict이면 그때의 모델 답을 다시 쓴다.
     progress(dict)는 파일마다 불린다. should_stop()이 True면 남은 모델 호출을 건너뛴다(규칙 항목은 모두 남음)."""
@@ -327,13 +330,16 @@ def build_draft(files, model, url='http://127.0.0.1:11434/v1/chat/completions', 
         raise ValueError('모델 주소는 127.0.0.1 또는 localhost만 허용합니다: ' + url)
     texts = {f['file']: '\n'.join(u['text'] for u in f['units']) for f in files}
     lines = {k: source_lines(v) for k, v in texts.items()}
-    plan = plan_load(files, max_chars, include_tables, only_files=only_files, max_calls_per_file=max_calls_per_file)
+    plan = plan_load(files, max_chars, include_tables, only_files=only_files, max_calls_per_file=max_calls_per_file, skip_reference=skip_reference)
     to_model = {r['file'] for r in plan['rows'] if r['to_model']}
     draft, dropped, calls, errors = [], [], [], []
     done_calls, stopped = 0, False
-    for fi, f in enumerate(files):
+    # 규칙층은 전 파일에 먼저, 모델은 짧은 파일부터(중간에 끊어도 더 많은 파일이 모델을 거치도록)
+    for f in files:
         for it in rule_items(f):
             draft.append({'file': f['file'], 'type': it['type'], 'text': it['text'], 'when': it['when'], 'quote': it['quote'], 'grounded': True, 'src': '규칙'})
+    order = sorted(files, key=lambda f: (f['file'] not in to_model, f.get('chars', 0)))
+    for fi, f in enumerate(order):
         if model == 'none' or (f['file'] not in to_model and replay is None):
             if progress:
                 progress({'file': f['file'], 'index': fi + 1, 'total': len(files), 'calls_done': done_calls, 'calls_total': plan['calls'], 'skipped': True})

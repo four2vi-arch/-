@@ -24,7 +24,7 @@ async function refresh() {
   setSteps(ST.step); if (ST.version) $('#ver').textContent = 'v' + ST.version;
   if (ST.folder && !$('#folder').value) $('#folder').value = ST.folder;
   if (!$('#url').value) $('#url').value = ST.url;
-  $('#tables').checked = !!ST.include_tables; $('#recent').value = String(ST.recent_years || 0); $('#maxCalls').value = String(ST.max_calls || 3);
+  $('#tables').checked = !!ST.include_tables; $('#recent').value = String(ST.recent_years || 0); $('#maxCalls').value = String(ST.max_calls || 3); $('#skipRef').checked = ST.skip_reference !== false;
   $('#title').value = ST.title || '';
   $('#log').textContent = (ST.log || []).join('\n');
   renderFiles(); renderSubdirs(); renderPlan(); renderProgress();
@@ -67,7 +67,7 @@ function renderPlan() {
   const model = ST.model;
   let h = '';
   if (!model) h = `<div class="note">모델 없이 규칙만으로 뽑습니다(몇 초). 전화번호·기한·현안 신호어가 있는 줄만 나옵니다. 모델을 고르면 문장 파일 ${p.files_model}개를 더 읽어 항목을 보탭니다.</div>`;
-  else h = `<div class="note">모델 <b>${esc(model)}</b>에 문장 파일 <b>${p.files_model}</b>개(호출 ${p.calls}회)를 보내고, 나머지 ${p.files_rule_only}개는 규칙만 적용합니다. 예상 시간 <b>약 ${secText(p.est_sec)}</b>(호출당 ${p.avg_sec}초 기준, 이 PC에서 잰 값으로 갱신됨). 긴 작업은 「여기까지만」으로 끊을 수 있습니다.</div>`;
+  else h = `<div class="note">모델 <b>${esc(model)}</b>에 문장 파일 <b>${p.files_model}</b>개(호출 ${p.calls}회)를 보내고, 나머지 ${p.files_rule_only}개는 규칙만 적용합니다. 예상 시간 <b>약 ${secText(p.est_sec)}</b>(호출당 ${p.avg_sec}초 기준, 이 PC에서 잰 값으로 갱신됨. 긴 공문은 호출당 2분을 넘기도 합니다). 짧은 파일부터 보내므로 「여기까지만」으로 끊어도 많은 파일이 모델을 거칩니다.</div>`;
   $('#plan').innerHTML = h;
   $('#planHint').textContent = model ? '' : '모델이 없어도 됩니다.';
 }
@@ -144,7 +144,7 @@ async function loadModels() {
 }
 
 async function settings() {
-  const j = await api('/api/settings', {model: $('#model').value, url: $('#url').value.trim(), include_tables: $('#tables').checked, recent_years: +$('#recent').value, max_calls: +$('#maxCalls').value, title: $('#title').value});
+  const j = await api('/api/settings', {model: $('#model').value, url: $('#url').value.trim(), include_tables: $('#tables').checked, recent_years: +$('#recent').value, max_calls: +$('#maxCalls').value, skip_reference: $('#skipRef').checked, title: $('#title').value});
   ST.model = $('#model').value; ST.include_tables = $('#tables').checked; ST.recent_years = +$('#recent').value; ST.plan = j.plan; renderPlan();
 }
 
@@ -170,7 +170,7 @@ $('#btnExtract').onclick = async () => {
   $('#btnExtract').disabled = false;
 };
 $('#btnModels').onclick = loadModels;
-['#model', '#url', '#tables', '#recent', '#maxCalls', '#title'].forEach(s => $(s).onchange = () => settings().catch(e => alert(e.message)));
+['#model', '#url', '#tables', '#recent', '#maxCalls', '#skipRef', '#title'].forEach(s => $(s).onchange = () => settings().catch(e => alert(e.message)));
 $('#btnDraft').onclick = async () => { try { await settings(); await api('/api/draft', {}); ITEMS = []; DROPPED = []; await refresh(); } catch (e) { alert(e.message); } };
 $('#btnStop').onclick = () => api('/api/stop', {});
 $('#btnSave').onclick = () => save().catch(e => alert(e.message));
