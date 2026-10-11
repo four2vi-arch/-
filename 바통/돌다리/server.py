@@ -15,13 +15,14 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.0 (2026-10-11.s)'
+VERSION = '1.1 (2026-10-12)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
 STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'suggest': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
-         'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': []}
+         'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': [],
+         'areas': core.DEFAULT_AREAS}
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
 CHECKPOINT = '모델응답_이어하기.jsonl'   # 모델 응답을 호출마다 바로 적어 두는 파일. 같은 폴더·모델이면 다음 「초안 만들기」가 재사용한다(죽어도 한 호출만 잃음)
 _extracting = False
@@ -170,6 +171,7 @@ def run_draft():
                 n += 1; d['id'] = n; d['keep'] = True; d['note'] = ''
             for d in dropped:
                 n += 1; d['id'] = n; d['keep'] = False; d['note'] = ''
+            core.tag_items(draft, STATE.get('areas') or core.DEFAULT_AREAS, keep_manual=False); core.tag_items(dropped, STATE.get('areas') or core.DEFAULT_AREAS, keep_manual=False)
             STATE['items'], STATE['dropped'], STATE['calls'], STATE['errors'] = draft, dropped, calls, errors
             if calls:
                 STATE['avg_sec'] = round(sum(c['sec'] for c in calls) / len(calls), 1)
@@ -301,6 +303,8 @@ class H(BaseHTTPRequestHandler):
                 st['originals_changed'] = sum(1 for x in STATE['fingerprints'] if not x.get('unchanged', True))
                 st['work'] = WORK; st['version'] = VERSION
                 st['checkpoint'] = checkpoint_info()
+                st['areas_text'] = core.areas_text(STATE.get('areas') or core.DEFAULT_AREAS)
+                st['n_skip'] = sum(1 for x in STATE['failures'] if x.get('skip')); st['n_fail'] = len(STATE['failures']) - st['n_skip']
             return self._send(200, st)
         if p.path == '/api/items':
             with LOCK:
@@ -353,6 +357,9 @@ class H(BaseHTTPRequestHandler):
                 for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference'):
                     if k in body:
                         STATE[k] = body[k]
+                if 'areas_text' in body:
+                    STATE['areas'] = core.parse_areas(body['areas_text']) or core.DEFAULT_AREAS
+                    core.tag_items(STATE['items'], STATE['areas']); core.tag_items(STATE['dropped'], STATE['areas'])
                 if 'url' in body:
                     if not core.is_local_url(str(body['url'])):
                         return self._send(400, {'error': '모델 주소는 127.0.0.1 또는 localhost만 허용합니다'})
@@ -385,13 +392,26 @@ class H(BaseHTTPRequestHandler):
                     for k in ('keep', 'text', 'when', 'type', 'note'):
                         if k in ch:
                             it[k] = ch[k]
-                    if it in STATE['dropped'] and it.get('keep'):
+                    if 'area' in ch:
+                        it['area'] = str(ch['area']); it['area_by'] = '사람'
+                    if 'text' in ch or 'when' in ch:
+                        it['cycle'] = core.cycle_of(it)
+                    if it in STATE['dropped'] and it.get('keep'):   # 불확실에서 되살림
                         STATE['dropped'].remove(it); it['src'] = '모델(불확실→전임자 복원)'; STATE['items'].append(it)
+                for b in body.get('bulk', []):          # 일괄: {'ids': [...], 'keep': true/false}
+                    for i in b.get('ids', []):
+                        it = by_id.get(i)
+                        if it is not None and it in STATE['items']:
+                            it['keep'] = bool(b.get('keep'))
                 for new in body.get('add', []):
                     nid = max([0] + [it['id'] for it in STATE['items'] + STATE['dropped']]) + 1
-                    STATE['items'].append({'id': nid, 'file': '', 'type': new.get('type') if new.get('type') in core.TYPES else '진행 중 현안',
-                                           'text': str(new.get('text', '')).strip(), 'when': str(new.get('when', '')).strip(), 'quote': '', 'grounded': True,
-                                           'src': '직접 입력', 'keep': True, 'note': str(new.get('note', '')).strip()})
+                    rec = {'id': nid, 'file': '', 'type': new.get('type') if new.get('type') in core.TYPES else '진행 중 현안',
+                           'text': str(new.get('text', '')).strip(), 'when': str(new.get('when', '')).strip(), 'quote': '', 'grounded': True,
+                           'src': '직접 입력', 'keep': True, 'note': str(new.get('note', '')).strip()}
+                    core.tag_items([rec], STATE.get('areas') or core.DEFAULT_AREAS, keep_manual=False)
+                    if new.get('area'):
+                        rec['area'] = str(new['area']); rec['area_by'] = '사람'
+                    STATE['items'].append(rec)
             save_session()
             return self._send(200, {'ok': True, 'items': STATE['items'], 'dropped': STATE['dropped']})
         if p == '/api/export':
@@ -417,6 +437,11 @@ class H(BaseHTTPRequestHandler):
 
 def main():
     global WORK
+    for stream in (sys.stdout, sys.stderr):   # 윈도 콘솔(cp949)에서 한글·특수문자 출력으로 죽지 않게
+        try:
+            stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
     ap = argparse.ArgumentParser()
     ap.add_argument('--port', type=int, default=8765)
     ap.add_argument('--work', default=os.path.join(HERE, '작업'))

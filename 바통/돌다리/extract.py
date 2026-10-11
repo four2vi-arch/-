@@ -224,13 +224,106 @@ def extract_xlsx(path):
         raise ValueError('옛 엑셀(.xls, 97-2003) 형식입니다. 엑셀에서 열어 .xlsx로 다시 저장하면 읽습니다')
     if head.startswith(b'<') or head.lower().startswith(b'<!doc'):
         raise ValueError('이름만 .xlsx인 웹(HTML) 파일입니다. 엑셀에서 열어 .xlsx로 다시 저장하면 읽습니다')
-    import openpyxl
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
-        units = _xlsx_units(wb)
-    finally:
-        wb.close()  # 윈도에서는 닫지 않으면 임시 폴더를 지울 수 없다
+        import openpyxl
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        try:
+            units = _xlsx_units(wb)
+        finally:
+            wb.close()  # 윈도에서는 닫지 않으면 임시 폴더를 지울 수 없다
+        return units
+    except Exception as e:   # 실제 폴더에서 60개: 「list index out of range」「Value must be a sequence」「_NamedCellStyle」— openpyxl이 한컴·옛 엑셀이 만든 서식을 못 읽음. 글자만 XML에서 직접 읽는다
+        try:
+            return _xlsx_raw(path)
+        except Exception:
+            raise e
+
+
+def _xlsx_raw(path, max_rows=5000):
+    """openpyxl 없이 xlsx(zip+XML)에서 셀 글자만 읽는다. 서식·수식은 보지 않는다(값만)."""
+    ns = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+    rns = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+    with zipfile.ZipFile(path) as z:
+        names = set(z.namelist())
+        shared = []
+        if 'xl/sharedStrings.xml' in names:
+            for si in ET.fromstring(z.read('xl/sharedStrings.xml')).iter(ns + 'si'):
+                shared.append(''.join(t.text or '' for t in si.iter(ns + 't')))
+        sheets = []
+        if 'xl/workbook.xml' in names:
+            rels = {}
+            if 'xl/_rels/workbook.xml.rels' in names:
+                for r in ET.fromstring(z.read('xl/_rels/workbook.xml.rels')):
+                    rels[r.get('Id')] = r.get('Target')
+            for sh in ET.fromstring(z.read('xl/workbook.xml')).iter(ns + 'sheet'):
+                tgt = rels.get(sh.get(rns + 'id'), '')
+                tgt = tgt if tgt.startswith('/') else 'xl/' + tgt
+                sheets.append((sh.get('name') or '시트', tgt.lstrip('/')))
+        if not sheets:
+            sheets = [(n.split('/')[-1], n) for n in sorted(names) if n.startswith('xl/worksheets/sheet') and n.endswith('.xml')]
+        units = []
+        for title, target in sheets:
+            if target not in names:
+                continue
+            lines, r = [], 0
+            for row in ET.fromstring(z.read(target)).iter(ns + 'row'):
+                r += 1
+                if r > max_rows:
+                    lines.append('(%d행 이후 생략)' % max_rows); break
+                vals = []
+                for c in row.iter(ns + 'c'):
+                    v = c.find(ns + 'v'); t = c.get('t')
+                    if t == 's' and v is not None and v.text and v.text.isdigit() and int(v.text) < len(shared):
+                        vals.append(shared[int(v.text)])
+                    elif t == 'inlineStr':
+                        vals.append(''.join(x.text or '' for x in c.iter(ns + 't')))
+                    elif v is not None and v.text:
+                        vals.append(v.text)
+                    else:
+                        vals.append('')
+                if any(x.strip() for x in vals):
+                    lines.append('%s행: ' % (row.get('r') or r) + '\t'.join(x.strip() for x in vals).rstrip('\t'))
+            if lines:
+                units.append({'loc': '시트 「%s」' % title, 'text': '\n'.join(lines)})
     return units
+
+
+# ---------------------------------------------------------------- 파워포인트·웹 문서
+def extract_pptx(path):
+    ans = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+    units = []
+    with zipfile.ZipFile(path) as z:
+        slides = sorted((n for n in z.namelist() if re.match(r'ppt/slides/slide\d+\.xml$', n)), key=lambda n: int(re.search(r'(\d+)', n.split('/')[-1]).group(1)))
+        if not slides:
+            raise ValueError('파워포인트 슬라이드(ppt/slides) 없음')
+        for i, n in enumerate(slides, 1):
+            paras = []
+            for p in ET.fromstring(z.read(n)).iter(ans + 'p'):
+                t = ''.join(x.text or '' for x in p.iter(ans + 't')).strip()
+                if t:
+                    paras.append(t)
+            if paras:
+                units.append({'loc': '슬라이드 %d' % i, 'text': '\n'.join(paras)})
+    return units
+
+
+def extract_html(path):
+    import html as _html
+    raw = open(path, 'rb').read()
+    t = None
+    for enc in ('utf-8-sig', 'utf-8', 'cp949', 'euc-kr'):
+        try:
+            t = raw.decode(enc); break
+        except UnicodeDecodeError:
+            pass
+    if t is None:
+        raise ValueError('글자 인코딩을 알 수 없음')
+    t = re.sub(r'(?is)<(script|style)[^>]*>.*?</\1>', ' ', t)
+    t = re.sub(r'(?i)<br\s*/?>|</(p|div|tr|li|h\d)>', '\n', t)
+    t = _html.unescape(re.sub(r'<[^>]+>', ' ', t))
+    lines = [re.sub(r'[ \t]+', ' ', l).strip() for l in t.split('\n')]
+    lines = [l for l in lines if l]
+    return [{'loc': '본문', 'text': '\n'.join(lines)}] if lines else []
 
 
 def _xlsx_units(wb):
@@ -373,7 +466,16 @@ def _old_office(kind):
 HANDLERS = {'.hwp': extract_hwp, '.hwpx': extract_hwpx, '.pdf': extract_pdf, '.xlsx': extract_xlsx, '.xlsm': extract_xlsx,
             '.doc': _old_office('워드(97-2003, .doc)'), '.xls': _old_office('엑셀(97-2003, .xls)'), '.ppt': _old_office('파워포인트(97-2003, .ppt)'),
             '.docx': extract_docx, '.eml': extract_eml, '.txt': extract_text, '.md': extract_text, '.csv': extract_text,
-            '.odt': extract_odt, '.ods': extract_odt}
+            '.odt': extract_odt, '.ods': extract_odt, '.pptx': extract_pptx, '.html': extract_html, '.htm': extract_html}
+HANCOM_HINT = {'.cell': '한셀(.cell) 문서는 읽지 못합니다. 한셀에서 「다른 이름으로 저장 → Excel(.xlsx)」 하면 읽습니다',
+               '.show': '한쇼(.show) 문서는 읽지 못합니다. 한쇼에서 PowerPoint(.pptx)로 저장하면 읽습니다',
+               '.rtf': '서식 있는 텍스트(.rtf)는 읽지 못합니다. 워드·한글에서 .docx로 저장하면 읽습니다'}
+# 읽지 않는 형식: 문서가 아니라 그림·영상·프로그램·글꼴·임시 파일. 「못 읽음」이 아니라 「읽지 않음」으로 따로 센다(인수인계서에 「직접 열어 볼 것」으로는 적지 않음)
+NON_DOC = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tif', '.tiff', '.webp', '.heic', '.svg', '.ico', '.psd', '.ai',
+           '.mp4', '.mp3', '.wav', '.avi', '.mov', '.wmv', '.m4a',
+           '.exe', '.dll', '.msi', '.bat', '.cmd', '.lnk', '.url', '.ini', '.db', '.dat', '.pia', '.fnt', '.ttf', '.otf', '.woff',
+           '.tmp', '.bak', '.backup', '.log', '.json', '.xml', '.js', '.css', '.py', '.pyc', '.iso', '.7z', '.rar', '.egg', '.alz'}
+MAX_BYTES = 200 * 1024 * 1024
 
 
 def clean_text(s):
@@ -413,9 +515,22 @@ def extract_file(path, rel, results, failures, depth=0):
             failures.append({'file': rel, 'reason': '암호가 걸린 압축 파일' if 'password' in str(e).lower() else str(e)})
         return
     fn = HANDLERS.get(ext)
+    base = os.path.basename(path)
+    if base.startswith('~$') or base.lower() in ('thumbs.db', 'desktop.ini'):
+        failures.append({'file': rel, 'reason': '임시·시스템 파일', 'skip': True}); return
+    if ext in HANCOM_HINT:
+        failures.append({'file': rel, 'reason': HANCOM_HINT[ext]}); return
     if not fn:
-        failures.append({'file': rel, 'reason': '지원하지 않는 형식(%s)' % (ext or '확장자 없음')})
+        if ext in NON_DOC:
+            failures.append({'file': rel, 'reason': '읽지 않는 형식(%s: 그림·영상·프로그램·글꼴·임시 파일)' % ext, 'skip': True})
+        else:
+            failures.append({'file': rel, 'reason': '지원하지 않는 형식(%s)' % (ext or '확장자 없음')})
         return
+    try:
+        if os.path.getsize(path) > MAX_BYTES:
+            failures.append({'file': rel, 'reason': '너무 커서 건너뜀(200MB 넘음) — 직접 열어 볼 것'}); return
+    except OSError:
+        pass
     try:
         units = fn(path)
         if not units:
@@ -434,15 +549,18 @@ def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=Fals
     """skip_dirs: 건너뛸 폴더 이름(어느 깊이든 같은 이름). skip_names: 건너뛸 파일 이름 정규식. 숨김 폴더(.으로 시작)는 늘 건너뛴다."""
     results, failures, fps = [], [], []
     skip = set(skip_dirs or ())
-    for root, dirs, files in os.walk(folder):
+    walk_root = folder
+    if os.name == 'nt' and not str(folder).startswith('\\\\?\\'):
+        walk_root = '\\\\?\\' + os.path.abspath(folder)   # 260자 넘는 경로도 열리게(윈도 긴 경로 접두)
+    for root, dirs, files in os.walk(walk_root):
         dirs[:] = sorted(d for d in dirs if d not in skip and not d.startswith('.'))
-        if skip_root_files and os.path.abspath(root) == os.path.abspath(folder):
+        if skip_root_files and os.path.normcase(os.path.abspath(root)) == os.path.normcase(os.path.abspath(walk_root)):
             continue   # 프로그램 폴더를 골랐을 때: 최상위의 README·설정 파일은 업무 문서가 아니다
         for name in sorted(files):
             if skip_names and re.search(skip_names, name):
                 continue
             p = os.path.join(root, name)
-            rel = os.path.relpath(p, folder)
+            rel = os.path.relpath(p, walk_root)
             try:
                 before = sha256(p)
                 extract_file(p, rel, results, failures)

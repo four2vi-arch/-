@@ -3,120 +3,202 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>돌다리 v1.0 · 업무 인수인계 도우미(화면)</title>
+<title>돌다리 · 업무 인수인계 도우미</title>
 <style>
-:root{--ink:#1d2430;--mute:#5d6673;--line:#d9dee6;--bg:#f5f7fa;--card:#fff;--acc:#1f5fbf;--acc2:#e8f0fc;--warn:#b54708;--warnbg:#fff4e5;--ok:#1a7f4b;--okbg:#e6f6ec}
+:root{
+  --paper:#eef1f1;--surface:#fff;--surface-2:#f6f8f8;--sunken:#e3e9e9;--s:1;
+  --ink:#10191f;--ink-2:#38474f;--ink-3:#63737b;--line:#d4dcdd;--line-2:#e7eded;
+  --accent:#0f7a6c;--accent-ink:#0a5b50;--accent-wash:#e1f0ed;
+  --ins:#3a5a8c;--ins-ink:#2d4870;--ins-wash:#e4eaf4;
+  --warn:#8a5a00;--warn-wash:#fbf3de;--warn-line:#e7d6ac;--bad:#a23b2a;--bad-wash:#fbe7e3;
+  --head:"HY헤드라인M","HYHeadLine-Medium","맑은 고딕","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+  --sans:"맑은 고딕","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  --mono:"D2Coding","Consolas","Menlo",monospace;
+}
+:root[data-theme="dark"]{
+  --paper:#0f1518;--surface:#161e22;--surface-2:#1b252a;--sunken:#0b1013;--ink:#e8f0f2;--ink-2:#b0c0c6;--ink-3:#8697a0;--line:#2a373c;--line-2:#222d32;
+  --accent:#3fbfa9;--accent-ink:#60d1bd;--accent-wash:#12302a;--ins:#7ba3dd;--ins-ink:#9cbcea;--ins-wash:#17233a;--warn:#d9ac57;--warn-wash:#2a2314;--warn-line:#493d1e;--bad:#e08878;--bad-wash:#3a1d18;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Malgun Gothic","맑은 고딕","Apple SD Gothic Neo",sans-serif}
-header{background:#fff;border-bottom:1px solid var(--line);padding:14px 24px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-header h1{font-size:20px;margin:0}
-header .sub{color:var(--mute);font-size:14px}
-main{max-width:1100px;margin:0 auto;padding:18px 16px 60px}
-section.step{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px}
-section.step h2{font-size:18px;margin:0 0 10px;display:flex;align-items:center;gap:10px}
-section.step h2 .n{display:inline-flex;width:28px;height:28px;border-radius:50%;background:var(--line);color:#333;align-items:center;justify-content:center;font-size:15px}
-section.step.cur h2 .n{background:var(--acc);color:#fff}
-section.step.done h2 .n{background:var(--ok);color:#fff}
-section.step.off{opacity:.55}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
-input[type=text],select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;min-width:120px}
-input.wide{flex:1;min-width:260px}
-button{font:inherit;padding:9px 16px;border-radius:7px;border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer}
-button.ghost{background:#fff;color:var(--acc)}
-button.danger{background:#fff;color:var(--warn);border-color:var(--warn)}
-button:disabled{opacity:.45;cursor:default}
-.hint{color:var(--mute);font-size:14px}
-.picker{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:6px 0;background:#fbfcfe}
-.picker .d{display:inline-block;margin:3px 6px 3px 0;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer}
-.picker .d:hover{border-color:var(--acc);color:var(--acc)}
-.note{background:var(--warnbg);border-left:4px solid var(--warn);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:14px}
-.good{background:var(--okbg);border-left:4px solid var(--ok);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:14px}
-table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}
-th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
-th{background:#f0f3f7;font-weight:600}
+html{font-size:calc(14.5px*var(--s))}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:1rem;line-height:1.6}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--ins-ink)}
+header{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:8px 18px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+.brand b{font-family:var(--head);font-size:1.35rem;color:var(--accent-ink)}
+.brand span{color:var(--ink-3);font-size:.85rem}
+.search{flex:1;min-width:220px;display:flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:4px 10px}
+.search input{flex:1;border:0;background:transparent;outline:0}
+.hbtns{display:flex;gap:6px}
+#wrap{display:flex;min-height:calc(100vh - 52px)}
+nav#side{width:210px;flex:none;background:var(--surface);border-right:1px solid var(--line);padding:12px 10px}
+nav#side .lbl{font-size:.75rem;color:var(--ink-3);letter-spacing:.1em;margin:8px 8px 4px}
+nav#side a{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;color:var(--ink-2);text-decoration:none;cursor:pointer;font-size:.95rem}
+nav#side a .n{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--sunken);align-items:center;justify-content:center;font-size:.75rem;color:var(--ink-2)}
+nav#side a.done .n{background:var(--accent);color:#fff}
+nav#side a.cur{background:var(--accent-wash);color:var(--accent-ink);font-weight:600}
+nav#side a.cur .n{background:var(--accent);color:#fff}
+nav#side a.off{opacity:.45}
+nav#side .cnt{margin-left:auto;font-size:.75rem;color:var(--ink-3)}
+main{flex:1;min-width:0;padding:18px 24px 60px;max-width:1180px}
+.view{display:none}.view.on{display:block}
+h2{font-family:var(--head);font-weight:500;font-size:1.3rem;margin:0 0 4px;color:var(--ink)}
+.lead{color:var(--ink-3);font-size:.9rem;margin:0 0 14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+label.f{display:flex;gap:6px;align-items:center;color:var(--ink-2);font-size:.92rem}
+input[type=text],input[type=search],select,textarea{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:100px}
+textarea{width:100%;min-height:120px;font-family:var(--mono);font-size:.85rem}
+input.wide{flex:1;min-width:240px}
+button{padding:7px 14px;border-radius:7px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+button.ghost{background:var(--surface);color:var(--accent-ink)}
+button.danger{background:var(--surface);color:var(--bad);border-color:var(--bad)}
+button.sm{padding:3px 9px;font-size:.85rem}
+button:disabled{opacity:.4;cursor:default}
+.hint{color:var(--ink-3);font-size:.86rem}
+.note{background:var(--warn-wash);border-left:4px solid var(--warn);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:.9rem}
+.good{background:var(--accent-wash);border-left:4px solid var(--accent);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:.9rem}
+.bad{background:var(--bad-wash);border-left:4px solid var(--bad);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:.9rem}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:8px 0}
+.stat{background:var(--surface-2);border:1px solid var(--line-2);border-radius:8px;padding:8px 12px}
+.stat b{display:block;font-size:1.4rem;font-family:var(--head);font-weight:500}
+.stat span{font-size:.82rem;color:var(--ink-3)}
+table{border-collapse:collapse;width:100%;font-size:.88rem;margin:6px 0}
+th,td{border-bottom:1px solid var(--line-2);padding:5px 8px;text-align:left;vertical-align:top}
+th{background:var(--surface-2);font-weight:600;white-space:nowrap}
 td.num,th.num{text-align:right;white-space:nowrap}
-.bar{height:14px;background:#e6eaf0;border-radius:7px;overflow:hidden;margin:6px 0}
-.bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .4s}
-.tabs{display:flex;gap:6px;margin:6px 0 10px;flex-wrap:wrap}
-.tabs button{background:#fff;color:var(--ink);border-color:var(--line)}
-.tabs button.on{background:var(--acc2);border-color:var(--acc);color:var(--acc)}
-.item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0;display:grid;grid-template-columns:28px 1fr;gap:8px 10px;background:#fff}
-.item.off{opacity:.5;background:#fafafa}
-.item .t{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.item input.text{flex:1;min-width:240px}
-.item input.when{width:120px}
-.item .src{font-size:13px;color:var(--mute);word-break:break-all}
-.item .src b{color:#333;font-weight:600}
-.item .also{font-size:12px;color:#8a919c;margin-top:2px}
-.item .tag{font-size:12px;padding:1px 7px;border-radius:10px;background:#eef1f5;color:#444;white-space:nowrap}
-.item .tag.fix{background:#fff1d6;color:#7a4b00}
-.item .tag.man{background:#e4f3ff;color:#0b4f8a}
-.item input.note{width:100%;font-size:13px;border-style:dashed}
-details{margin:10px 0}
-summary{cursor:pointer;color:var(--acc)}
-.count{font-weight:600}
-#log{font-family:Consolas,monospace;font-size:12px;color:var(--mute);white-space:pre-wrap;max-height:120px;overflow:auto;background:#f7f8fa;padding:8px;border-radius:6px}
-.add{background:var(--acc2);border-radius:8px;padding:10px 12px;margin-top:10px}
-footer{color:var(--mute);font-size:12px;text-align:center;margin-top:30px}
+.picker{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:6px 0;background:var(--surface-2)}
+.picker .d{display:inline-block;margin:3px 6px 3px 0;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer}
+.picker .d:hover{border-color:var(--accent);color:var(--accent-ink)}
+.bar{height:12px;background:var(--sunken);border-radius:6px;overflow:hidden;margin:8px 0}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.chip{padding:3px 10px;border:1px solid var(--line);border-radius:14px;background:var(--surface);cursor:pointer;font-size:.86rem;color:var(--ink-2)}
+.chip.on{background:var(--accent-wash);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.chip.ins.on{background:var(--ins-wash);border-color:var(--ins);color:var(--ins-ink)}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;padding:8px 10px;background:var(--surface-2);border-radius:8px;border:1px solid var(--line-2)}
+.item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;display:grid;grid-template-columns:22px 22px 1fr;gap:4px 8px;background:var(--surface)}
+.item.off{opacity:.5}
+.item .t{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.item input.text{flex:1;min-width:220px}
+.item input.when{width:110px}
+.item select.area{min-width:120px}
+.item .src{font-size:.82rem;color:var(--ink-3);word-break:break-all}
+.item .src b{color:var(--ink-2);font-weight:600}
+.item .also{font-size:.78rem;color:var(--ink-3)}
+.tag{font-size:.75rem;padding:1px 7px;border-radius:10px;background:var(--sunken);color:var(--ink-2);white-space:nowrap}
+.tag.fix{background:var(--warn-wash);color:var(--warn)}.tag.man{background:var(--ins-wash);color:var(--ins-ink)}.tag.cy{background:var(--accent-wash);color:var(--accent-ink)}
+.item input.note{width:100%;font-size:.85rem;border-style:dashed}
+details{margin:8px 0}summary{cursor:pointer;color:var(--ins-ink)}
+#log{font-family:var(--mono);font-size:.8rem;color:var(--ink-3);white-space:pre-wrap;max-height:300px;overflow:auto;background:var(--surface-2);padding:8px;border-radius:6px}
+.cyc-group{margin:10px 0}
+.cyc-group h3{font-family:var(--head);font-weight:500;font-size:1.05rem;margin:8px 0 4px;display:flex;gap:10px;align-items:center}
+tr.off td{opacity:.45;text-decoration:line-through}
+footer{color:var(--ink-3);font-size:.78rem;text-align:center;margin:30px 0 0}
 #printView{display:none}
-@media print{header,button,.tabs,#s1,#s2,#s3,#s5,details,footer,#log,#s4 .row,#s4 .hint,#items,.add{display:none !important} #printView{display:block} .item{break-inside:avoid}
-#printView h2{font-size:18px;margin:0 0 8px}#printView h3{font-size:15px;margin:16px 0 6px;border-bottom:1px solid #999;padding-bottom:3px}
-#printView .pi{padding:6px 0;border-bottom:1px dotted #ccc;font-size:13px}#printView .pi.off{color:#999;text-decoration:line-through}
-#printView .pi .w{font-weight:600;margin-right:6px}#printView .pi .s{color:#555;font-size:11px;display:block;margin-top:2px}#printView .pi .n{color:#0b4f8a;font-size:12px;display:block}}
+@media print{header,nav#side,.view,footer{display:none !important} #printView{display:block} .pi{break-inside:avoid}
+#printView h2{font-size:17px;margin:0 0 8px}#printView h3{font-size:14px;margin:14px 0 6px;border-bottom:1px solid #999;padding-bottom:3px}
+#printView .pi{padding:5px 0;border-bottom:1px dotted #ccc;font-size:12px}#printView .pi.off{color:#999;text-decoration:line-through}
+#printView .pi .w{font-weight:600;margin-right:6px}#printView .pi .s{color:#555;font-size:10px;display:block;margin-top:2px}#printView .pi .n{color:#0b4f8a;font-size:11px;display:block}}
+@media (max-width:860px){nav#side{width:150px}main{padding:12px}}
 </style>
 </head>
 <body>
-<header><h1>돌다리 <span id="ver" style="font-size:14px;color:#5d6673;font-weight:400">v1.0</span></h1><span class="sub">업무 인수인계 도우미 · 전임자의 업무 폴더에서 후임자가 알아야 할 것을 출처와 함께 뽑습니다 · 이 PC 안에서만 작동(외부 전송 없음)</span></header>
+<header>
+  <div class="brand"><b>돌다리</b><span id="ver"></span><span>업무 인수인계 도우미 · 이 PC 안에서만 작동</span></div>
+  <div class="search">🔍<input id="q" type="search" placeholder="항목·출처 파일 찾기 (검토 화면)" autocomplete="off"></div>
+  <div class="hbtns"><button class="ghost sm" id="fsdn" title="글자 작게">가−</button><button class="ghost sm" id="fsup" title="글자 크게">가＋</button><button class="ghost sm" id="thm" title="화면 밝기">◐</button><button class="ghost sm" id="btnPrint">인쇄</button></div>
+</header>
+<div id="wrap">
+<nav id="side">
+  <div class="lbl">진 행</div>
+  <a data-v="folder"><span class="n">1</span>업무 폴더<span class="cnt" id="cFolder"></span></a>
+  <a data-v="setup"><span class="n">2</span>설정·계획</a>
+  <a data-v="run"><span class="n">3</span>초안 만들기<span class="cnt" id="cRun"></span></a>
+  <a data-v="review"><span class="n">4</span>검토<span class="cnt" id="cReview"></span></a>
+  <a data-v="export"><span class="n">5</span>내보내기<span class="cnt" id="cExport"></span></a>
+  <div class="lbl">보 기</div>
+  <a data-v="cycle"><span class="n">⟳</span>주기 업무 확인</a>
+  <a data-v="area"><span class="n">▦</span>분야별 보기</a>
+  <a data-v="files"><span class="n">▤</span>읽은 파일</a>
+  <a data-v="log"><span class="n">≡</span>작업 기록</a>
+</nav>
 <main>
 
-<section class="step" id="s1"><h2><span class="n">1</span>업무 폴더 고르기</h2>
-<div class="row"><input type="text" id="folder" class="wide" placeholder="예) C:\업무\서무  (폴더 주소를 붙여 넣거나 「찾기」)"><button class="ghost" id="btnPick">찾기…</button><button class="ghost" id="btnBrowse" title="윈도 폴더 창">창으로 찾기</button><button id="btnExtract">읽기</button></div>
-<div id="picker" class="picker" hidden><div class="row"><b>폴더 고르기</b> <span id="pkPath" class="hint"></span><button class="ghost" id="pkUp" style="padding:4px 10px">위로</button><button id="pkUse" style="padding:4px 10px">이 폴더로</button><button class="ghost" id="pkClose" style="padding:4px 10px">닫기</button></div><div id="pkList"></div></div>
-<div class="hint">읽을 수 있는 파일: 한글(.hwp 5.0·.hwpx), 워드(.docx), PDF(글자 있는 것), 엑셀(.xlsx), 메일(.eml), 메모(.txt·.md·.csv), 압축(.zip 안의 파일). 원본은 읽기만 하고 바꾸지 않습니다(처리 전후 지문 대조). 옛 한글 2.x·3.x 문서, 암호 문서, 스캔 이미지는 「못 읽은 파일」로 따로 적힙니다.</div>
-<div id="extractMsg"></div>
-<div id="subdirs"></div>
+<section class="view" id="v-folder">
+  <h2>1. 업무 폴더</h2><p class="lead">전임자의 업무 폴더를 지정하고 「읽기」를 누릅니다. 원본은 읽기만 하고 바꾸지 않습니다(처리 전후 지문 대조).</p>
+  <div class="card">
+    <div class="row"><input type="text" id="folder" class="wide" placeholder="예) C:\업무\서무   (폴더 주소를 붙여 넣거나 「찾기」)"><button class="ghost" id="btnPick">찾기…</button><button class="ghost" id="btnBrowse" title="윈도 폴더 창">창으로 찾기</button><button id="btnExtract">읽기</button></div>
+    <div id="picker" class="picker" hidden><div class="row"><b>폴더 고르기</b> <span id="pkPath" class="hint"></span><button class="ghost sm" id="pkUp">위로</button><button class="sm" id="pkUse">이 폴더로</button><button class="ghost sm" id="pkClose">닫기</button></div><div id="pkList"></div></div>
+    <div id="extractMsg"></div>
+    <div id="subdirs"></div>
+    <div class="hint">읽는 형식: 한글(.hwp 5.0·.hwpx, 옛 2.x·3.x는 어림), 워드(.docx), 파워포인트(.pptx), PDF(글자 있는 것), 엑셀(.xlsx·.xlsm·.csv), ODT, 메일(.eml), 메모(.txt·.md), 웹(.html), 압축(.zip). 그림·영상·프로그램·글꼴·임시 파일은 읽지 않고, 한셀(.cell)·암호 문서·스캔 PDF는 「못 읽음」으로 따로 적힙니다.</div>
+  </div>
+  <div id="files"></div>
 </section>
 
-<section class="step" id="s2"><h2><span class="n">2</span>읽은 결과와 처리 계획</h2>
-<div id="files"></div>
-<div class="row"><label>모델 <select id="model"><option value="">없음(규칙만, 몇 초)</option></select></label>
-<label>모델 주소 <input type="text" id="url" style="width:330px"></label>
-<button class="ghost" id="btnModels">목록 새로고침</button></div>
-<div class="row"><label><input type="checkbox" id="tables"> 표 파일(엑셀·csv)도 모델에 보내기 <span class="hint">(기본은 규칙만. 모델이 표를 잘못 읽는 일이 많음)</span></label>
-<label><input type="checkbox" id="skipRef" checked> 지침·매뉴얼·길라잡이류는 모델에 보내지 않기 <span class="hint">(이름으로 판단. 길어서 시간을 많이 먹고, 할 일·담당은 규칙으로 잡힘)</span></label>
-<label>최근 <select id="recent"><option value="0">전체 연도</option><option value="1">1년</option><option value="2">2년</option><option value="3">3년</option></select> 파일만 모델에 보내기 <span class="hint">(파일 이름·앞머리의 연도 기준, 연도 없는 파일은 포함)</span></label>
-<label>긴 파일은 앞 <select id="maxCalls"><option value="1">6천 자</option><option value="2">1만2천 자</option><option value="3" selected>1만8천 자</option><option value="6">3만6천 자</option><option value="99">전부</option></select>까지만 <span class="hint">(6천 자마다 모델 1회)</span></label></div>
-<div id="plan"></div>
-<div class="row"><button id="btnDraft">초안 만들기</button><span class="hint" id="planHint"></span></div>
+<section class="view" id="v-setup">
+  <h2>2. 설정·계획</h2><p class="lead">모델 없이 규칙만으로도 몇 분이면 끝납니다. 모델을 고르면 문장 파일을 더 읽어 항목을 보탭니다.</p>
+  <div class="card">
+    <div class="row"><label class="f">모델 <select id="model"><option value="">없음(규칙만, 몇 분)</option></select></label>
+    <label class="f">모델 주소 <input type="text" id="url" style="width:320px"></label><button class="ghost sm" id="btnModels">목록 새로고침</button><span class="hint" id="planHint"></span></div>
+    <div class="row"><label class="f"><input type="checkbox" id="tables"> 표 파일(엑셀·csv)도 모델에 보내기</label>
+    <label class="f"><input type="checkbox" id="skipRef" checked> 지침·매뉴얼·길라잡이류는 모델에 보내지 않기</label>
+    <label class="f">최근 <select id="recent"><option value="0">전체 연도</option><option value="1">1년</option><option value="2">2년</option><option value="3">3년</option></select> 파일만 모델에</label>
+    <label class="f">긴 파일은 앞 <select id="maxCalls"><option value="1">6천 자</option><option value="2">1만2천 자</option><option value="3" selected>1만8천 자</option><option value="6">3만6천 자</option><option value="99">전부</option></select>까지만</label></div>
+    <div id="plan"></div>
+    <div class="row"><button id="btnDraft">초안 만들기</button><label class="f">인수인계서 제목 꼬리 <input type="text" id="title" placeholder="예) 영업과 우편영업실 · 2026.2." style="width:260px"></label></div>
+  </div>
+  <div class="card"><b>분야 키워드</b> <span class="hint">한 줄에 「분야: 키워드, 키워드」. 항목의 글·발췌·파일 이름에 키워드가 많이 든 분야로 분류합니다. 고치면 바로 다시 분류됩니다.</span>
+    <textarea id="areas"></textarea><div class="row"><button class="ghost sm" id="btnAreas">분야 적용</button><button class="ghost sm" id="btnAreasDefault">기본값으로</button></div></div>
 </section>
 
-<section class="step" id="s3"><h2><span class="n">3</span>초안 만드는 중</h2>
-<div class="bar"><i id="barFill"></i></div>
-<div class="row"><span id="progText" class="hint"></span><button class="danger" id="btnStop">여기까지만(중단)</button></div>
-<div class="hint">중단하면 지금까지 읽은 파일의 항목과 규칙으로 뽑은 항목(전체 파일)만으로 검토 화면이 열립니다.</div>
+<section class="view" id="v-run">
+  <h2>3. 초안 만들기</h2><p class="lead">짧은 파일부터 모델에 보냅니다. 「여기까지만」을 누르면 그때까지의 결과와 전체 파일의 규칙 항목으로 검토 화면이 열립니다. 모델 응답은 호출마다 저장되어 중간에 꺼져도 다음에 이어서 갑니다.</p>
+  <div class="card"><div class="bar"><i id="barFill"></i></div><div class="row"><span id="progText" class="hint">아직 시작하지 않았습니다. 「2. 설정·계획」에서 「초안 만들기」를 누르세요.</span></div><div class="row"><button class="danger" id="btnStop">여기까지만(중단)</button></div></div>
 </section>
 
-<section class="step" id="s4"><h2><span class="n">4</span>검토 — 지우고, 고치고, 직접 적기</h2>
-<div class="hint">항목마다 출처 파일과 원문 발췌가 붙어 있습니다. 틀리거나 필요 없는 항목은 체크를 풀면 인수인계서에서 빠집니다. 글은 바로 고칠 수 있고, 메모 칸에 후임자에게 남길 말을 적습니다. 확인되지 않아 뺀 항목은 맨 아래 「불확실(제외)」에서 되살릴 수 있습니다.</div>
-<div class="row"><label>제목 꼬리 <input type="text" id="title" placeholder="예) 영업과 우편영업실 · 2026.2." style="width:300px"></label><span id="counts" class="hint"></span><button class="ghost" id="btnSave">저장</button></div>
-<div class="tabs" id="tabs"></div>
-<div id="items"></div>
-<div class="add"><b>직접 적기</b> <span class="hint">(문서에 없거나 모델이 못 잡은 현안·할 일·사람. 출처는 「전임자가 직접 적음」으로 남습니다)</span>
-<div class="row"><select id="addType"><option>진행 중 현안</option><option>월별 할 일</option><option>협의할 사람</option></select><input type="text" id="addWhen" placeholder="시기(예: 2026년 2월)" style="width:150px"><input type="text" id="addText" class="wide" placeholder="내용"><input type="text" id="addNote" placeholder="메모(선택)" style="width:200px"><button id="btnAdd">추가</button></div></div>
+<section class="view" id="v-review">
+  <h2>4. 검토</h2><p class="lead">틀리거나 필요 없는 항목은 체크를 풀면 인수인계서에서 빠집니다. 글은 바로 고칠 수 있고, 메모 칸에 후임자에게 남길 말을 적습니다.</p>
+  <div class="toolbar"><div class="chips" id="tabs"></div><span class="hint" id="counts"></span><button class="ghost sm" id="btnSave">저장</button></div>
+  <div class="toolbar"><span class="hint">분야</span><div class="chips" id="areaChips"></div></div>
+  <div class="toolbar"><span class="hint">주기</span><div class="chips" id="cycleChips"></div><span class="hint" id="filterInfo"></span></div>
+  <div class="toolbar"><label class="f"><input type="checkbox" id="selAll"> 보이는 항목 전부 선택</label><button class="ghost sm" id="btnKeepSel">선택 항목 남김</button><button class="ghost sm" id="btnDropSel">선택 항목 뺌</button><span class="hint" id="selInfo"></span></div>
+  <div id="items"></div>
+  <div class="card"><b>직접 적기</b> <span class="hint">문서에 없거나 모델이 못 잡은 것. 출처는 「전임자가 직접 적음」으로 남습니다.</span>
+    <div class="row"><select id="addType"><option>진행 중 현안</option><option>월별 할 일</option><option>협의할 사람</option></select><input type="text" id="addWhen" placeholder="시기(예: 2026년 2월)" style="width:150px"><input type="text" id="addText" class="wide" placeholder="내용"><select id="addArea"></select><input type="text" id="addNote" placeholder="메모(선택)" style="width:180px"><button id="btnAdd">추가</button></div></div>
+  <details id="droppedBox"><summary>불확실(제외): 발췌가 원문에서 확인되지 않아 뺀 모델 항목 <b id="nDropped"></b></summary><div id="dropped"></div></details>
+  <details id="errBox"><summary>처리 중 오류 <b id="nErr"></b></summary><div id="errs" class="hint"></div></details>
+  <div class="row"><button id="btnExport">인수인계서 내보내기(.md + .docx)</button><button class="ghost" id="btnPrint2">검토본 인쇄</button></div>
+</section>
+
+<section class="view" id="v-cycle">
+  <h2>주기 업무 확인</h2><p class="lead">매주·매월·분기·반기·매년 되풀이되는 일을 묶어 보여 줍니다. 후임자가 계속 해야 하는 일은 남기고, 끝난 일은 묶음째 뺄 수 있습니다. 체크 상태는 검토 화면과 같습니다.</p>
+  <div id="cycleView"></div>
+</section>
+
+<section class="view" id="v-area">
+  <h2>분야별 보기</h2><p class="lead">분야 키워드로 나눈 항목 수입니다. 분야를 누르면 검토 화면에서 그 분야만 보입니다. 키워드는 「2. 설정·계획」에서 고칩니다.</p>
+  <div id="areaView"></div>
+</section>
+
+<section class="view" id="v-files">
+  <h2>읽은 파일</h2><p class="lead">형식별 수와 글자 수, 못 읽은 파일의 이유입니다.</p>
+  <div id="filesView"></div>
+</section>
+
+<section class="view" id="v-export">
+  <h2>5. 내보내기</h2><p class="lead">파일은 작업 폴더에 저장됩니다. .docx는 워드·한글에서 열어 꾸미고, 원본지문.csv는 처리 전후 원본이 바뀌지 않았다는 증빙입니다. 인수인계서에는 개인정보(전화번호 등)가 들어 있으니 업무 목적 외 사용·보관을 금합니다.</p>
+  <div class="card"><div class="row"><button id="btnExport2">인수인계서 내보내기(.md + .docx)</button><button class="ghost" id="btnPrint3">검토본 인쇄</button></div><div id="exports"></div></div>
+</section>
+
+<section class="view" id="v-log"><h2>작업 기록</h2><div id="log"></div></section>
+
 <div id="printView"></div>
-<details id="droppedBox"><summary>불확실(제외): 발췌가 원문에서 확인되지 않아 뺀 모델 항목 <span class="count" id="nDropped"></span></summary><div id="dropped"></div></details>
-<details id="errBox"><summary>처리 중 오류 <span class="count" id="nErr"></span></summary><div id="errs" class="hint"></div></details>
-<div class="row"><button id="btnExport">인수인계서 내보내기(.md + .docx)</button><button class="ghost" id="btnPrint">이 화면 인쇄</button></div>
-</section>
-
-<section class="step" id="s5"><h2><span class="n">5</span>내보낸 파일</h2>
-<div id="exports"></div>
-<div class="hint">파일은 작업 폴더에 저장됩니다. .docx는 워드·한글에서 열어 꾸미고, 원본지문.csv는 처리 전후 원본이 바뀌지 않았다는 증빙입니다. 인수인계서에는 개인정보(전화번호 등)가 들어 있으니 업무 목적 외 사용·보관을 금합니다.</div>
-</section>
-
-<details><summary>작업 기록</summary><div id="log"></div></details>
-<footer>돌다리 v1.0 · 「2026년 공공 AI 대전환 챌린지」 세션2 지정과제① 업무바통 출품작 · © 2026 이희재(정읍우체국). 모든 처리는 이 PC 안에서만 이루어집니다.</footer>
+<footer>돌다리 · 「2026년 공공 AI 대전환 챌린지」 세션2 지정과제① 업무바통 출품작 · © 2026 이희재(정읍우체국). 모든 처리는 이 PC 안에서만 이루어집니다.</footer>
 </main>
+</div>
 <script src="/app.js"></script>
 </body>
 </html>

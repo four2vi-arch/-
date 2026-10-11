@@ -527,3 +527,64 @@ def build_draft(files, model, url='http://127.0.0.1:11434/v1/chat/completions', 
         except Exception:
             pass
     return draft, dropped, calls, errors
+
+# ---------------------------------------------------------------- 분야(키워드)·주기 꼬리표
+DEFAULT_AREAS = [
+    {'name': '요금후납·계약', 'keys': '요금후납, 후납, 계약, 갱신, 수탁, 업체'},
+    {'name': '소포·택배·EMS', 'keys': '소포, 택배, EMS, 국제우편, 특별소통, 명절, 설 , 추석'},
+    {'name': '우체국쇼핑', 'keys': '쇼핑, 특산품, 입점, 카탈로그, 선물, 공급업체'},
+    {'name': '창구전시판매', 'keys': '전시판매, 매대, POP, 창구판매, 진열'},
+    {'name': '매출·실적', 'keys': '매출, 실적, 목표, 달성, 진도, 점검'},
+    {'name': '고객만족·KPCSI', 'keys': 'KPCSI, 만족도, 친절, 민원, 고객'},
+    {'name': '홍보·마케팅', 'keys': '홍보, 마케팅, 판촉, 캠페인, 이벤트, 안내문'},
+    {'name': '회의·보고', 'keys': '회의, 보고, 결과보고, 계획, 추진'},
+    {'name': '규정·매뉴얼', 'keys': '지침, 매뉴얼, 규정, 서식, 길라잡이, 편람'},
+    {'name': '예산·정산', 'keys': '예산, 정산, 지급, 수수료, 경비, 환급'},
+]
+CYCLE_PATTERNS = [('매주', r'매주|주간|주별|매 ?주'), ('매월', r'매월|월별|월마감|익월|매 ?달|월 초|월말|매월말'), ('분기', r'분기'), ('반기', r'반기|상반기|하반기'),
+                  ('매년', r'매년|연간|연말|연초|연 ?1회|해마다|매 ?해')]
+
+
+def parse_areas(text):
+    """설정 글(한 줄에 「분야: 키워드, 키워드」)을 목록으로."""
+    out = []
+    for line in str(text or '').splitlines():
+        if ':' not in line and '：' not in line:
+            continue
+        name, keys = re.split(r'[:：]', line, 1)
+        if name.strip():
+            out.append({'name': name.strip(), 'keys': keys.strip()})
+    return out
+
+
+def areas_text(areas):
+    return '\n'.join('%s: %s' % (a['name'], a['keys']) for a in areas)
+
+
+def area_of(item, areas):
+    hay = ' '.join(str(item.get(k) or '') for k in ('text', 'quote', 'file', 'note')).lower()
+    best, score = '기타', 0
+    for a in areas:
+        keys = [k.strip().lower() for k in str(a.get('keys', '')).split(',') if k.strip()]
+        n = sum(hay.count(k) for k in keys)
+        if n > score:
+            best, score = a['name'], n
+    return best
+
+
+def cycle_of(item):
+    hay = ' '.join(str(item.get(k) or '') for k in ('when', 'text', 'quote'))
+    for name, pat in CYCLE_PATTERNS:
+        if re.search(pat, hay):
+            return name
+    return '해당 월' if re.search(r'\d{1,2}월', str(item.get('when') or '')) else '1회'
+
+
+def tag_items(items, areas, keep_manual=True):
+    """분야·주기 꼬리표를 붙인다. 사람이 고른 분야(area_by)는 바꾸지 않는다."""
+    for it in items:
+        if keep_manual and it.get('area_by') == '사람':
+            continue
+        it['area'] = area_of(it, areas)
+        it['cycle'] = cycle_of(it)
+    return items

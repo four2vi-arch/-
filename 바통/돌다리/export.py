@@ -46,7 +46,8 @@ def to_markdown(session):
             out.append('- (없음)')
         for it in rows:
             head = ('[%s] ' % it['when']) if it.get('when') else ''
-            out.append('- %s%s' % (head, it.get('text', '')))
+            tags = ' · '.join(x for x in (it.get('area'), (it.get('cycle') if it.get('cycle') not in (None, '', '1회', '해당 월') else '')) if x)
+            out.append('- %s%s%s' % (head, it.get('text', ''), (' (%s)' % tags) if tags else ''))
             if it.get('note'):
                 out.append('  - 메모: %s' % it['note'])
             if it.get('file'):
@@ -56,11 +57,14 @@ def to_markdown(session):
             elif it.get('src') == '직접 입력':
                 out.append('  - 출처: 전임자가 직접 적음')
         out.append('')
-    failures = session.get('failures', [])
-    if failures:
+    failures = [x for x in session.get('failures', []) if not x.get('skip')]
+    skipped = [x for x in session.get('failures', []) if x.get('skip')]
+    if failures or skipped:
         out.append('## 못 읽은 파일(후임자가 직접 열어 볼 것)')
         out.append('')
         out += ['- %s: %s' % (x['file'], x['reason']) for x in failures]
+        if skipped:
+            out.append('- 그 밖에 그림·영상·프로그램·글꼴·임시 파일 %d개는 읽지 않았다(문서가 아님)' % len(skipped))
         out.append('')
     out.append('---')
     out.append('%s · 항목마다 출처 파일과 원문 발췌를 붙였고, 원문에서 확인되지 않은 항목은 싣지 않았다. 원본 파일은 읽기만 했다.' % CREDIT)
@@ -104,7 +108,8 @@ def to_docx(session, path):
             body.append(_p('(없음)', indent=360))
         for it in rows:
             head = ('[%s] ' % it['when']) if it.get('when') else ''
-            body.append(_p('• ' + head + it.get('text', ''), indent=360))
+            tags = ' · '.join(x for x in (it.get('area'), (it.get('cycle') if it.get('cycle') not in (None, '', '1회', '해당 월') else '')) if x)
+            body.append(_p('• ' + head + it.get('text', '') + ((' (%s)' % tags) if tags else ''), indent=360))
             if it.get('note'):
                 body.append(_p('메모: ' + it['note'], size=9, indent=720))
             if it.get('file'):
@@ -116,6 +121,7 @@ def to_docx(session, path):
     failures = session.get('failures', [])
     if failures:
         body.append(_p('못 읽은 파일(후임자가 직접 열어 볼 것)', style='Heading1'))
+        failures = [x for x in failures if not x.get('skip')]
         for x in failures:
             body.append(_p('• %s: %s' % (x['file'], x['reason']), indent=360))
     body.append(_p(CREDIT + ' · 항목마다 출처 파일과 원문 발췌를 붙였고, 원문에서 확인되지 않은 항목은 싣지 않았다. 원본 파일은 읽기만 했다.', size=8, color='888888'))
