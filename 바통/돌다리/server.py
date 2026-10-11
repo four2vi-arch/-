@@ -15,7 +15,7 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.0 (2026-10-11.m)'
+VERSION = '1.0 (2026-10-11.n)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
@@ -158,19 +158,31 @@ def browse_folder():
     """OS 폴더 고르기 창. 윈도는 PowerShell 창을 먼저, 안 되면 tkinter. 둘 다 안 되면 빈 문자열(화면의 폴더 목록으로 고른다)."""
     cmds = []
     if sys.platform.startswith('win'):
-        ps = ('Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; '
+        ps = ('[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; '   # 한글 경로가 깨지지 않게 UTF-8로 내보낸다
+              'Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; '
               '$d.Description = "업무 폴더 고르기"; $d.ShowNewFolderButton = $false; '
               'if ($d.ShowDialog((New-Object System.Windows.Forms.Form -Property @{TopMost = $true})) -eq "OK") { Write-Output $d.SelectedPath }')
         cmds.append(['powershell', '-NoProfile', '-STA', '-Command', ps])
     code = 'import tkinter,tkinter.filedialog as d;r=tkinter.Tk();r.withdraw();r.attributes("-topmost",1);print(d.askdirectory(title="업무 폴더 고르기") or "")'
     cmds.append([sys.executable, '-c', code])
+    env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUTF8='1')
     for cmd in cmds:
         try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=300, encoding='utf-8', errors='replace')
-            if out.stdout.strip():
-                return out.stdout.strip()
+            out = subprocess.run(cmd, capture_output=True, timeout=300, env=env)
+            raw = out.stdout or b''
+            text = ''
+            for enc in ('utf-8', 'cp949', 'mbcs' if sys.platform.startswith('win') else 'latin-1'):   # UTF-8이 아니면 윈도 한글 코드페이지로
+                try:
+                    text = raw.decode(enc).strip()
+                    break
+                except Exception:
+                    continue
+            if text and os.path.isdir(text):
+                return text
+            if text:
+                log('폴더 창이 돌려준 경로를 찾지 못함: %r' % text[:80])
             if out.returncode != 0:
-                log('폴더 창 실패(%s): %s' % (cmd[0], (out.stderr or '').strip()[:120]))
+                log('폴더 창 실패(%s): %s' % (cmd[0], (out.stderr or b'').decode('utf-8', 'replace').strip()[:120]))
         except Exception as e:
             log('폴더 창 실패(%s): %s' % (cmd[0], str(e)[:120]))
     return ''
