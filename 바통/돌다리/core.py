@@ -274,31 +274,63 @@ def rule_items(fobj):
     return items
 
 
-def merge_similar(draft):
+def merge_similar(draft, progress=None):
     """같은 유형에서 발췌 줄이 서로 포함되거나 요약이 비슷한 항목(같은 공문이 일정표·메모·초안에 되풀이된 것)을 한 항목으로 묶는다.
-    첫 항목이 대표가 되고 나머지 출처는 also 목록에 들어간다. 문장 파일(공문·보고서) 출처를 대표로 우선한다."""
+    첫 항목이 대표가 되고 나머지 출처는 also 목록에 들어간다. 문장 파일(공문·보고서) 출처를 대표로 우선한다.
+    수천~수만 항목에서도 끝나도록 2-gram 집합을 한 번만 만들고, 후보는 (유형, 발췌 앞 12자)·(유형, 요약 앞 12자)·공유 2-gram이 많은 묶음으로 좁힌다."""
     order = {k: i for i, k in enumerate(['odt', 'hwp', 'hwpx', 'docx', 'pdf', 'eml', 'txt', 'md', 'xlsx', 'xlsm', 'csv'])}
+
     def kind_of(f):
         return os.path.splitext(f.split(' ▸ ')[-1])[1].lower().lstrip('.')
-    groups = []
-    for d in draft:
+
+    def jacc(A, B):
+        if not A or not B:
+            return 0.0
+        return len(A & B) / len(A | B)
+
+    def cont(A, B):
+        if min(len(A), len(B)) < 4:
+            return 0.0
+        return len(A & B) / min(len(A), len(B))
+
+    groups, by_key, by_gram = [], {}, {}
+    for i, d in enumerate(draft):
+        nq, nt = norm(d['quote']), norm(d['text'])
+        gq, gt = grams(d['quote']), grams(d['text'])
+        keys = [(d['type'], 'q', nq[:12]), (d['type'], 't', nt[:12])]
+        cand = set()
+        for k in keys:
+            cand.update(by_key.get(k, ()))
+        # 공유 2-gram이 많은 묶음(요약 기준): 2-gram 8개를 표본으로 뽑아 색인을 본다
+        for g in list(gt)[:8]:
+            cand.update(by_gram.get((d['type'], g), ()))
         hit = None
-        for g in groups:
+        for gi in cand:
+            g = groups[gi]
             if g['type'] != d['type']:
                 continue
-            if line_overlap(g['quote'], d['quote']) or sim(g['text'], d['text']) >= 0.6 or contain(g['quote'], d['quote']) >= 0.8:
+            if (min(len(g['_nq']), len(nq)) >= 6 and (g['_nq'] in nq or nq in g['_nq'])) or jacc(g['_gt'], gt) >= 0.6 or cont(g['_gq'], gq) >= 0.8:
                 hit = g
                 break
         if hit is None:
-            d = dict(d); d['also'] = []
-            groups.append(d)
+            g = dict(d); g['also'] = []; g['_nq'], g['_nt'], g['_gq'], g['_gt'] = nq, nt, gq, gt
+            groups.append(g); gi = len(groups) - 1
+            for k in keys:
+                by_key.setdefault(k, []).append(gi)
+            for gram in gt:
+                by_gram.setdefault((d['type'], gram), []).append(gi)
         else:
-            # 문장 파일이 대표가 되도록 자리를 바꾼다
             if order.get(kind_of(d['file']), 99) < order.get(kind_of(hit['file']), 99) and d['src'] == hit['src']:
                 also = hit['also'] + [{'file': hit['file'], 'quote': hit['quote']}]
                 hit.update({k: d[k] for k in ('file', 'text', 'when', 'quote', 'src')}); hit['also'] = also
+                hit['_nq'], hit['_nt'], hit['_gq'], hit['_gt'] = nq, nt, gq, gt
             else:
                 hit['also'].append({'file': d['file'], 'quote': d['quote']})
+        if progress and i % 500 == 0:
+            progress({'phase': '같은 내용 묶는 중', 'index': i, 'total': len(draft)})
+    for g in groups:
+        for k in ('_nq', '_nt', '_gq', '_gt'):
+            g.pop(k, None)
     return groups
 
 

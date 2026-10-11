@@ -15,9 +15,9 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.0 (2026-10-11.n)'
+VERSION = '1.0 (2026-10-11.o)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
-SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
+SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
 STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'suggest': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
@@ -119,7 +119,11 @@ def run_draft():
     try:
         draft, dropped, calls, errors = core.build_draft(files, STATE['model'] or 'none', STATE['url'], '', 6000, include_tables=STATE['include_tables'],
                                                          only_files=only, progress=progress, should_stop=lambda: STATE['stop'], max_calls_per_file=int(STATE.get('max_calls') or 3), skip_reference=bool(STATE.get('skip_reference', True)))
-        draft = core.merge_similar(draft)
+        with open(os.path.join(WORK, '초안_원본_최근.json'), 'w', encoding='utf-8') as f:   # 묶기 전 초안을 먼저 남긴다(묶기 도중 끊겨도 잃지 않게)
+            json.dump({'folder': STATE['folder'], 'model': STATE['model'], 'draft': draft, 'dropped': dropped, 'calls': calls, 'errors': errors}, f, ensure_ascii=False)
+        with LOCK:
+            STATE['progress'] = dict(STATE['progress'] or {}, phase='같은 내용 묶는 중', sec=round(time.time() - t0))
+        draft = core.merge_similar(draft, progress=lambda p: progress(dict(STATE['progress'] or {}, **p)))
         with LOCK:
             n = 0
             for d in draft:

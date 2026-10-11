@@ -78,7 +78,7 @@ function renderProgress() {
   const done = p.calls_total ? p.calls_done / p.calls_total : (p.index / Math.max(1, p.total));
   $('#barFill').style.width = Math.round(done * 100) + '%';
   const left = p.calls_total && p.calls_done ? (p.sec / p.calls_done) * (p.calls_total - p.calls_done) : (p.calls_total - p.calls_done) * (ST.avg_sec || 22);
-  $('#progText').textContent = ST.running ? `파일 ${p.index}/${p.total} · 모델 호출 ${p.calls_done}/${p.calls_total} · 지난 시간 ${secText(p.sec || 0)} · 남은 시간 약 ${secText(left)} · ${esc(p.file || '')}` : '';
+  $('#progText').textContent = !ST.running ? '' : p.phase ? `${p.phase}… ${p.index || 0}/${p.total || 0} 항목 · 지난 시간 ${secText(p.sec || 0)} (모델 호출은 끝났습니다. 잠시 기다리세요)` : `파일 ${p.index}/${p.total} · 모델 호출 ${p.calls_done}/${p.calls_total} · 지난 시간 ${secText(p.sec || 0)} · 남은 시간 약 ${secText(left)} · ${esc(p.file || '')}`;
   $('#btnStop').disabled = !ST.running;
 }
 
