@@ -35,7 +35,12 @@ async function refresh() {
   if (ST.step >= 4) { const j = await api('/api/items'); ITEMS = j.items; DROPPED = j.dropped; }
   else { ITEMS = []; DROPPED = []; }
   $('#subline').textContent = (ST.folder ? ST.folder + ' · ' : '') + (ST.handover_from || ST.handover_to ? `인계자 ${ST.handover_from || '?'} → 인수자 ${ST.handover_to || '?'} · ` : '') + '이 PC 안에서만 작동';
-  renderNav(); renderMain(); renderAside();
+  renderNav(); renderAside();
+  const pr = ST.progress;
+  if (ST.running && sec === 'prep' && $('#btnStop') && pr) {   // 중단 단추가 이미 있으면(진행 화면이 그려진 뒤) 글·막대만 갱신
+    $('#progText').textContent = pr.phase ? `${pr.phase}… ${pr.index || 0}/${pr.total || 0}` : `파일 ${pr.index}/${pr.total} · 모델 호출 ${pr.calls_done}/${pr.calls_total} · ${secText(pr.sec || 0)} 지남 · 남은 시간 약 ${secText(pr.chars_total && pr.chars_done ? (pr.sec / pr.chars_done) * (pr.chars_total - pr.chars_done) : 0)}`;
+    const bar = $('#main .bar i'); if (bar) bar.style.width = (pr.chars_total ? Math.round(100 * pr.chars_done / pr.chars_total) : pr.total ? Math.round(100 * pr.index / pr.total) : 0) + '%';
+  } else renderMain();
   if (ST.running || ST.reloading || ST.extracting) { clearTimeout(timer); timer = setTimeout(refresh, ST.running ? 1500 : 2500); }
 }
 function completeness(a) {
@@ -170,7 +175,7 @@ function renderPrep(m) {
   else {
     const p = ST.plan || {};
     h += `<div class="row"><div class="seg" id="engineSeg"><button data-e="rules" class="${engine === 'rules' ? 'on' : ''}">규칙만 · 몇 분</button><button data-e="model" class="${engine === 'model' ? 'on' : ''}">AI 모델도 사용 · 오래 걸림</button></div>
-      <span id="modelRow" ${engine === 'model' ? '' : 'hidden'}><select id="model"><option value="">모델 고르기</option></select> <input type="text" id="url" value="${esc(ST.url || '')}" style="width:280px"> <button class="ghost sm" id="btnModels">목록 새로고침</button></span><span class="s" id="planHint"></span></div>`;
+      <span id="modelRow" ${engine === 'model' ? '' : 'hidden'}><select id="model"><option value="">모델 고르기</option>${ST.model ? `<option value="${esc(ST.model)}" selected>${esc(ST.model)}</option>` : ''}</select> <input type="text" id="url" value="${esc(ST.url || '')}" style="width:280px"> <button class="ghost sm" id="btnModels">목록 새로고침</button></span><span class="s" id="planHint"></span></div>`;
     h += engine === 'model' && ST.model ? `<div class="note">모델 <b>${esc(ST.model)}</b>에 문장 파일 ${p.files_model || 0}개(호출 ${p.calls || 0}회). 예상 약 ${secText(p.est_sec || 0)}. 짧은 파일부터 보내고, 「여기까지만」으로 끊어도 결과는 남습니다. 모델 응답은 호출마다 저장되어 중간에 꺼져도 이어서 갑니다.${ST.checkpoint && ST.checkpoint.reusable ? ` 이전 응답 ${ST.checkpoint.reusable}회 재사용.` : ''}</div>` : `<div class="s">규칙만: 전화번호·기한·현안 신호어가 있는 줄을 뽑습니다. 수천 파일도 몇 분입니다. 모델은 나중에 하위 폴더 하나로 좁혀 보태는 것을 권합니다.</div>`;
     const pr = ST.progress;
     h += `<div class="row"><button class="btn" id="btnDraft" ${ST.running ? 'disabled' : ''}>초안 만들기</button>${ST.running ? '<button class="ghost sm" id="btnStop" style="color:var(--fail);border-color:var(--fail)">여기까지만(중단)</button>' : ''}<span class="s" id="progText">${ST.running && pr ? (pr.phase ? `${pr.phase}… ${pr.index || 0}/${pr.total || 0}` : `파일 ${pr.index}/${pr.total} · 모델 호출 ${pr.calls_done}/${pr.calls_total} · ${secText(pr.sec || 0)} 지남 · 남은 시간 약 ${secText(pr.chars_total && pr.chars_done ? (pr.sec / pr.chars_done) * (pr.chars_total - pr.chars_done) : 0)}`) : ST.step >= 4 && pr ? `끝났습니다. 파일 ${pr.total}개 · 모델 호출 ${pr.calls_done}회 · ${secText(pr.sec || 0)}. 항목 ${ITEMS.length}개가 목차의 각 절에 제안으로 들어가 있습니다.` : ''}</span></div>`;
@@ -213,6 +218,7 @@ async function settings(extra) {
 }
 async function loadModels() {
   try { const j = await api('/api/models'); const sel = $('#model'); if (!sel) return; const cur = ST.model || '';
+    const have = [...sel.options].map(o => o.value).filter(Boolean); if (j.models.length && j.models.every(m => have.includes(m)) && have.every(m => j.models.includes(m) || m === cur)) return;
     sel.innerHTML = '<option value="">모델 고르기</option>' + j.models.map(m => `<option value="${esc(m)}" ${m === cur ? 'selected' : ''}>${esc(m)}</option>`).join('');
     if (cur && !j.models.includes(cur)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(cur)}" selected>${esc(cur)}</option>`);
     $('#planHint').textContent = j.models.length ? '' : 'Ollama가 켜져 있지 않거나 모델이 없습니다. 규칙만으로 진행할 수 있습니다.'; } catch (e) { const ph = $('#planHint'); if (ph) ph.textContent = e.message; }
