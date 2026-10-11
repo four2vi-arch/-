@@ -52,6 +52,7 @@ function renderSubdirs() {
     ST.subdirs.map(d => `<label style="margin-right:12px"><input type="checkbox" class="sub" value="${esc(d)}" ${ex.has(d) ? '' : 'checked'}> ${esc(d)}</label>`).join('') +
     ' <button class="ghost" id="btnReread" style="padding:4px 10px">다시 읽기</button></div>';
   $('#btnReread').onclick = async () => {
+    if (ITEMS.length && !confirm(`지금 초안 ${ITEMS.length}개가 있습니다. 다시 읽으면 검토 화면이 비워집니다(이전 초안은 작업 폴더에 백업됩니다). 계속할까요?`)) return;
     const exclude = [...box.querySelectorAll('.sub')].filter(c => !c.checked).map(c => c.value);
     try { await api('/api/extract', {folder: $('#folder').value, exclude}); ITEMS = []; DROPPED = []; await refresh(); await loadModels(); await settings(); } catch (e) { alert(e.message); }
   };
@@ -164,6 +165,7 @@ $('#pkClose').onclick = () => { $('#picker').hidden = true; };
 $('#pkUse').onclick = () => { $('#folder').value = pkCur; $('#picker').hidden = true; $('#btnExtract').click(); };
 $('#btnBrowse').onclick = async () => { const j = await api('/api/browse', {}); if (j.folder) { $('#folder').value = j.folder; $('#extractMsg').innerHTML = ''; } else $('#extractMsg').innerHTML = '<div class="note">윈도 폴더 창을 열지 못했거나 취소했습니다. 「찾기…」로 화면 안에서 고르거나, 탐색기 주소창의 경로를 복사해 붙여 넣은 뒤 「읽기」를 누르세요.</div>'; };
 $('#btnExtract').onclick = async () => {
+  if (ITEMS.length && !confirm(`지금 초안 ${ITEMS.length}개가 있습니다. 폴더를 다시 읽으면 검토 화면이 비워집니다(이전 초안은 작업 폴더에 백업됩니다). 계속할까요?\n아직 내보내지 않았다면 「취소」를 누르고 먼저 내보내세요.`)) return;
   $('#extractMsg').innerHTML = '<div class="hint">읽는 중…</div>'; $('#btnExtract').disabled = true;
   try { await api('/api/extract', {folder: $('#folder').value}); ITEMS = []; DROPPED = []; $('#extractMsg').innerHTML = ''; await refresh(); await loadModels(); await settings(); }
   catch (e) { $('#extractMsg').innerHTML = '<div class="note">' + esc(e.message) + '</div>'; }
@@ -197,6 +199,9 @@ $('#btnAdd').onclick = async () => {
   await save({type: $('#addType').value, when: $('#addWhen').value, text, note: $('#addNote').value});
   $('#addText').value = ''; $('#addWhen').value = ''; $('#addNote').value = '';
 };
-$('#btnExport').onclick = async () => { try { await save(); await api('/api/export', {}); await refresh(); renderExports(); $('#s5').scrollIntoView({behavior: 'smooth'}); } catch (e) { alert(e.message); } };
+$('#btnExport').onclick = async () => {
+  if (!ITEMS.length && !DROPPED.length) { alert('초안이 없습니다. ③ 초안 만들기를 먼저 하세요.'); return; }
+  try { await save(); await api('/api/export', {}); await refresh(); renderExports(); $('#s5').scrollIntoView({behavior: 'smooth'}); } catch (e) { alert(e.message); }
+};
 
 refresh().then(() => { if (ST.files && ST.files.length) loadModels(); });

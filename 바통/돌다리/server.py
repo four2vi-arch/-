@@ -15,9 +15,9 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.0 (2026-10-11.l)'
+VERSION = '1.0 (2026-10-11.m)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
-SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
+SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
 STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'suggest': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
@@ -59,8 +59,18 @@ def year_of(f):
     return int(m.group(1)) if m else None
 
 
+def backup_draft():
+    """폴더를 다시 읽기 전에 지금 초안을 작업 폴더에 남긴다(실수로 지워지지 않게)."""
+    if STATE['items'] or STATE['dropped']:
+        name = '초안_백업_%s.json' % datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        with open(os.path.join(WORK, name), 'w', encoding='utf-8') as f:
+            json.dump({'folder': STATE['folder'], 'model': STATE['model'], 'items': STATE['items'], 'dropped': STATE['dropped']}, f, ensure_ascii=False, indent=1)
+        log('이전 초안 %d항목을 %s에 남기고 폴더를 다시 읽습니다' % (len(STATE['items']), name))
+
+
 def do_extract(folder, exclude=None):
     t0 = time.time()
+    backup_draft()
     exclude = set(exclude or [])
     subdirs = sorted(d for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d)) and d not in SKIP_DIRS and not d.startswith('.'))
     warn, suggest = '', ''
@@ -316,6 +326,8 @@ class H(BaseHTTPRequestHandler):
             save_session()
             return self._send(200, {'ok': True, 'items': STATE['items'], 'dropped': STATE['dropped']})
         if p == '/api/export':
+            if not STATE['items'] and not STATE['dropped']:
+                return self._send(400, {'error': '초안이 없습니다. ③ 초안 만들기를 먼저 하거나, 폴더를 다시 읽었다면 초안을 다시 만드세요(이전 초안은 작업 폴더의 초안_백업 파일에 있습니다)'})
             with LOCK:
                 session = {'folder': STATE['folder'], 'files': STATE['files'], 'failures': STATE['failures'], 'fingerprints': STATE['fingerprints'],
                            'items': STATE['items'], 'model': STATE['model'] or '없음(규칙층만)', 'title': STATE['title'] or '전임자 확인 후 확정', 'version': VERSION}

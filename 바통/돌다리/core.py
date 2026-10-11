@@ -233,6 +233,8 @@ def rule_items(fobj):
             if not raw:
                 continue
             line_body = re.sub(r'^\d+행:\s*', '', raw)  # 엑셀 줄 머리 제거
+            long_para = len(line_body) > 300                 # 매뉴얼의 긴 문단: 한 줄짜리 할 일이 아니다(전화번호만 본다)
+            md_table = line_body.startswith('|')             # 마크다운 표 줄: 표 파일처럼 다룬다
             ym = re.search(r'(20\d{2})\.\s*(\d{1,2})\.', raw) or re.search(r'(20\d{2})-(\d{2})-\d{2}', raw) or re.search(r'(20\d{2})(\d{2})\d{2}', fobj.get('file', ''))
             if ym and not year_hint:
                 year_hint, month_hint = ym.group(1), int(ym.group(2))
@@ -249,6 +251,8 @@ def rule_items(fobj):
                 seen.add(('p', ph))
                 add('협의할 사람', '%s · %s · %s' % (name_near_phone(line_body, ph), ph, re.sub(r'\s+', ' ', line_body)[:50]), '', raw, u['loc'])
             # 월별 할 일: 「○월 ○일/말/초까지」·「○월 ○일~○일」·「2025-09-11」(제출·기한과 함께)·「○개월/○주 전」이 든 문장
+            if long_para or md_table:
+                continue
             d = DUE.search(line_body) or DUE_RANGE.search(line_body)
             if d and ACTION.search(line_body):
                 add('월별 할 일', line_body, when_of(int(d.group(1))), raw, u['loc'])
