@@ -5,7 +5,7 @@ import os, re, json, zipfile, datetime
 from xml.sax.saxutils import escape
 
 TYPES = ['월별 할 일', '협의할 사람', '진행 중 현안']
-CREDIT = '돌다리 v1.0(업무바통) · 이희재(정읍우체국)'
+CREDIT = '돌다리 v2.0(업무바통) · 이희재(정읍우체국)'
 
 
 def kept_items(session):
@@ -65,45 +65,103 @@ def calendar_lines(items):
     return out
 
 
-def to_markdown(session):
-    out = ['# 업무 인수인계서(초안 · %s)' % session.get('title', '전임자 확인 후 확정'), '']
-    out += ['- ' + l for l in header_lines(session)] + ['']
+STATUS_LABEL = {'진행': '진행 중', '대기': '회신·결정 대기', '완료': '끝남'}
+
+
+def chapters(session):
+    """인수인계서의 뼈대. (종류, 글) 목록. 종류: h1·h2·h3·p·li·sub(들여 쓴 작은 글).
+    표지(업무 목록·개요) → 월별 일정표 → 업무별 장(개요·달력·진행 중인 일·연락할 사람·꼭 봐야 할 파일) → 못 읽은 파일."""
+    out = []
     items = kept_items(session)
+    overview = session.get('overview') or {}
+    areas = [a['name'] for a in (session.get('areas') or [])] + ['기타']
+    used = [a for a in areas if any((it.get('area') or '기타') == a for it in items)]
+    out.append(('h1', '1. 업무 요약'))
+    if session.get('handover_from') or session.get('handover_to'):
+        out.append(('p', '인계자: %s · 인수자: %s' % (session.get('handover_from') or '', session.get('handover_to') or '')))
+    for a in used:
+        rows = [it for it in items if (it.get('area') or '기타') == a]
+        n = lambda t: sum(1 for it in rows if it.get('type') == t)
+        out.append(('li', '%s — 할 일 %d · 진행 중인 일 %d · 연락할 사람 %d' % (a, n('월별 할 일'), n('진행 중 현안'), n('협의할 사람'))))
+        if overview.get(a):
+            out.append(('sub', overview[a]))
     cal = calendar_lines(items)
     if cal:
-        out += ['## 월별 일정표', ''] + cal
-    for kind in TYPES:
-        out.append('## ' + kind)
-        out.append('')
-        rows = [it for it in items if it.get('type') == kind]
-        if kind == '월별 할 일':
-            rows.sort(key=lambda it: (month_key(it.get('when')), it.get('file', '')))
-        if not rows:
-            out.append('- (없음)')
+        out.append(('h1', '2. 월별 일정표(전체)'))
+        for l in cal:
+            if l.startswith('### '):
+                out.append(('h3', l[4:]))
+            elif l.startswith('- '):
+                out.append(('li', l[2:]))
+    def src(it):
+        if it.get('file'):
+            return '출처: %s · 「%s」' % (it['file'], str(it.get('quote', '')).replace('\n', ' / ')[:120]) + ((' · 같은 내용 %d곳' % len(it['also'])) if it.get('also') else '')
+        return '출처: 전임자가 직접 적음'
+    for ci, a in enumerate(used, 3):
+        rows = [it for it in items if (it.get('area') or '기타') == a]
+        out.append(('h1', '%d. %s' % (ci, a)))
+        out.append(('h2', '업무 개요'))
+        out.append(('p', overview.get(a) or '(전임자가 적지 않음)'))
+        standing, months, none = calendar_buckets(rows)
+        if standing or any(months.values()) or none:
+            out.append(('h2', '이 업무의 달력'))
+            for it in standing:
+                out.append(('li', '%s · %s' % (it.get('cycle'), it.get('text', '')))); out.append(('sub', src(it)))
+            for m in range(1, 13):
+                for it in months[m]:
+                    out.append(('li', '[%s] %s' % (it.get('when'), it.get('text', '')))); out.append(('sub', src(it)))
+            for it in none:
+                out.append(('li', it.get('text', ''))); out.append(('sub', src(it)))
+        issues = [it for it in rows if it.get('type') == '진행 중 현안']
+        if issues:
+            out.append(('h2', '진행 중인 일'))
+            for it in issues:
+                st = STATUS_LABEL.get(it.get('status') or '진행', '진행 중')
+                out.append(('li', '[%s] %s' % (st, it.get('text', ''))))
+                if it.get('next'):
+                    out.append(('sub', '다음에 할 일: ' + it['next']))
+                if it.get('note'):
+                    out.append(('sub', '메모: ' + it['note']))
+                out.append(('sub', src(it)))
+        people = [it for it in rows if it.get('type') == '협의할 사람']
+        if people:
+            out.append(('h2', '연락할 사람'))
+            for it in people:
+                out.append(('li', it.get('text', '') + ((' — ' + it['note']) if it.get('note') else '')))
+                out.append(('sub', src(it)))
+        files = {}
         for it in rows:
-            head = ('[%s] ' % it['when']) if it.get('when') else ''
-            tags = ' · '.join(x for x in (it.get('area'), (it.get('cycle') if it.get('cycle') not in (None, '', '1회', '해당 월') else '')) if x)
-            out.append('- %s%s%s' % (head, it.get('text', ''), (' (%s)' % tags) if tags else ''))
-            if it.get('note'):
-                out.append('  - 메모: %s' % it['note'])
             if it.get('file'):
-                out.append('  - 출처: %s · 「%s」' % (it['file'], str(it.get('quote', '')).replace('\n', ' / ')))
-                for al in it.get('also', [])[:5]:
-                    out.append('  - 같은 내용: %s · 「%s」' % (al['file'], str(al.get('quote', '')).replace('\n', ' / ')[:80]))
-            elif it.get('src') == '직접 입력':
-                out.append('  - 출처: 전임자가 직접 적음')
-        out.append('')
+                files[it['file']] = files.get(it['file'], 0) + 1
+            for al in it.get('also', []):
+                files[al['file']] = files.get(al['file'], 0) + 1
+        top = sorted(files.items(), key=lambda x: -x[1])[:8]
+        if top:
+            out.append(('h2', '꼭 봐야 할 파일'))
+            for f, n in top:
+                out.append(('li', '%s (항목 %d개의 출처)' % (f, n)))
     failures = [x for x in session.get('failures', []) if not x.get('skip')]
     skipped = [x for x in session.get('failures', []) if x.get('skip')]
     if failures or skipped:
-        out.append('## 못 읽은 파일(후임자가 직접 열어 볼 것)')
-        out.append('')
-        out += ['- %s: %s' % (x['file'], x['reason']) for x in failures]
+        out.append(('h1', '%d. 못 읽은 파일(후임자가 직접 열어 볼 것)' % (len(used) + 3)))
+        for x in failures:
+            out.append(('li', '%s: %s' % (x['file'], x['reason'])))
         if skipped:
-            out.append('- 그 밖에 그림·영상·프로그램·글꼴·임시 파일 %d개는 읽지 않았다(문서가 아님)' % len(skipped))
-        out.append('')
-    out.append('---')
-    out.append('%s · 항목마다 출처 파일과 원문 발췌를 붙였고, 원문에서 확인되지 않은 항목은 싣지 않았다. 원본 파일은 읽기만 했다.' % CREDIT)
+            out.append(('p', '그 밖에 그림·영상·프로그램·글꼴·임시 파일 %d개는 읽지 않았다(문서가 아님).' % len(skipped)))
+    return out
+
+
+def to_markdown(session):
+    out = ['# 업무 인수인계서(%s)' % session.get('title', '전임자 확인 후 확정'), '']
+    out += ['- ' + l for l in header_lines(session)] + ['']
+    for kind, text in chapters(session):
+        if kind == 'h1': out += ['', '## ' + text, '']
+        elif kind == 'h2': out += ['', '### ' + text, '']
+        elif kind == 'h3': out += ['', '#### ' + text, '']
+        elif kind == 'p': out.append(text)
+        elif kind == 'li': out.append('- ' + text)
+        elif kind == 'sub': out.append('  - ' + text)
+    out += ['', '---', '%s · 항목마다 출처 파일과 원문 발췌를 붙였고, 원문에서 확인되지 않은 항목은 싣지 않았다. 원본 파일은 읽기만 했다.' % CREDIT]
     return '\n'.join(out) + '\n'
 
 
@@ -131,43 +189,16 @@ def _p(text, style=None, size=None, color=None, bold=False, indent=0):
 
 
 def to_docx(session, path):
-    body = [_p('업무 인수인계서(초안 · %s)' % session.get('title', '전임자 확인 후 확정'), style='Title')]
+    body = [_p('업무 인수인계서(%s)' % session.get('title', '전임자 확인 후 확정'), style='Title')]
     for l in header_lines(session):
         body.append(_p(l, size=10.5, color='555555'))
-    items = kept_items(session)
-    cal = calendar_lines(kept_items(session))
-    if cal:
-        body.append(_p('월별 일정표', style='Heading1'))
-        for l in cal:
-            if l.startswith('### '):
-                body.append(_p(l[4:], style='Heading2'))
-            elif l.startswith('- '):
-                body.append(_p('• ' + l[2:], indent=360))
-    for kind in TYPES:
-        body.append(_p(kind, style='Heading1'))
-        rows = [it for it in items if it.get('type') == kind]
-        if kind == '월별 할 일':
-            rows.sort(key=lambda it: (month_key(it.get('when')), it.get('file', '')))
-        if not rows:
-            body.append(_p('(없음)', indent=360))
-        for it in rows:
-            head = ('[%s] ' % it['when']) if it.get('when') else ''
-            tags = ' · '.join(x for x in (it.get('area'), (it.get('cycle') if it.get('cycle') not in (None, '', '1회', '해당 월') else '')) if x)
-            body.append(_p('• ' + head + it.get('text', '') + ((' (%s)' % tags) if tags else ''), indent=360))
-            if it.get('note'):
-                body.append(_p('메모: ' + it['note'], size=11, indent=720))
-            if it.get('file'):
-                body.append(_p('출처: %s · 「%s」' % (it['file'], str(it.get('quote', '')).replace('\n', ' / ')), size=10, color='666666', indent=720))
-                for al in it.get('also', [])[:5]:
-                    body.append(_p('같은 내용: %s · 「%s」' % (al['file'], str(al.get('quote', '')).replace('\n', ' / ')[:80]), size=10, color='888888', indent=720))
-            elif it.get('src') == '직접 입력':
-                body.append(_p('출처: 전임자가 직접 적음', size=10, color='666666', indent=720))
-    failures = session.get('failures', [])
-    if failures:
-        body.append(_p('못 읽은 파일(후임자가 직접 열어 볼 것)', style='Heading1'))
-        failures = [x for x in failures if not x.get('skip')]
-        for x in failures:
-            body.append(_p('• %s: %s' % (x['file'], x['reason']), indent=360))
+    for kind, text in chapters(session):
+        if kind == 'h1': body.append(_p(text, style='Heading1'))
+        elif kind == 'h2': body.append(_p(text, style='Heading2'))
+        elif kind == 'h3': body.append(_p(text, bold=True))
+        elif kind == 'p': body.append(_p(text))
+        elif kind == 'li': body.append(_p('• ' + text, indent=360))
+        elif kind == 'sub': body.append(_p(text, size=10, color='666666', indent=720))
     body.append(_p(CREDIT + ' · 항목마다 출처 파일과 원문 발췌를 붙였고, 원문에서 확인되지 않은 항목은 싣지 않았다. 원본 파일은 읽기만 했다.', size=9.5, color='888888'))
     W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     document = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'

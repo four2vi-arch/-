@@ -15,14 +15,14 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '1.2 (2026-10-12)'
+VERSION = '2.0 (2026-10-12)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
 STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'suggest': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
          'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': [],
-         'areas': core.DEFAULT_AREAS}
+         'areas': core.DEFAULT_AREAS, 'overview': {}, 'handover_from': '', 'handover_to': ''}
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
 CHECKPOINT = '모델응답_이어하기.jsonl'   # 모델 응답을 호출마다 바로 적어 두는 파일. 같은 폴더·모델이면 다음 「초안 만들기」가 재사용한다(죽어도 한 호출만 잃음)
 _extracting = False
@@ -362,7 +362,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:
-                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference'):
+                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to'):
                     if k in body:
                         STATE[k] = body[k]
                 if 'areas_text' in body:
@@ -397,7 +397,7 @@ class H(BaseHTTPRequestHandler):
                     it = by_id.get(ch.get('id'))
                     if not it:
                         continue
-                    for k in ('keep', 'text', 'when', 'type', 'note'):
+                    for k in ('keep', 'text', 'when', 'type', 'note', 'status', 'seen', 'next'):
                         if k in ch:
                             it[k] = ch[k]
                     if 'area' in ch:
