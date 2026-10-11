@@ -34,8 +34,8 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     await page.click('#fsup'); await page.click('#fsdn'); await page.click('#thm'); const dark = await page.evaluate(() => document.documentElement.dataset.theme); await page.click('#thm');
     ok('글자 크기·밝기 단추', dark === 'dark');
     // 왼쪽 메뉴 전부
-    for (const v of ['setup', 'run', 'review', 'export', 'cycle', 'area', 'files', 'log', 'folder']) { await page.click(`nav#side a[data-v="${v}"]`); if ((await cur()) !== v) { ok('메뉴 ' + v, false); } }
-    ok('왼쪽 메뉴 9개 전환', (await cur()) === 'folder');
+    for (const v of ['setup', 'run', 'review', 'export', 'calendar', 'cycle', 'area', 'files', 'log', 'folder']) { await page.click(`nav#side a[data-v="${v}"]`); if ((await cur()) !== v) { ok('메뉴 ' + v, false); } }
+    ok('왼쪽 메뉴 10개 전환', (await cur()) === 'folder');
     // 찾기(화면 안 폴더 고르기)
     await page.click('#btnPick'); await page.waitForSelector('#picker:not([hidden])');
     const nd = await page.$$eval('#pkList .d', d => d.length); ok('찾기… 폴더 목록이 뜸', nd > 0, nd + '개');
@@ -118,6 +118,11 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     await page.$eval('#cycleView .ck', el => { el.checked = true; el.dispatchEvent(new Event('change')); }); await sleep(300);
     ok('주기 묶음 전부 뺌·남김·줄 체크', true);
     await page.screenshot({path: path.join(shots, '6_주기.png')});
+    // 월별 일정표
+    await page.click('nav#side a[data-v="calendar"]'); const cg = await page.$$('#calendarView .cyc-group'); ok('월별 일정표 묶음', cg.length >= 2, cg.length + '묶음');
+    const cb = await page.$('#calendarView h3 button[data-k="0"]'); if (cb) { await cb.click(); await sleep(400); await page.click('#calendarView h3 button[data-k="1"]'); await sleep(400); }
+    await page.$eval('#calendarView .ck', el => { el.checked = false; el.dispatchEvent(new Event('change')); }); await sleep(300); await page.$eval('#calendarView .ck', el => { el.checked = true; el.dispatchEvent(new Event('change')); }); await sleep(300);
+    ok('월별 일정표 전부 뺌·남김·줄 체크', true);
     // 분야별 보기
     await page.click('nav#side a[data-v="area"]'); const ab = await page.$('#areaView button'); ok('분야별 표', !!ab);
     if (ab) { await ab.click(); ok('「검토에서 보기」 → 검토 화면', (await cur()) === 'review'); }

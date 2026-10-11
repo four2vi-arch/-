@@ -20,7 +20,7 @@
   --accent:#3fbfa9;--accent-ink:#60d1bd;--accent-wash:#12302a;--ins:#7ba3dd;--ins-ink:#9cbcea;--ins-wash:#17233a;--warn:#d9ac57;--warn-wash:#2a2314;--warn-line:#493d1e;--bad:#e08878;--bad-wash:#3a1d18;
 }
 *{box-sizing:border-box}
-html{font-size:calc(14.5px*var(--s))}
+html{font-size:calc(17px*var(--s))}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:1rem;line-height:1.6}
 button,input,select,textarea{font:inherit;color:inherit}
 a{color:var(--ins-ink)}
@@ -32,7 +32,7 @@ header{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1
 .search input{flex:1;border:0;background:transparent;outline:0}
 .hbtns{display:flex;gap:6px}
 #wrap{display:flex;min-height:calc(100vh - 52px)}
-nav#side{width:210px;flex:none;background:var(--surface);border-right:1px solid var(--line);padding:12px 10px}
+nav#side{width:240px;flex:none;background:var(--surface);border-right:1px solid var(--line);padding:12px 10px}
 nav#side .lbl{font-size:.75rem;color:var(--ink-3);letter-spacing:.1em;margin:8px 8px 4px}
 nav#side a{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;color:var(--ink-2);text-decoration:none;cursor:pointer;font-size:.95rem}
 nav#side a .n{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--sunken);align-items:center;justify-content:center;font-size:.75rem;color:var(--ink-2)}
@@ -41,7 +41,7 @@ nav#side a.cur{background:var(--accent-wash);color:var(--accent-ink);font-weight
 nav#side a.cur .n{background:var(--accent);color:#fff}
 nav#side a.off{opacity:.45}
 nav#side .cnt{margin-left:auto;font-size:.75rem;color:var(--ink-3)}
-main{flex:1;min-width:0;padding:18px 24px 60px;max-width:1180px}
+main{flex:1;min-width:0;padding:18px 28px 60px;max-width:1500px}
 .view{display:none}.view.on{display:block}
 h2{font-family:var(--head);font-weight:500;font-size:1.3rem;margin:0 0 4px;color:var(--ink)}
 .lead{color:var(--ink-3);font-size:.9rem;margin:0 0 14px}
@@ -56,7 +56,7 @@ button.ghost{background:var(--surface);color:var(--accent-ink)}
 button.danger{background:var(--surface);color:var(--bad);border-color:var(--bad)}
 button.sm{padding:3px 9px;font-size:.85rem}
 button:disabled{opacity:.4;cursor:default}
-.hint{color:var(--ink-3);font-size:.86rem}
+.hint{color:var(--ink-3);font-size:.92rem}
 .note{background:var(--warn-wash);border-left:4px solid var(--warn);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:.9rem}
 .good{background:var(--accent-wash);border-left:4px solid var(--accent);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:.9rem}
 .bad{background:var(--bad-wash);border-left:4px solid var(--bad);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:.9rem}
@@ -64,7 +64,7 @@ button:disabled{opacity:.4;cursor:default}
 .stat{background:var(--surface-2);border:1px solid var(--line-2);border-radius:8px;padding:8px 12px}
 .stat b{display:block;font-size:1.4rem;font-family:var(--head);font-weight:500}
 .stat span{font-size:.82rem;color:var(--ink-3)}
-table{border-collapse:collapse;width:100%;font-size:.88rem;margin:6px 0}
+table{border-collapse:collapse;width:100%;font-size:.95rem;margin:6px 0}
 th,td{border-bottom:1px solid var(--line-2);padding:5px 8px;text-align:left;vertical-align:top}
 th{background:var(--surface-2);font-weight:600;white-space:nowrap}
 td.num,th.num{text-align:right;white-space:nowrap}
@@ -84,12 +84,12 @@ td.num,th.num{text-align:right;white-space:nowrap}
 .item input.text{flex:1;min-width:220px}
 .item input.when{width:110px}
 .item select.area{min-width:120px}
-.item .src{font-size:.82rem;color:var(--ink-3);word-break:break-all}
+.item .src{font-size:.9rem;color:var(--ink-3);word-break:break-all}
 .item .src b{color:var(--ink-2);font-weight:600}
-.item .also{font-size:.78rem;color:var(--ink-3)}
-.tag{font-size:.75rem;padding:1px 7px;border-radius:10px;background:var(--sunken);color:var(--ink-2);white-space:nowrap}
+.item .also{font-size:.86rem;color:var(--ink-3)}
+.tag{font-size:.82rem;padding:1px 7px;border-radius:10px;background:var(--sunken);color:var(--ink-2);white-space:nowrap}
 .tag.fix{background:var(--warn-wash);color:var(--warn)}.tag.man{background:var(--ins-wash);color:var(--ins-ink)}.tag.cy{background:var(--accent-wash);color:var(--accent-ink)}
-.item input.note{width:100%;font-size:.85rem;border-style:dashed}
+.item input.note{width:100%;font-size:.95rem;border-style:dashed}
 details{margin:8px 0}summary{cursor:pointer;color:var(--ins-ink)}
 #log{font-family:var(--mono);font-size:.8rem;color:var(--ink-3);white-space:pre-wrap;max-height:300px;overflow:auto;background:var(--surface-2);padding:8px;border-radius:6px}
 .cyc-group{margin:10px 0}
@@ -97,10 +97,10 @@ details{margin:8px 0}summary{cursor:pointer;color:var(--ins-ink)}
 tr.off td{opacity:.45;text-decoration:line-through}
 footer{color:var(--ink-3);font-size:.78rem;text-align:center;margin:30px 0 0}
 #printView{display:none}
-@media print{header,nav#side,.view,footer{display:none !important} #printView{display:block} .pi{break-inside:avoid}
-#printView h2{font-size:17px;margin:0 0 8px}#printView h3{font-size:14px;margin:14px 0 6px;border-bottom:1px solid #999;padding-bottom:3px}
-#printView .pi{padding:5px 0;border-bottom:1px dotted #ccc;font-size:12px}#printView .pi.off{color:#999;text-decoration:line-through}
-#printView .pi .w{font-weight:600;margin-right:6px}#printView .pi .s{color:#555;font-size:10px;display:block;margin-top:2px}#printView .pi .n{color:#0b4f8a;font-size:11px;display:block}}
+@page{margin:15mm} @media print{header,nav#side,.view,footer{display:none !important} body{font-size:13pt} #printView{display:block} .pi{break-inside:avoid}
+#printView h2{font-size:20pt;margin:0 0 8px}#printView h3{font-size:16pt;margin:14px 0 6px;border-bottom:1px solid #999;padding-bottom:3px}
+#printView .pi{padding:6px 0;border-bottom:1px dotted #ccc;font-size:13pt;line-height:1.5}#printView .pi.off{color:#999;text-decoration:line-through}
+#printView .pi .w{font-weight:600;margin-right:6px}#printView .pi .s{color:#555;font-size:11pt;display:block;margin-top:2px}#printView .pi .n{color:#0b4f8a;font-size:12pt;display:block}}
 @media (max-width:860px){nav#side{width:150px}main{padding:12px}}
 </style>
 </head>
@@ -119,6 +119,7 @@ footer{color:var(--ink-3);font-size:.78rem;text-align:center;margin:30px 0 0}
   <a data-v="review"><span class="n">4</span>검토<span class="cnt" id="cReview"></span></a>
   <a data-v="export"><span class="n">5</span>내보내기<span class="cnt" id="cExport"></span></a>
   <div class="lbl">보 기</div>
+  <a data-v="calendar"><span class="n">📅</span>월별 일정표</a>
   <a data-v="cycle"><span class="n">⟳</span>주기 업무 확인</a>
   <a data-v="area"><span class="n">▦</span>분야별 보기</a>
   <a data-v="files"><span class="n">▤</span>읽은 파일</a>
@@ -171,6 +172,11 @@ footer{color:var(--ink-3);font-size:.78rem;text-align:center;margin:30px 0 0}
   <details id="droppedBox"><summary>불확실(제외): 발췌가 원문에서 확인되지 않아 뺀 모델 항목 <b id="nDropped"></b></summary><div id="dropped"></div></details>
   <details id="errBox"><summary>처리 중 오류 <b id="nErr"></b></summary><div id="errs" class="hint"></div></details>
   <div class="row"><button id="btnExport">인수인계서 내보내기(.md + .docx)</button><button class="ghost" id="btnPrint2">검토본 인쇄</button></div>
+</section>
+
+<section class="view" id="v-calendar">
+  <h2>월별 일정표</h2><p class="lead">「월별 할 일」을 달력처럼 늘어놓습니다. 맨 위는 매주·매월 늘 하는 일, 그 아래 1월부터 12월, 맨 아래는 시기가 적히지 않은 일입니다. 달마다 「전부 남김/뺌」으로 정리할 수 있고, 인수인계서에도 같은 표가 들어갑니다.</p>
+  <div id="calendarView"></div>
 </section>
 
 <section class="view" id="v-cycle">

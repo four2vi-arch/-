@@ -32,10 +32,46 @@ def header_lines(session):
                 sum(1 for it in kept_items(session) if it.get('src') == '직접 입력'))]
 
 
+STANDING = ('매주', '매월', '분기', '반기', '매년')
+
+
+def calendar_buckets(items):
+    """월별 할 일을 늘 하는 일 / 1~12월 / 시기 없음으로 나눈다(화면 「월별 일정표」와 같은 규칙)."""
+    todo = [it for it in items if it.get('type') == '월별 할 일']
+    standing = [it for it in todo if it.get('cycle') in STANDING]
+    months = {m: [] for m in range(1, 13)}
+    none = []
+    for it in todo:
+        if it in standing:
+            continue
+        m = month_key(it.get('when'))
+        (months[m] if 1 <= m <= 12 else none).append(it)
+    standing.sort(key=lambda it: STANDING.index(it.get('cycle')) if it.get('cycle') in STANDING else 99)
+    return standing, months, none
+
+
+def calendar_lines(items):
+    standing, months, none = calendar_buckets(items)
+    out = []
+    def row(it):
+        return '%s%s' % (('[%s] ' % it['when']) if it.get('when') else '', it.get('text', '')) + ((' (%s)' % it['area']) if it.get('area') else '')
+    if standing:
+        out += ['### 늘 하는 일(매주·매월·분기·반기·매년)', ''] + ['- %s · %s' % (it.get('cycle'), row(it)) for it in standing] + ['']
+    for m in range(1, 13):
+        if months[m]:
+            out += ['### %d월' % m, ''] + ['- ' + row(it) for it in months[m]] + ['']
+    if none:
+        out += ['### 시기 없음', ''] + ['- ' + row(it) for it in none] + ['']
+    return out
+
+
 def to_markdown(session):
     out = ['# 업무 인수인계서(초안 · %s)' % session.get('title', '전임자 확인 후 확정'), '']
     out += ['- ' + l for l in header_lines(session)] + ['']
     items = kept_items(session)
+    cal = calendar_lines(items)
+    if cal:
+        out += ['## 월별 일정표', ''] + cal
     for kind in TYPES:
         out.append('## ' + kind)
         out.append('')
@@ -79,7 +115,7 @@ def _p(text, style=None, size=None, color=None, bold=False, indent=0):
     if color:
         rpr += '<w:color w:val="%s"/>' % color
     if size:
-        rpr += '<w:sz w:val="%d"/>' % (size * 2)
+        rpr += '<w:sz w:val="%d"/>' % int(round(size * 2))
     ppr = ''
     if style:
         ppr += '<w:pStyle w:val="%s"/>' % style
@@ -97,8 +133,16 @@ def _p(text, style=None, size=None, color=None, bold=False, indent=0):
 def to_docx(session, path):
     body = [_p('업무 인수인계서(초안 · %s)' % session.get('title', '전임자 확인 후 확정'), style='Title')]
     for l in header_lines(session):
-        body.append(_p(l, size=9, color='555555'))
+        body.append(_p(l, size=10.5, color='555555'))
     items = kept_items(session)
+    cal = calendar_lines(kept_items(session))
+    if cal:
+        body.append(_p('월별 일정표', style='Heading1'))
+        for l in cal:
+            if l.startswith('### '):
+                body.append(_p(l[4:], style='Heading2'))
+            elif l.startswith('- '):
+                body.append(_p('• ' + l[2:], indent=360))
     for kind in TYPES:
         body.append(_p(kind, style='Heading1'))
         rows = [it for it in items if it.get('type') == kind]
@@ -111,31 +155,32 @@ def to_docx(session, path):
             tags = ' · '.join(x for x in (it.get('area'), (it.get('cycle') if it.get('cycle') not in (None, '', '1회', '해당 월') else '')) if x)
             body.append(_p('• ' + head + it.get('text', '') + ((' (%s)' % tags) if tags else ''), indent=360))
             if it.get('note'):
-                body.append(_p('메모: ' + it['note'], size=9, indent=720))
+                body.append(_p('메모: ' + it['note'], size=11, indent=720))
             if it.get('file'):
-                body.append(_p('출처: %s · 「%s」' % (it['file'], str(it.get('quote', '')).replace('\n', ' / ')), size=8, color='666666', indent=720))
+                body.append(_p('출처: %s · 「%s」' % (it['file'], str(it.get('quote', '')).replace('\n', ' / ')), size=10, color='666666', indent=720))
                 for al in it.get('also', [])[:5]:
-                    body.append(_p('같은 내용: %s · 「%s」' % (al['file'], str(al.get('quote', '')).replace('\n', ' / ')[:80]), size=8, color='888888', indent=720))
+                    body.append(_p('같은 내용: %s · 「%s」' % (al['file'], str(al.get('quote', '')).replace('\n', ' / ')[:80]), size=10, color='888888', indent=720))
             elif it.get('src') == '직접 입력':
-                body.append(_p('출처: 전임자가 직접 적음', size=8, color='666666', indent=720))
+                body.append(_p('출처: 전임자가 직접 적음', size=10, color='666666', indent=720))
     failures = session.get('failures', [])
     if failures:
         body.append(_p('못 읽은 파일(후임자가 직접 열어 볼 것)', style='Heading1'))
         failures = [x for x in failures if not x.get('skip')]
         for x in failures:
             body.append(_p('• %s: %s' % (x['file'], x['reason']), indent=360))
-    body.append(_p(CREDIT + ' · 항목마다 출처 파일과 원문 발췌를 붙였고, 원문에서 확인되지 않은 항목은 싣지 않았다. 원본 파일은 읽기만 했다.', size=8, color='888888'))
+    body.append(_p(CREDIT + ' · 항목마다 출처 파일과 원문 발췌를 붙였고, 원문에서 확인되지 않은 항목은 싣지 않았다. 원본 파일은 읽기만 했다.', size=9.5, color='888888'))
     W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     document = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 '<w:document xmlns:w="%s"><w:body>%s<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
                 '<w:pgMar w:top="1418" w:right="1134" w:bottom="1418" w:left="1134" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>' % (W, ''.join(body)))
     styles = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
               '<w:styles xmlns:w="%s">'
-              '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Malgun Gothic" w:hAnsi="Malgun Gothic" w:eastAsia="맑은 고딕"/><w:sz w:val="21"/><w:lang w:eastAsia="ko-KR"/></w:rPr></w:rPrDefault>'
+              '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Malgun Gothic" w:hAnsi="Malgun Gothic" w:eastAsia="맑은 고딕"/><w:sz w:val="24"/><w:lang w:eastAsia="ko-KR"/></w:rPr></w:rPrDefault>'
               '<w:pPrDefault><w:pPr><w:spacing w:after="80" w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>'
               '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
               '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="200"/></w:pPr><w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style>'
               '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="280" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1F3864"/></w:rPr></w:style>'
+              '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="280" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/><w:color w:val="1F3864"/></w:rPr></w:style>'
               '</w:styles>' % W)
     content_types = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'

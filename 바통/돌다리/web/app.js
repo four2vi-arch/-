@@ -23,7 +23,7 @@ function show(v) {
   view = v; ls('view', v);
   $$('.view').forEach(el => el.classList.toggle('on', el.id === 'v-' + v));
   $$('nav#side a').forEach(a => a.classList.toggle('cur', a.dataset.v === v));
-  if (v === 'review') renderItems(); if (v === 'cycle') renderCycle(); if (v === 'area') renderArea(); if (v === 'files') renderFilesView();
+  if (v === 'review') renderItems(); if (v === 'cycle') renderCycle(); if (v === 'calendar') renderCalendar(); if (v === 'area') renderArea(); if (v === 'files') renderFilesView();
   window.scrollTo(0, 0);
 }
 $$('nav#side a').forEach(a => a.onclick = () => show(a.dataset.v));
@@ -251,7 +251,7 @@ async function save(add, bulk) {
   const body = {changes: Object.values(pending), add: add ? [add] : [], bulk: bulk ? [bulk] : []};
   pending = {};
   const j = await api('/api/items', body); ITEMS = j.items; DROPPED = j.dropped;
-  if (view === 'review') renderItems(); if (view === 'cycle') renderCycle(); if (view === 'area') renderArea(); navState();
+  if (view === 'review') renderItems(); if (view === 'cycle') renderCycle(); if (view === 'calendar') renderCalendar(); if (view === 'area') renderArea(); navState();
 }
 function selectedIds() { const s = $$('.sel:checked').map(c => +c.closest('.item').dataset.id); return s.length ? s : null; }
 async function bulkKeep(keep) {
@@ -270,6 +270,40 @@ $('#btnAdd').onclick = async () => {
   $('#addText').value = ''; $('#addWhen').value = ''; $('#addNote').value = '';
 };
 $('#q').oninput = () => { q = $('#q').value; if (view !== 'review') show('review'); else renderItems(); };
+
+
+// ---------------------------------------------------------------- 월별 일정표
+function calBuckets() {
+  const todo = ITEMS.filter(i => i.type === '월별 할 일');
+  const standing = todo.filter(i => ['매주', '매월', '분기', '반기', '매년'].includes(i.cycle));
+  const months = {}; for (let m = 1; m <= 12; m++) months[m] = [];
+  const none = [];
+  todo.filter(i => !standing.includes(i)).forEach(i => { const m = mon(i.when); if (m >= 1 && m <= 12) months[m].push(i); else none.push(i); });
+  return {standing, months, none};
+}
+function calRows(rows) {
+  return '<table><tr><th style="width:40px">남김</th><th>시기</th><th>내용</th><th>분야</th><th>출처</th></tr>' +
+    rows.map(i => `<tr class="${i.keep ? '' : 'off'}" data-id="${i.id}"><td><input type="checkbox" class="ck" ${i.keep ? 'checked' : ''}></td><td>${esc(i.when)}</td><td>${esc(i.text)}</td><td>${esc(i.area || '기타')}</td><td class="hint">${esc(i.file || '직접 적음')}</td></tr>`).join('') + '</table>';
+}
+function renderCalendar() {
+  const box = $('#calendarView');
+  if (!ITEMS.length) { box.innerHTML = '<div class="hint">아직 초안이 없습니다.</div>'; return; }
+  const b = calBuckets();
+  const block = (key, title, sub, rows) => rows.length ? `<div class="cyc-group card" data-key="${key}"><h3>${title} <span class="hint">${sub} · ${rows.filter(i => i.keep).length}/${rows.length} 남김</span><button class="ghost sm" data-k="1">전부 남김</button><button class="ghost sm" data-k="0">전부 뺌</button></h3>${calRows(rows)}</div>` : '';
+  let h = block('standing', '늘 하는 일', '매주·매월·분기·반기·매년', b.standing.slice().sort((x, y) => CYCLES.indexOf(x.cycle) - CYCLES.indexOf(y.cycle)));
+  for (let m = 1; m <= 12; m++) h += block('m' + m, m + '월', '이 달에 할 일', b.months[m].slice().sort((x, y) => String(x.area).localeCompare(String(y.area))));
+  h += block('none', '시기 없음', '시기가 적히지 않은 일(검토에서 시기를 적으면 달로 들어감)', b.none);
+  box.innerHTML = h || '<div class="hint">월별 할 일 항목이 없습니다.</div>';
+  $$('#calendarView h3 button').forEach(bt => bt.onclick = async () => {
+    const g = bt.closest('.cyc-group'); const ids = [...g.querySelectorAll('tr[data-id]')].map(tr => +tr.dataset.id); const keep = bt.dataset.k === '1';
+    if (!confirm(`이 묶음 ${ids.length}개를 전부 「${keep ? '남김' : '뺌'}」으로 할까요?`)) return;
+    try { await save(null, {ids, keep}); } catch (e) { alert(e.message); }
+  });
+  $$('#calendarView .ck').forEach(c => c.onchange = async e => {
+    const tr = e.target.closest('tr'); const id = +tr.dataset.id; pending[id] = {id, keep: e.target.checked}; const it = ITEMS.find(i => i.id === id); if (it) it.keep = e.target.checked; tr.classList.toggle('off', !e.target.checked);
+    try { await api('/api/items', {changes: Object.values(pending)}); pending = {}; navState(); } catch (err) { alert(err.message); }
+  });
+}
 
 // ---------------------------------------------------------------- 주기 업무·분야별
 function renderCycle() {
