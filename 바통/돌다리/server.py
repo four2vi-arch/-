@@ -12,17 +12,20 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract as EX
 import core
+import docs
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '2.0.2 (2026-10-12)'
+VERSION = '3.0 (2026-10-13)'
+MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
-SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
+SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
 STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'suggest': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
          'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': [],
-         'areas': core.DEFAULT_AREAS, 'overview': {}, 'handover_from': '', 'handover_to': '', 'assets': {}, 'keyfiles': []}
+         'areas': core.DEFAULT_AREAS, 'overview': {}, 'handover_from': '', 'handover_to': '', 'assets': {}, 'keyfiles': [],
+         'months': 12, 'model_scope': 'issues', 'witness': '', 'handover_date': '', 'org': '', 'info': {}}
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
 CHECKPOINT = '모델응답_이어하기.jsonl'   # 모델 응답을 호출마다 바로 적어 두는 파일. 같은 폴더·모델이면 다음 「초안 만들기」가 재사용한다(죽어도 한 호출만 잃음)
 _extracting = False
@@ -52,11 +55,14 @@ def _reload_units():
         if STATE['folder'] == folder:   # 되읽는 사이에 다른 폴더를 읽었으면 버린다
             mc = {}
             for f in files:
-                _units[f['file'].replace('\\', '/')] = f['units']; mc[f['file'].replace('\\', '/')] = f.get('mchars', f['chars'])
+                _units[f['file'].replace('\\', '/')] = f['units']; mc[f['file'].replace('\\', '/')] = (f.get('mchars', f['chars']), f.get('mtime', ''))
             with LOCK:
                 for f in STATE['files']:
-                    if f['file'] in mc and not f.get('mchars'):
-                        f['mchars'] = mc[f['file']]
+                    if f['file'] in mc:
+                        if not f.get('mchars'):
+                            f['mchars'] = mc[f['file']][0]
+                        if not f.get('mtime'):
+                            f['mtime'] = mc[f['file']][1]
                 STATE['plan'] = make_plan()   # 옛 세션은 모델에 보내는 길이를 몰라 호출 수가 적게 잡혔던 것을 바로잡는다
         log('이전 폴더 되읽기 끝: %d개, %.0f초' % (len(files), time.time() - t0))
     except Exception as e:
@@ -119,7 +125,7 @@ def do_extract(folder, exclude=None):
     for x in failures + fps:
         x['file'] = x['file'].replace('\\', '/')
     with LOCK:
-        STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mchars': f.get('mchars', f['chars']), 'year': year_of(f)} for f in files],
+        STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mchars': f.get('mchars', f['chars']), 'mtime': f.get('mtime', ''), 'year': year_of(f)} for f in files],
                       'failures': failures, 'fingerprints': fps, 'items': [], 'dropped': [], 'errors': [], 'calls': [], 'exports': [], 'step': 2, 'progress': None})
         STATE['plan'] = make_plan()
     log('추출 %.1f초: 읽음 %d · 못 읽음 %d · 원본 변경 %d' % (time.time() - t0, len(files), len(failures), sum(1 for x in fps if not x['unchanged'])))
@@ -129,25 +135,23 @@ def do_extract(folder, exclude=None):
 def checkpoint_info():
     """이전 회차 모델 응답이 지금 폴더·모델에 맞게 남아 있으면 그 수(화면 ② 안내용)."""
     try:
-        prev = core.load_checkpoint(os.path.join(WORK, CHECKPOINT), STATE['folder'], STATE['model'], 6000)
+        prev = core.load_checkpoint(os.path.join(WORK, CHECKPOINT), STATE['folder'], STATE['model'], MAX_CHARS3)
         return {'reusable': len(prev)}
     except Exception:
         return {'reusable': 0}
 
 
+def _files_with_units():
+    return [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mtime': f.get('mtime', ''), 'units': _units.get(f['file'], [])} for f in STATE['files']]
+
+
 def make_plan():
-    only = None
-    if STATE['recent_years']:
-        lim = datetime.date.today().year - STATE['recent_years']
-        only = {f['file'] for f in STATE['files'] if f.get('year') is None or f['year'] >= lim}
-    files = [dict(f, units=[]) for f in STATE['files']]
-    return core.plan_load(files, include_tables=STATE['include_tables'], avg_sec=STATE['avg_sec'], only_files=only, max_calls_per_file=int(STATE.get('max_calls') or 3), skip_reference=bool(STATE.get('skip_reference', True)))
+    """문서 단위 계획(v3): 기간 안 문서·현안 후보·반복 업무·모델 호출 수. 글자가 아직 안 읽혔으면(되읽기 중) 이름·수정일만으로 센다."""
+    return docs.plan_summary(_files_with_units(), STATE.get('areas') or core.DEFAULT_AREAS, int(STATE.get('months') or 12), STATE.get('model_scope') or 'issues', avg_sec=STATE['avg_sec'])
 
 
 def run_draft():
-    files = [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'units': _units.get(f['file'], [])} for f in STATE['files']]
-    plan = make_plan()
-    only = {r['file'] for r in plan['rows'] if r['to_model']}
+    files = _files_with_units()
     t0 = time.time()
 
     def progress(p):
@@ -155,37 +159,20 @@ def run_draft():
             STATE['progress'] = dict(p, sec=round(time.time() - t0))
 
     try:
-        draft, dropped, calls, errors = core.build_draft(files, STATE['model'] or 'none', STATE['url'], '', 6000, include_tables=STATE['include_tables'],
-                                                         only_files=only, progress=progress, should_stop=lambda: STATE['stop'], max_calls_per_file=int(STATE.get('max_calls') or 3), skip_reference=bool(STATE.get('skip_reference', True)),
-                                                         checkpoint=os.path.join(WORK, CHECKPOINT), folder=STATE['folder'])
+        items, calls, errors, info = docs.build_docs(files, STATE.get('areas') or core.DEFAULT_AREAS, int(STATE.get('months') or 12), STATE['model'] or 'none', STATE['url'], '',
+                                                      STATE.get('model_scope') or 'issues', MAX_CHARS3, progress=progress, should_stop=lambda: STATE['stop'],
+                                                      checkpoint=os.path.join(WORK, CHECKPOINT), folder=STATE['folder'], prev_items=STATE['items'])
         n_reused = sum(1 for c in calls if c.get('reused'))
         if n_reused:
             log('이전 회차의 모델 응답 %d회를 다시 부르지 않고 재사용' % n_reused)
-        try:   # 묶기 전 초안을 먼저 남긴다(묶기 도중 끊겨도 잃지 않게). 저장이 실패해도 초안은 계속 간다.
-            with open(os.path.join(WORK, '초안_원본_최근.json'), 'w', encoding='utf-8', errors='replace') as f:
-                json.dump({'folder': STATE['folder'], 'model': STATE['model'], 'draft': draft, 'dropped': dropped, 'calls': calls, 'errors': errors}, f, ensure_ascii=False)
-        except Exception as e:
-            log('묶기 전 초안 저장 실패(초안은 계속 진행): %s' % str(e)[:120])
         with LOCK:
-            STATE['progress'] = dict(STATE['progress'] or {}, phase='같은 내용 묶는 중', sec=round(time.time() - t0))
-        try:
-            draft = core.merge_similar(draft, progress=lambda p: progress(dict(STATE['progress'] or {}, **p)))
-        except Exception as e:   # 묶기가 실패하면 묶지 않은 채로 검토 화면을 연다
-            log('같은 내용 묶기 실패(묶지 않고 엽니다): %s' % str(e)[:120])
-            for d in draft:
-                d.setdefault('also', [])
-        with LOCK:
-            n = 0
-            for d in draft:
-                n += 1; d['id'] = n; d['keep'] = True; d['note'] = ''
-            for d in dropped:
-                n += 1; d['id'] = n; d['keep'] = False; d['note'] = ''
-            core.tag_items(draft, STATE.get('areas') or core.DEFAULT_AREAS, keep_manual=False); core.tag_items(dropped, STATE.get('areas') or core.DEFAULT_AREAS, keep_manual=False)
-            STATE['items'], STATE['dropped'], STATE['calls'], STATE['errors'] = draft, dropped, calls, errors
+            STATE['items'], STATE['dropped'], STATE['calls'], STATE['errors'], STATE['info'] = items, [], calls, errors, info
+            STATE['progress'] = dict(STATE['progress'] or {}, index=len(items), total=len(items), calls_done=len(calls), calls_total=len(calls), sec=round(time.time() - t0), stopped=info.get('stopped', False))
             if calls:
                 STATE['avg_sec'] = round(sum(c['sec'] for c in calls) / len(calls), 1)
             STATE['step'] = 4
-        log('초안 %d항목(규칙 %d·모델 %d, 같은 내용 %d건 묶음), 불확실 %d, 오류 %d, %.0f초' % (len(draft), sum(1 for d in draft if d['src'] == '규칙'), sum(1 for d in draft if d['src'] != '규칙'), sum(len(d.get('also', [])) for d in draft), len(dropped), len(errors), time.time() - t0))
+        log('초안 %d건(현안 %d·반복 %d·문서 %d, 기간 밖 %d, 붙임 %d) · 매뉴얼 %s(문서번호 %d개) · 모델 호출 %d · 오류 %d · %.0f초' % (
+            len(items), info['n_issue'], info['n_recur'], info['n_doc'], info['n_old'], info['n_attach'], info['manual'] or '없음', info['manual_refs'], len(calls), len(errors), time.time() - t0))
     except Exception as e:
         with LOCK:
             STATE['errors'] = [{'file': '', 'chunk': 0, 'reason': str(e)[:200]}]
@@ -313,12 +300,18 @@ class H(BaseHTTPRequestHandler):
                 st['work'] = WORK; st['version'] = VERSION
                 st['checkpoint'] = checkpoint_info()
                 st['extracting'] = STATE.get('extracting') if _extracting else None; st['extract_error'] = STATE.get('extract_error', '')
-                st['areas_text'] = core.areas_text(STATE.get('areas') or core.DEFAULT_AREAS)
+                st['areas_text'] = docs.areas_text(STATE.get('areas') or core.DEFAULT_AREAS)
                 st['n_skip'] = sum(1 for x in STATE['failures'] if x.get('skip')); st['n_fail'] = len(STATE['failures']) - st['n_skip']
             return self._send(200, st)
         if p.path == '/api/items':
             with LOCK:
                 return self._send(200, {'items': STATE['items'], 'dropped': STATE['dropped']})
+        if p.path == '/api/onnara':   # 온나라 붙여넣기용 절별 평문(현재 상태로 바로 만든다)
+            with LOCK:
+                session = {'items': STATE['items'], 'areas': STATE.get('areas') or core.DEFAULT_AREAS, 'overview': STATE.get('overview') or {}, 'assets': STATE.get('assets') or {},
+                           'info': STATE.get('info') or {}, 'months': STATE.get('months', 12), 'failures': STATE['failures'], 'handover_from': STATE.get('handover_from', ''),
+                           'handover_to': STATE.get('handover_to', ''), 'witness': STATE.get('witness', ''), 'handover_date': STATE.get('handover_date', ''), 'org': STATE.get('org', '')}
+            return self._send(200, {'sections': [{'name': n, 'text': t} for n, t in export.onnara_sections(session)]})
         if p.path == '/api/search':   # 물어보기(1안): 파일 이름·본문 검색. 모델 없이 즉시. 이 PC 안에서만.
             q = urllib.parse.parse_qs(p.query).get('q', [''])[0].strip().lower()
             if len(q) < 2:
@@ -390,12 +383,14 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:
-                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles'):
+                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org'):
                     if k in body:
                         STATE[k] = body[k]
                 if 'areas_text' in body:
-                    STATE['areas'] = core.parse_areas(body['areas_text']) or core.DEFAULT_AREAS
-                    core.tag_items(STATE['items'], STATE['areas']); core.tag_items(STATE['dropped'], STATE['areas'])
+                    STATE['areas'] = docs.parse_areas(body['areas_text']) or core.DEFAULT_AREAS
+                    for it in STATE['items']:
+                        if it.get('area_by') != '사람':
+                            it['area'] = docs.area_of(it.get('title', ''), '', STATE['areas'])
                 if 'url' in body:
                     if not core.is_local_url(str(body['url'])):
                         return self._send(400, {'error': '모델 주소는 127.0.0.1 또는 localhost만 허용합니다'})
@@ -412,7 +407,7 @@ class H(BaseHTTPRequestHandler):
             if not STATE['files']:
                 return self._send(400, {'error': '먼저 폴더를 읽어야 합니다'})
             with LOCK:
-                STATE['running'] = True; STATE['stop'] = False; STATE['step'] = 3; STATE['progress'] = {'index': 0, 'total': len(STATE['files']), 'calls_done': 0, 'calls_total': STATE['plan']['calls'], 'sec': 0}
+                STATE['running'] = True; STATE['stop'] = False; STATE['step'] = 3; STATE['progress'] = {'index': 0, 'total': (STATE['plan'] or {}).get('n_items', 0), 'calls_done': 0, 'calls_total': (STATE['plan'] or {}).get('calls', 0), 'sec': 0}
             threading.Thread(target=run_draft, daemon=True).start()
             return self._send(200, {'ok': True})
         if p == '/api/stop':
@@ -420,44 +415,45 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True})
         if p == '/api/items':
             with LOCK:
-                by_id = {it['id']: it for it in STATE['items'] + STATE['dropped']}
+                by_id = {it['id']: it for it in STATE['items']}
                 for ch in body.get('changes', []):
                     it = by_id.get(ch.get('id'))
                     if not it:
                         continue
-                    for k in ('keep', 'text', 'when', 'type', 'note', 'status', 'seen', 'next', 'decided'):
+                    for k in ('keep', 'decided', 'status', 'next', 'note', 'seen', 'due_next', 'summary', 'when'):
                         if k in ch:
                             it[k] = ch[k]
+                    for k in ('title', 'todo'):
+                        if k in ch:
+                            it[k] = str(ch[k]); it[k + '_by'] = '사람'
                     if 'area' in ch:
                         it['area'] = str(ch['area']); it['area_by'] = '사람'
-                    if 'text' in ch or 'when' in ch:
-                        it['cycle'] = core.cycle_of(it)
-                    if it in STATE['dropped'] and it.get('keep'):   # 불확실에서 되살림
-                        STATE['dropped'].remove(it); it['src'] = '모델(불확실→전임자 복원)'; STATE['items'].append(it)
+                    if 'kind3' in ch and ch['kind3'] in ('현안', '반복', '문서'):
+                        it['kind3'] = ch['kind3']
                 for b in body.get('bulk', []):          # 일괄: {'ids': [...], 'keep': true/false}
                     for i in b.get('ids', []):
                         it = by_id.get(i)
-                        if it is not None and it in STATE['items']:
+                        if it is not None:
                             it['keep'] = bool(b.get('keep')); it['decided'] = True
                 for new in body.get('add', []):
-                    nid = max([0] + [it['id'] for it in STATE['items'] + STATE['dropped']]) + 1
-                    rec = {'id': nid, 'file': '', 'type': new.get('type') if new.get('type') in core.TYPES else '진행 중 현안',
-                           'text': str(new.get('text', '')).strip(), 'when': str(new.get('when', '')).strip(), 'quote': '', 'grounded': True,
-                           'src': '직접 입력', 'keep': True, 'note': str(new.get('note', '')).strip()}
-                    core.tag_items([rec], STATE.get('areas') or core.DEFAULT_AREAS, keep_manual=False)
-                    if new.get('area'):
-                        rec['area'] = str(new['area']); rec['area_by'] = '사람'
+                    nid = max([0] + [it['id'] for it in STATE['items']]) + 1
+                    rec = {'id': nid, 'file': '', 'kind': '', 'cls': '직접 입력', 'date': str(new.get('date', '')).strip()[:10], 'docno': '', 'title': str(new.get('title', '')).strip()[:160],
+                           'area': str(new.get('area') or '기타'), 'area_by': '사람', 'due': [], 'due_next': str(new.get('due_next', '')).strip()[:10], 'contacts': [], 'recur': None, 'attachments': [],
+                           'kind3': new.get('kind3') if new.get('kind3') in ('현안', '반복', '문서') else '현안', 'reflected': '', 'summary': '', 'todo': str(new.get('todo', '')).strip()[:160], 'todo_by': '사람',
+                           'owner': '', 'model_status': '', 'src': '직접 입력', 'keep': True, 'decided': True, 'status': '진행', 'next': '', 'note': str(new.get('note', '')).strip(), 'seen': False, 'quote': '',
+                           'when': str(new.get('when', '')).strip()[:40]}
                     STATE['items'].append(rec)
             save_session()
-            return self._send(200, {'ok': True, 'items': STATE['items'], 'dropped': STATE['dropped']})
+            return self._send(200, {'ok': True, 'items': STATE['items'], 'dropped': []})
         if p == '/api/export':
-            if not STATE['items'] and not STATE['dropped']:
+            if not STATE['items']:
                 return self._send(400, {'error': '초안이 없습니다. ③ 초안 만들기를 먼저 하거나, 폴더를 다시 읽었다면 초안을 다시 만드세요(이전 초안은 작업 폴더의 초안_백업 파일에 있습니다)'})
             with LOCK:
                 session = {'folder': STATE['folder'], 'files': STATE['files'], 'failures': STATE['failures'], 'fingerprints': STATE['fingerprints'],
                            'items': STATE['items'], 'model': STATE['model'] or '없음(규칙층만)', 'title': STATE['title'] or '전임자 확인 후 확정', 'version': VERSION,
                            'overview': STATE.get('overview') or {}, 'assets': STATE.get('assets') or {}, 'keyfiles': STATE.get('keyfiles') or [], 'areas': STATE.get('areas') or core.DEFAULT_AREAS,
-                           'handover_from': STATE.get('handover_from', ''), 'handover_to': STATE.get('handover_to', '')}
+                           'handover_from': STATE.get('handover_from', ''), 'handover_to': STATE.get('handover_to', ''), 'witness': STATE.get('witness', ''), 'handover_date': STATE.get('handover_date', ''),
+                           'org': STATE.get('org', ''), 'months': STATE.get('months', 12), 'info': STATE.get('info') or {}}
             stem = '인수인계서_' + datetime.datetime.now().strftime('%Y%m%d_%H%M')
             paths = export.write_all(session, WORK, stem)
             with open(os.path.join(WORK, stem + '_원본지문.csv'), 'w', encoding='utf-8-sig', newline='') as f:

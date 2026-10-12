@@ -183,9 +183,9 @@ def parse_json_loose(s):
     return None
 
 
-def call_model(url, model, key, text, timeout=600, json_mode=True):
+def call_model(url, model, key, text, timeout=600, json_mode=True, system=None):
     body = {'model': model, 'temperature': 0, 'stream': False,
-            'messages': [{'role': 'system', 'content': SYS}, {'role': 'user', 'content': text}]}
+            'messages': [{'role': 'system', 'content': system or SYS}, {'role': 'user', 'content': text}]}
     if json_mode:
         body['response_format'] = {'type': 'json_object'}
     headers = {'Content-Type': 'application/json'}
@@ -197,7 +197,7 @@ def call_model(url, model, key, text, timeout=600, json_mode=True):
             j = json.loads(r.read().decode('utf-8'))
     except urllib.error.HTTPError as e:
         if json_mode and e.code >= 500:  # 젬마 2차에서 HTTP 500 2건: JSON 강제 없이 한 번 더
-            return call_model(url, model, key, text, timeout, json_mode=False)
+            return call_model(url, model, key, text, timeout, json_mode=False, system=system)
         raise
     c = (j.get('choices') or [{}])[0].get('message', {}).get('content') or j.get('message', {}).get('content') or ''
     return c, j.get('usage') or {}

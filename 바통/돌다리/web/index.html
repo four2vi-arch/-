@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>돌다리 · 업무 인수인계서</title>
+<title>돌다리 · 업무인계·인수서</title>
 <style>
 :root{--bg:#f4f5f7;--card:#fff;--ink:#1c2430;--ink2:#566273;--ink3:#8a94a3;--line:#dfe3ea;--line2:#eef0f4;--accent:#c8102e;--accent-ink:#fff;--accent-soft:#fdecef;--ok:#1f7a4d;--ok-bg:#e6f4ec;--warn:#8a5a00;--warn-bg:#fff3d1;--fail:#b3261e;--fail-bg:#fde7e5;--info:#2d4870;--info-bg:#e4eaf4;--tint:#f3f6fa;--shadow:0 1px 2px rgba(20,30,50,.06),0 4px 14px rgba(20,30,50,.05);--s:1}
 :root[data-theme=dark]{--bg:#12161c;--card:#1a2029;--ink:#e8ecf2;--ink2:#9aa6b6;--ink3:#7b8696;--line:#2c3542;--line2:#232b36;--accent:#ff5a6e;--accent-ink:#1a0a0d;--accent-soft:#3a1a20;--ok:#6fd39f;--ok-bg:#15342a;--warn:#f2c35b;--warn-bg:#3a2f12;--fail:#ff8a80;--fail-bg:#3f1c1a;--info:#9cbcea;--info-bg:#17233a;--tint:#202835;--shadow:none}
@@ -49,7 +49,7 @@ main h2{font-size:1.5rem;letter-spacing:-.02em;display:flex;align-items:center;g
 .sug{border:1px solid var(--line);border-left:4px solid var(--info);border-radius:10px;padding:10px 12px;margin:8px 0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;background:var(--card);box-shadow:var(--shadow)}
 .sug.me{border-left-color:var(--ok)}.sug.off{opacity:.5;border-left-color:var(--line)}
 .sug .t{font-weight:500;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.sug .t input.text{flex:1;min-width:220px;border:1px solid transparent;background:transparent;padding:3px 6px;border-radius:7px}
+.sug .t input.text{flex:1;min-width:200px;border:1px solid transparent;background:transparent;padding:3px 6px;border-radius:7px}
 .sug .t input.text:hover,.sug .t input.text:focus{border-color:var(--line);background:var(--card)}
 .sug .s{font-size:.84rem;color:var(--ink3);word-break:break-all}
 .sug .act{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end}
@@ -57,7 +57,10 @@ main h2{font-size:1.5rem;letter-spacing:-.02em;display:flex;align-items:center;g
 .sug .act button.y{border-color:var(--ok);color:var(--ok)}.sug .act button.n{color:var(--ink3)}
 .sug input.memo{width:100%;border:1px dashed var(--line);border-radius:7px;padding:4px 8px;font-size:.88rem;background:transparent}
 .sug select.mini,.sug input.when{padding:3px 6px;font-size:.84rem;border-radius:7px;border:1px solid var(--line);background:var(--card)}
-.sug input.when{width:120px}
+.sug input.when{width:130px}
+.copybar{display:flex;gap:8px;align-items:center;margin:4px 0 12px;font-size:.88rem;color:var(--ink3)}
+.mini-lbl{font-size:.8rem;color:var(--ink3)}
+.doc .d{color:var(--ink3);font-size:.84rem;font-family:Consolas,monospace}
 .chip{font-size:.78rem;padding:1px 8px;border-radius:999px;background:var(--line2);color:var(--ink2);white-space:nowrap}
 .chip.cy{background:var(--ok-bg);color:var(--ok)}.chip.st{background:var(--warn-bg);color:var(--warn)}
 .cal{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
@@ -107,10 +110,10 @@ table{border-collapse:collapse;width:100%;font-size:.92rem;margin:6px 0}th,td{bo
 <body>
 <div class="top">
   <div class="mark">돌</div>
-  <div><h1>돌다리 · 업무 인수인계서 <span id="ver" class="sub" style="font-size:.78rem"></span></h1><div class="sub" id="subline">전임자의 업무 폴더에서 후임자가 알아야 할 것을 업무별로 채웁니다 · 이 PC 안에서만 작동</div></div>
+  <div><h1>돌다리 · 업무인계·인수서 <span id="ver" class="sub" style="font-size:.78rem"></span></h1><div class="sub" id="subline">업무 폴더의 최근 문서를 한 건씩 정리해 법정 서식(별지 제12호)으로 채웁니다 · 이 PC 안에서만 작동</div></div>
   <div class="prog"><span id="progLbl">완성도 —</span><div class="bar"><i id="progBar"></i></div>
     <div class="seg" id="modeSeg" title="넘기는 사람은 넣고 고치고, 받는 사람은 확인합니다"><button data-m="give" class="on">넘기는 사람</button><button data-m="take">받는 사람</button></div>
-    <button class="ghost sm" id="fsdn" title="글자 작게">가−</button><button class="ghost sm" id="fsup" title="글자 크게">가＋</button><button class="ghost sm" id="thm" title="밝기">◐</button><button class="ghost sm" id="btnPrint">인쇄</button><button class="btn" id="btnExport">인수인계서 내려받기</button></div>
+    <button class="ghost sm" id="fsdn" title="글자 작게">가−</button><button class="ghost sm" id="fsup" title="글자 크게">가＋</button><button class="ghost sm" id="thm" title="밝기">◐</button><button class="ghost sm" id="btnPrint">인쇄</button><button class="btn" id="btnExport">인계·인수서 내려받기</button></div>
 </div>
 <div class="layout">
 <nav id="nav"></nav>

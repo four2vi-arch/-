@@ -12,7 +12,7 @@
       결과 폴더에 추출.json(파일별 글자·위치), 원본_지문.csv(처리 전후 SHA-256), 못읽은_파일.csv
 의존: olefile(BSD), pypdf(BSD), openpyxl(MIT). 나머지는 파이썬 표준 라이브러리. 재배포 제한 없음.
 """
-import os, sys, io, re, json, zlib, struct, hashlib, zipfile, csv, tempfile, email, email.policy
+import os, datetime, sys, io, re, json, zlib, struct, hashlib, zipfile, csv, tempfile, email, email.policy
 import warnings, logging
 warnings.filterwarnings('ignore')                      # openpyxl·pypdf의 서식·글꼴 경고는 검은 창에 찍지 않는다(못 읽은 파일은 따로 집계)
 for _n in ('pypdf', 'pypdf._reader', 'pypdf.generic', 'pypdf._cmap'):
@@ -538,7 +538,11 @@ def extract_file(path, rel, results, failures, depth=0):
             return
         for u in units:
             u['text'] = clean_text(u.get('text', '')); u['loc'] = clean_text(str(u.get('loc', '')))
-        results.append({'file': clean_text(rel), 'kind': ext[1:], 'chars': sum(len(u['text']) for u in units),
+        try:
+            mtime = datetime.date.fromtimestamp(os.path.getmtime(path)).isoformat()
+        except Exception:
+            mtime = ''
+        results.append({'file': clean_text(rel), 'kind': ext[1:], 'chars': sum(len(u['text']) for u in units), 'mtime': mtime,
                         'mchars': sum(len(u['loc']) + len(u['text']) + 3 for u in units) + max(0, len(units) - 1), 'units': units})
     except ValueError as e:
         failures.append({'file': clean_text(rel), 'reason': clean_text(str(e)[:160])})

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""돌다리 완전성 시험(10.11.s): 실제 폴더에서 일어난·일어날 만한 고장을 한꺼번에 넣고 끝까지 가는지 본다.
+"""돌다리 완전성 시험(v3, 10.13): 실제 폴더에서 일어난·일어날 만한 고장을 한꺼번에 넣고 끝까지 가는지 본다.
 실행: python robust_test.py [작업폴더]   (모델 서버 없이 가짜 함수로 돌린다. 수십 초.)
 
 넣는 고장:
@@ -14,7 +14,7 @@
 import os, sys, json, time, shutil, random, tempfile, csv
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
-import extract as EX, core, export
+import extract as EX, core, docs, export
 
 WORK = sys.argv[1] if len(sys.argv) > 1 else os.path.join(tempfile.gettempdir(), '돌다리_완전성시험')
 shutil.rmtree(WORK, ignore_errors=True)
@@ -65,7 +65,8 @@ for f in files:
 bad_text = '깨진😀글자\udcff'
 check('clean_text가 JSON에 쓸 수 있는 글자로 바꿈', json.dumps(EX.clean_text(bad_text), ensure_ascii=False).encode('utf-8') is not None)
 
-# ---------- 3. 모델 고장 흉내
+# ---------- 3. 모델 고장 흉내(문서 단위)
+AREAS = core.DEFAULT_AREAS
 calls_seen = {'n': 0}
 def fake_model(f):
     calls_seen['n'] += 1
@@ -73,70 +74,74 @@ def fake_model(f):
     if k == 1: return 'json 아님. 모델이 멋대로 쓴 글'
     if k == 2: return ''
     if k == 3: raise TimeoutError('timed out')
-    if k == 4: return '{"items": "문자열"}'
-    if k == 5: return '{"items": [{"type": "진행 중 현안", "text": "보류: 창구 전시 매대 교체 건은 본부 회신 대기 중", "quote": "보류: 창구 전시 매대 교체 건은 본부 회신 대기 중"}, 1, null, {"type": "협의할 사람", "text": "과장", "quote": "과장"}]}'
-    return json.dumps({'items': [{'type': '월별 할 일', 'text': '각 국 제출', 'when': '3월', 'quote': '3월 %s일까지 각 국 제출 바람.' % (f['file'][-9:-7].lstrip('0') or '0')}]}, ensure_ascii=False)
+    if k == 4: return '{"요지": ["목록"]}'
+    if k == 5: return '{"요지": "소포 접수 마감 변경", "할 일": "각 국 제출", "기한": "2099-01-01", "담당": "홍길동 010-9999-9999", "상태": "진행 중"}'   # 문서에 없는 기한·담당 → 걸러야
+    return json.dumps({'요지': '소포 접수 마감 변경 안내', '할 일': '기한까지 각 국 제출', '기한': '', '담당': '박세진 010-0000-0303', '상태': '진행 중'}, ensure_ascii=False)
 t0 = time.time()
-draft, dropped, calls, errors = core.build_draft(files, 'fake', fake=fake_model, include_tables=False)
-check('모델이 JSON 아님·빈 글·예외·엉뚱한 구조를 줘도 끝까지 감', True, '초안 %d · 불확실 %d · 호출 %d · 오류 %d · %.1f초' % (len(draft), len(dropped), len(calls), len(errors), time.time() - t0))
-check('표 파일 연락처는 30건 + 알림 1줄로 막힘', 30 <= sum(1 for d in draft if d['file'].endswith('고객명단_2000.csv') and d['type'] == '협의할 사람') <= 31)
-check('깨진 글자가 든 항목도 JSON으로 저장됨', json.dumps(draft, ensure_ascii=False).encode('utf-8') is not None)
+items, calls, errors, info = docs.build_docs(files, AREAS, months=12, model='fake', fake=fake_model, model_scope='all', today=__import__('datetime').date(2026, 4, 1))
+check('모델이 JSON 아님·빈 글·예외·엉뚱한 구조를 줘도 끝까지 감', True, '항목 %d · 호출 %d · 오류 %d · %.1f초' % (len(items), len(calls), len(errors), time.time() - t0))
+check('문서 한 건 = 항목 한 개(읽은 파일보다 많지 않음)', 0 < len(items) <= len(files), '%d / %d' % (len(items), len(files)))
+check('문서에 없는 기한·담당은 싣지 않음', not any(i['due_next'] == '2099-01-01' for i in items) and not any('홍길동' in (i.get('owner') or '') for i in items))
+check('문서에 있는 담당은 실림', any('박세진' in (i.get('owner') or '') for i in items))
+check('표 파일은 항목이 되지 않음(명단 2,000행 csv)', not any(i['file'].endswith('고객명단_2000.csv') for i in items))
+check('깨진 글자가 든 항목도 JSON으로 저장됨', json.dumps(items, ensure_ascii=False).encode('utf-8') is not None)
 
-# 연속 접속 실패 → 모델 포기, 규칙은 남김
-def dead_model(f):
-    raise ConnectionRefusedError('[WinError 10061] 대상 컴퓨터에서 연결을 거부')
-d2, _, c2, e2 = core.build_draft(files, 'fake', fake=None, include_tables=False, url='http://127.0.0.1:1/v1/chat/completions', max_consecutive_failures=5)
-check('모델 서버가 죽어 있으면 5회 뒤 포기하고 규칙 항목은 남음', len(c2) == 5 and any('연속 응답하지' in e['reason'] for e in e2) and sum(1 for d in d2 if d['src'] == '규칙') > 50, '호출 %d · 규칙 %d' % (len(c2), sum(1 for d in d2 if d['src'] == '규칙')))
+# 연속 접속 실패 → 모델 포기, 규칙 항목은 남김
+d2, c2, e2, _ = docs.build_docs(files, AREAS, months=12, model='fake-dead', url='http://127.0.0.1:1/v1/chat/completions', model_scope='all', max_consecutive_failures=5, today=__import__('datetime').date(2026, 4, 1))
+check('모델 서버가 죽어 있으면 5회 뒤 포기하고 규칙 항목은 남음', len(c2) == 5 and any('연속 응답하지' in e['reason'] for e in e2) and len(d2) == len(items), '호출 %d · 항목 %d' % (len(c2), len(d2)))
 
-# ---------- 4. 이어하기(체크포인트): 7번째 호출에서 프로세스가 죽었다고 치고 다시 시작
+# ---------- 4. 이어하기(체크포인트): 8번째 호출에서 프로세스가 죽었다고 치고 다시 시작
 ck = os.path.join(WORK, '모델응답_이어하기.jsonl')
-import urllib.request
 real_call = core.call_model
 state = {'n': 0}
-def flaky_call(url, model, key, text, timeout=600, json_mode=True):
+def flaky_call(url, model, key, text, timeout=600, json_mode=True, system=None):
     state['n'] += 1
     if state['n'] == 8:
         raise SystemExit('프로세스 죽음 흉내')
-    return json.dumps({'items': [{'type': '월별 할 일', 'text': '제출', 'when': '3월', 'quote': '각 국 제출 바람.'}]}, ensure_ascii=False), {}
+    return json.dumps({'요지': '제출 안내', '할 일': '각 국 제출', '기한': '', '담당': '', '상태': '진행 중'}, ensure_ascii=False), {}
 core.call_model = flaky_call
+TD = __import__('datetime').date(2026, 4, 1)
 try:
-    core.build_draft(files, 'gemma3:4b', include_tables=False, checkpoint=ck, folder=SRC, max_calls_per_file=1)
+    docs.build_docs(files, AREAS, months=12, model='gemma3:4b', model_scope='all', checkpoint=ck, folder=SRC, today=TD)
     check('죽음 흉내가 실제로 났어야 함', False)
 except SystemExit:
     pass
 state['n'] = 0
-core.call_model = lambda *a, **k: (json.dumps({'items': []}), {})
-d3, _, c3, e3 = core.build_draft(files, 'gemma3:4b', include_tables=False, checkpoint=ck, folder=SRC, max_calls_per_file=1)
+core.call_model = lambda *a, **k: (json.dumps({'요지': ''}), {})
+d3, c3, e3, _ = docs.build_docs(files, AREAS, months=12, model='gemma3:4b', model_scope='all', checkpoint=ck, folder=SRC, today=TD)
 core.call_model = real_call
 check('죽은 뒤 다시 시작하면 이전 응답 7회를 재사용(다시 부르지 않음)', sum(1 for c in c3 if c.get('reused')) == 7, '재사용 %d / 호출 %d' % (sum(1 for c in c3 if c.get('reused')), len(c3)))
-check('다른 모델이면 이전 응답을 쓰지 않음', core.load_checkpoint(ck, SRC, 'exaone3.5:7.8b', 6000) == {})
+check('다른 모델이면 이전 응답을 쓰지 않음', core.load_checkpoint(ck, SRC, 'exaone3.5:7.8b', 4000) == {})
 with open(ck, 'a', encoding='utf-8') as f:
     f.write('{이건 깨진 줄\n')
-n_ck = len(core.load_checkpoint(ck, SRC, 'gemma3:4b', 6000))
+n_ck = len(core.load_checkpoint(ck, SRC, 'gemma3:4b', 4000))
 check('이어하기 파일에 깨진 줄이 있어도 나머지는 읽힘(두 회차 호출 수와 같음)', n_ck == len(c3), '%d줄 / 호출 %d' % (n_ck, len(c3)))
 
-# ---------- 5. 수만 항목: 묶기·세션 저장·내보내기
-big = list(draft)
+# 다시 만들기: 사람이 정한 것은 파일 기준으로 남는다
+for it in d3[:3]:
+    it['decided'] = True; it['keep'] = False; it['note'] = '메모'; it['status'] = '미결'; it['next'] = '회신 대기'
+d4, _, _, _ = docs.build_docs(files, AREAS, months=12, prev_items=d3, today=TD)
+kept = {i['file']: i for i in d4}
+check('다시 만들어도 넣기·버리기·메모·상태가 파일 기준으로 남음', all(kept[it['file']]['keep'] is False and kept[it['file']]['note'] == '메모' and kept[it['file']]['status'] == '미결' for it in d3[:3]))
+
+# ---------- 5. 수만 항목: 세션 저장·내보내기
+big = list(items)
 for i in range(30000):
-    src = random.choice(draft)
-    big.append(dict(src, file='많은파일/%05d.txt' % i, text=src['text'] + ' %d' % random.randint(1, 99999)))
-t0 = time.time(); groups = core.merge_similar(big); t_merge = time.time() - t0
-check('3만 항목 같은 내용 묶기 60초 안', t_merge < 60, '%d → %d, %.1f초' % (len(big), len(groups), t_merge))
-n = 0
-for g in groups:
-    n += 1; g['id'] = n; g['keep'] = True; g['note'] = ''
-session = {'items': groups, 'dropped': dropped, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars']} for f in files], 'failures': failures,
-           'fingerprints': fps, 'folder': SRC, 'model': 'fake', 'title': '시험', 'version': 'test', 'errors': errors, 'calls': calls, 'exports': []}
+    src = random.choice(items)
+    big.append(dict(src, id=len(big) + 1, file='많은파일/%05d.txt' % i, title=src['title'] + ' %d' % random.randint(1, 99999), decided=True))
+session = {'items': big, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars']} for f in files], 'failures': failures,
+           'fingerprints': fps, 'folder': SRC, 'model': 'fake', 'title': '시험', 'version': 'test', 'errors': errors, 'calls': calls, 'exports': [], 'areas': AREAS, 'info': info, 'months': 12}
 t0 = time.time()
 with open(os.path.join(WORK, '세션.json'), 'w', encoding='utf-8', errors='replace') as f:
     json.dump(session, f, ensure_ascii=False)
 t_sess = time.time() - t0
 check('3만 항목 세션 저장(utf-8) 됨', True, '%.1f초 · %.1f MB' % (t_sess, os.path.getsize(os.path.join(WORK, '세션.json')) / 1e6))
 t0 = time.time(); outs = export.write_all(session, os.path.join(WORK, '결과'), '인수인계서_시험'); t_exp = time.time() - t0
-check('3만 항목 md·docx 내보내기 됨', all(os.path.exists(o) and os.path.getsize(o) > 1000 for o in outs), '%.1f초' % t_exp)
+check('3만 항목 md·docx·온나라 txt 내보내기 60초 안', all(os.path.exists(o) and os.path.getsize(o) > 1000 for o in outs) and t_exp < 60, '%.1f초' % t_exp)
 with open(outs[0], encoding='utf-8') as f:
     md = f.read()
-check('내보낸 md에 깨진 글자 없음(utf-8 재인코딩)', md.encode('utf-8') is not None and '�' in md or True)
+check('내보낸 md에 서식 차례', '### 가. 담당 업무' in md and '## 4. 그 밖의 참고사항' in md)
+t0 = time.time(); onn = export.onnara_sections(session); check('온나라 절별 글', len(onn) >= 7, '%.1f초' % (time.time() - t0))
 
 print('\n통과 %d · 실패 %d' % (len(ok), len(bad)))
 for b in bad:

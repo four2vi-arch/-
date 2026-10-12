@@ -5,7 +5,7 @@ import os, re, json, zipfile, datetime
 from xml.sax.saxutils import escape
 
 TYPES = ['월별 할 일', '협의할 사람', '진행 중 현안']
-CREDIT = '돌다리 v2.0(업무바통) · 이희재(정읍우체국)'
+CREDIT = '돌다리 v3.0(업무바통) · 이희재(정읍우체국)'
 
 
 def kept_items(session):
@@ -25,151 +25,148 @@ def header_lines(session):
     return ['작성 기준: %s · 돌다리 v%s' % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), session.get('version', '1.0')),
             '업무 폴더: %s' % session.get('folder', ''),
             '읽은 파일 %d개 · 못 읽은 문서 %d개 · 읽지 않는 형식(그림·프로그램 등) %d개 · 원본 변경 %d개(처리 전후 SHA-256 대조)' % (len(files), sum(1 for x in failures if not x.get('skip')), sum(1 for x in failures if x.get('skip')), changed),
-            '모델: %s · 규칙 항목 %d · 모델 항목 %d · 직접 적은 항목 %d' % (
-                session.get('model', '없음'),
+            '모델: %s · 문서 항목 %d(규칙만 %d · 모델 요지 %d · 직접 적음 %d)' % (
+                session.get('model', '없음'), len(kept_items(session)),
                 sum(1 for it in kept_items(session) if it.get('src') == '규칙'),
                 sum(1 for it in kept_items(session) if str(it.get('src', '')).startswith('모델')),
                 sum(1 for it in kept_items(session) if it.get('src') == '직접 입력'))]
 
 
-STANDING = ('매주', '매월', '분기', '반기', '매년')
+CLS_ORDER = ['공문', '메일', '회의록', '보고서·계획', '메모', '인수인계서', '규정·지침', '기타', '직접 입력']
+STATUS_LABEL = {'진행': '진행 중', '미결': '미결(회신·결정 대기)', '완료': '끝남'}
 
 
-def calendar_buckets(items):
-    """월별 할 일을 늘 하는 일 / 1~12월 / 시기 없음으로 나눈다(화면 「월별 일정표」와 같은 규칙)."""
-    todo = [it for it in items if it.get('type') == '월별 할 일']
-    standing = [it for it in todo if it.get('cycle') in STANDING]
-    months = {m: [] for m in range(1, 13)}
-    none = []
-    for it in todo:
-        if it in standing:
-            continue
-        m = month_key(it.get('when'))
-        (months[m] if 1 <= m <= 12 else none).append(it)
-    standing.sort(key=lambda it: STANDING.index(it.get('cycle')) if it.get('cycle') in STANDING else 99)
-    return standing, months, none
+def kept_docs(session):
+    return [it for it in session.get('items', []) if it.get('keep', True) and it.get('decided') is not False]
 
 
-def calendar_lines(items):
-    standing, months, none = calendar_buckets(items)
-    out = []
-    def row(it):
-        return '%s%s' % (('[%s] ' % it['when']) if it.get('when') else '', it.get('text', '')) + ((' (%s)' % it['area']) if it.get('area') else '')
-    if standing:
-        out += ['### 늘 하는 일(매주·매월·분기·반기·매년)', ''] + ['- %s · %s' % (it.get('cycle'), row(it)) for it in standing] + ['']
-    for m in range(1, 13):
-        if months[m]:
-            out += ['### %d월' % m, ''] + ['- ' + row(it) for it in months[m]] + ['']
-    if none:
-        out += ['### 시기 없음', ''] + ['- ' + row(it) for it in none] + ['']
-    return out
+def area_list(session, items):
+    areas = [a['name'] for a in (session.get('areas') or [])] + ['기타']
+    return [a for a in areas if any((it.get('area') or '기타') == a for it in items)]
 
 
-STATUS_LABEL = {'진행': '진행 중', '대기': '회신·결정 대기', '완료': '끝남'}
+def doc_line(it):
+    """[2026-02-01] 제목 (우편영업과-658)"""
+    return '%s%s%s' % (('[%s] ' % it['date']) if it.get('date') else '', it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '')
+
+
+def src_line(it):
+    if not it.get('file'):
+        return '출처: 전임자가 직접 적음'
+    return '파일: %s%s' % (it['file'], (' · 붙임 %d개' % len(it['attachments'])) if it.get('attachments') else '')
 
 
 def chapters(session):
-    """인수인계서 여덟 절. (종류, 글) 목록. 종류: h1·h2·h3·p·li·sub.
-    1 업무 현황 → 2 주요 현안 및 미결 사항 → 3 연간 업무 일정 → 4 업무별 인수인계 사항 → 5 관계자 연락처 → 6 계정·물품·예산 → 7 주요 자료 목록 → 8 확인하지 못한 자료."""
+    """별지 제12호서식(행정업무의 운영 및 혁신에 관한 규정 시행규칙) 업무인계·인수서 차례.
+    1. 업무현황(가 담당 업무 / 나 주요 업무계획 및 진행사항 / 다 현안사항 및 문제점 / 라 주요 미결사항) → 2. 관련 문서 현황 → 3. 주요 물품 및 예산 등 → 4. 그 밖의 참고사항 → 붙임 확인하지 못한 자료.
+    (종류, 글) 목록. 종류: h1·h2·h3·p·li·sub."""
     out = []
-    items = [it for it in kept_items(session) if it.get('decided', True)]
+    items = kept_docs(session)
     overview = session.get('overview') or {}
     assets = session.get('assets') or {}
-    areas = [a['name'] for a in (session.get('areas') or [])] + ['기타']
-    used = [a for a in areas if any((it.get('area') or '기타') == a for it in items)]
-    def src(it):
-        if it.get('file'):
-            return '출처: %s · 「%s」' % (it['file'], str(it.get('quote', '')).replace('\n', ' / ')[:120]) + ((' · 같은 내용 %d곳' % len(it['also'])) if it.get('also') else '')
-        return '출처: 전임자가 직접 적음'
-    def person(it):
-        return it.get('text', '') + ((' — ' + it['note']) if it.get('note') else '')
-    out.append(('h1', '1. 업무 현황'))
-    if session.get('handover_from') or session.get('handover_to'):
-        out.append(('p', '인계자: %s · 인수자: %s' % (session.get('handover_from') or '', session.get('handover_to') or '')))
+    info = session.get('info') or {}
+    used = area_list(session, items)
+    issues = [it for it in items if it.get('kind3') == '현안']
+    recur = [it for it in items if it.get('kind3') == '반복' or (it.get('kind3') == '현안' and it.get('recur'))]
+    out.append(('h1', '1. 업무현황'))
+    out.append(('h2', '가. 담당 업무'))
     for a in used:
         rows = [it for it in items if (it.get('area') or '기타') == a]
-        n = lambda t: sum(1 for it in rows if it.get('type') == t)
-        out.append(('li', '%s — 할 일 %d · 현안 %d · 연락처 %d' % (a, n('월별 할 일'), n('진행 중 현안'), n('협의할 사람'))))
         ov = overview.get(a) or {}
-        if isinstance(ov, dict) and ov.get('q1'):
-            out.append(('sub', '처음 한 달에 꼭: ' + ov['q1']))
-    issues = [it for it in items if it.get('type') == '진행 중 현안']
-    out.append(('h1', '2. 주요 현안 및 미결 사항'))
-    if not issues:
+        desc = (ov.get('desc') or '').strip() if isinstance(ov, dict) else str(ov)
+        out.append(('li', '%s — %s' % (a, desc or '(설명을 적지 않음) 문서 %d건' % len(rows))))
+        if isinstance(ov, dict) and (ov.get('tip') or '').strip():
+            out.append(('sub', '조심할 것: ' + ov['tip'].strip()))
+    out.append(('h2', '나. 주요 업무계획 및 진행사항'))
+    out.append(('p', '해마다·정기적으로 오는 업무(최근 %d개월 문서와 지난 3년 파일 날짜로 찾음). 달은 가장 최근 문서의 달.' % int(session.get('months') or 12)))
+    if not recur:
         out.append(('p', '(없음)'))
-    for a in used:
-        rows = [it for it in issues if (it.get('area') or '기타') == a]
-        if not rows:
-            continue
-        out.append(('h2', a))
-        for it in rows:
-            out.append(('li', '[%s] %s' % (STATUS_LABEL.get(it.get('status') or '진행', '진행 중'), it.get('text', ''))))
-            if it.get('next'):
-                out.append(('sub', '다음에 할 일: ' + it['next']))
+    months = {m: [] for m in range(1, 13)}
+    for it in recur:
+        m = (it.get('recur') or {}).get('month') or (int(it['date'][5:7]) if it.get('date') else 0)
+        months.setdefault(m if 1 <= m <= 12 else 0, []).append(it)
+    for m in range(1, 13):
+        for it in months[m]:
+            r = it.get('recur') or {}
+            out.append(('li', '%d월 · %s%s' % (m, it.get('title', ''), (' (%s년 %d회)' % ('·'.join(r['years']), r['n'])) if r.get('years') else '')))
+            if it.get('todo'):
+                out.append(('sub', '할 일: ' + it['todo']))
             if it.get('note'):
                 out.append(('sub', '메모: ' + it['note']))
-            out.append(('sub', src(it)))
-    cal = calendar_lines(items)
-    out.append(('h1', '3. 연간 업무 일정'))
-    if cal:
-        for l in cal:
-            if l.startswith('### '):
-                out.append(('h3', l[4:]))
-            elif l.startswith('- '):
-                out.append(('li', l[2:]))
-    else:
+            out.append(('sub', src_line(it)))
+    for it in months.get(0, []):
+        out.append(('li', it.get('title', ''))); out.append(('sub', src_line(it)))
+    out.append(('h2', '다. 현안사항 및 문제점'))
+    cur = [it for it in issues if (it.get('status') or '진행') != '미결']
+    if not cur:
         out.append(('p', '(없음)'))
-    out.append(('h1', '4. 업무별 인수인계 사항'))
-    QS = [('q1', '처음 한 달 안에 꼭 해야 하는 것'), ('q2', '자주 틀리거나 조심할 것'), ('q3', '이 일로 연락 오는 사람과 이유')]
     for a in used:
-        rows = [it for it in items if (it.get('area') or '기타') == a]
-        out.append(('h2', a))
-        ov = overview.get(a) or {}
-        if not isinstance(ov, dict):
-            ov = {'q1': str(ov)}
-        for k, label in QS:
-            out.append(('p', '%s: %s' % (label, ov.get(k) or '(적지 않음)')))
-        standing, months, none = calendar_buckets(rows)
-        if standing or any(months.values()) or none:
-            out.append(('h3', '이 업무의 달력'))
-            for it in standing:
-                out.append(('li', '%s · %s' % (it.get('cycle'), it.get('text', '')))); out.append(('sub', src(it)))
-            for m in range(1, 13):
-                for it in months[m]:
-                    out.append(('li', '[%s] %s' % (it.get('when'), it.get('text', '')))); out.append(('sub', src(it)))
-            for it in none:
-                out.append(('li', it.get('text', ''))); out.append(('sub', src(it)))
-        people = [it for it in rows if it.get('type') == '협의할 사람']
-        if people:
-            out.append(('h3', '연락할 사람'))
-            for it in people:
-                out.append(('li', person(it))); out.append(('sub', src(it)))
-    people = [it for it in items if it.get('type') == '협의할 사람']
-    out.append(('h1', '5. 관계자 연락처'))
-    if not people:
+        rows = [it for it in cur if (it.get('area') or '기타') == a]
+        if not rows:
+            continue
+        out.append(('h3', a))
+        for it in rows:
+            out.append(('li', '[%s] %s%s' % (STATUS_LABEL.get(it.get('status') or '진행', '진행 중'), doc_line(it), (' · 기한 %s' % it['due_next']) if it.get('due_next') else '')))
+            if it.get('summary'):
+                out.append(('sub', '요지: ' + it['summary']))
+            if it.get('todo'):
+                out.append(('sub', '할 일: ' + it['todo']))
+            if it.get('next'):
+                out.append(('sub', '다음에 할 일: ' + it['next']))
+            if it.get('owner'):
+                out.append(('sub', '담당: ' + it['owner']))
+            if it.get('note'):
+                out.append(('sub', '메모: ' + it['note']))
+            out.append(('sub', src_line(it)))
+    out.append(('h2', '라. 주요 미결사항'))
+    pend = [it for it in issues if (it.get('status') or '진행') == '미결']
+    if not pend:
         out.append(('p', '(없음)'))
-    for it in people:
-        out.append(('li', '%s · %s' % (it.get('area') or '기타', person(it))))
-    out.append(('h1', '6. 계정·물품·예산 등 인계 물품'))
+    for it in pend:
+        out.append(('li', '%s · %s%s' % (it.get('area') or '기타', doc_line(it), (' · 기한 %s' % it['due_next']) if it.get('due_next') else '')))
+        if it.get('next'):
+            out.append(('sub', '다음에 할 일: ' + it['next']))
+        if it.get('note'):
+            out.append(('sub', '메모: ' + it['note']))
+        out.append(('sub', src_line(it)))
+    out.append(('h1', '2. 관련 문서 현황'))
+    out.append(('p', '최근 %d개월 문서 %d건(업무별 기간을 달리 둔 곳은 그 기간). 그 이전 문서 %d건은 폴더에 그대로 있다.%s' % (
+        int(session.get('months') or 12), len(items), info.get('n_old', 0),
+        (' 누적 매뉴얼 「%s」에 아직 반영되지 않은 공문 %d건은 ★로 표시.' % (info['manual'], info.get('n_unreflected', 0))) if info.get('manual') else '')))
+    for a in used:
+        rows = sorted([it for it in items if (it.get('area') or '기타') == a], key=lambda it: it.get('date') or '', reverse=True)
+        out.append(('h2', '%s (%d건)' % (a, len(rows))))
+        for it in rows:
+            star = '★ ' if (info.get('manual') and it.get('cls') == '공문' and not it.get('reflected')) else ''
+            out.append(('li', '%s%s · %s' % (star, doc_line(it), it.get('cls', ''))))
+            out.append(('sub', src_line(it)))
+    out.append(('h1', '3. 주요 물품 및 예산 등'))
     AS = [('acct', '계정·비밀번호 보관처'), ('goods', '열쇠·물품·비품'), ('budget', '예산·미지급·정산'), ('etc', '그 밖의 당부')]
     for k, label in AS:
         out.append(('p', '%s: %s' % (label, assets.get(k) or '(적지 않음)')))
-    out.append(('h1', '7. 주요 자료 목록'))
-    keyfiles = session.get('keyfiles') or []
-    files = {}
+    out.append(('h1', '4. 그 밖의 참고사항'))
+    out.append(('h2', '관계자 연락처'))
+    seen, people = set(), []
     for it in items:
-        if it.get('file'):
-            files[it['file']] = files.get(it['file'], 0) + 1
-        for al in it.get('also', []):
-            files[al['file']] = files.get(al['file'], 0) + 1
-    listed = keyfiles or [f for f, n in sorted(files.items(), key=lambda x: -x[1])[:15]]
-    if not listed:
+        for c in it.get('contacts') or []:
+            if c['phone'] in seen:
+                continue
+            seen.add(c['phone']); people.append((it.get('area') or '기타', c, it))
+    if not people:
         out.append(('p', '(없음)'))
-    for f in listed:
-        out.append(('li', '%s (항목 %d개의 출처)' % (f, files.get(f, 0))))
+    for a in used:
+        rows = [p for p in people if p[0] == a]
+        if not rows:
+            continue
+        out.append(('h3', a))
+        for _, c, it in rows:
+            out.append(('li', '%s · %s · %s' % (c['name'], c['phone'], c['line'][:60]))); out.append(('sub', '문서: ' + it.get('title', '')))
+    if info.get('manual'):
+        out.append(('h2', '누적 업무 매뉴얼'))
+        out.append(('p', '%s (문서번호 %d개 반영). 위 2절의 ★ 공문은 매뉴얼에 아직 들어가지 않았으니 후임자가 해당 절에 반영할 것.' % (info['manual'], info.get('manual_refs', 0))))
     failures = [x for x in session.get('failures', []) if not x.get('skip')]
     skipped = [x for x in session.get('failures', []) if x.get('skip')]
-    out.append(('h1', '8. 확인하지 못한 자료(후임자가 직접 열어 볼 것)'))
+    out.append(('h1', '붙임. 확인하지 못한 자료(후임자가 직접 열어 볼 것)'))
     for x in failures:
         out.append(('li', '%s: %s' % (x['file'], x['reason'])))
     if skipped:
@@ -179,9 +176,14 @@ def chapters(session):
     return out
 
 
+def head_block(session):
+    return ['인계자: %s · 인수자: %s · 입회자: %s · 일자: %s · 소속: %s' % (session.get('handover_from') or '', session.get('handover_to') or '', session.get('witness') or '',
+                                                            session.get('handover_date') or datetime.date.today().isoformat(), session.get('org') or '')]
+
+
 def to_markdown(session):
-    out = ['# 업무 인수인계서(%s)' % session.get('title', '전임자 확인 후 확정'), '']
-    out += ['- ' + l for l in header_lines(session)] + ['']
+    out = ['# 업무인계·인수서(%s)' % session.get('title', '전임자 확인 후 확정'), '']
+    out += ['- ' + l for l in head_block(session) + header_lines(session)] + ['']
     for kind, text in chapters(session):
         if kind == 'h1': out += ['', '## ' + text, '']
         elif kind == 'h2': out += ['', '### ' + text, '']
@@ -189,7 +191,37 @@ def to_markdown(session):
         elif kind == 'p': out.append(text)
         elif kind == 'li': out.append('- ' + text)
         elif kind == 'sub': out.append('  - ' + text)
-    out += ['', '---', '%s · 항목마다 출처 파일과 원문 발췌를 붙였고, 원문에서 확인되지 않은 항목은 싣지 않았다. 원본 파일은 읽기만 했다.' % CREDIT]
+    out += ['', '---', '%s · 문서마다 출처 파일을 붙였고, 문서에서 확인되지 않은 내용은 싣지 않았다. 원본 파일은 읽기만 했다.' % CREDIT]
+    return '\n'.join(out) + '\n'
+
+
+def onnara_sections(session):
+    """온나라·e-사람 인계서 입력 칸에 붙여 넣을 글. 서식의 칸(1-가·나·다·라, 2, 3, 4)마다 평문 한 덩이."""
+    secs, cur, buf = [], None, []
+    def flush():
+        if cur is not None:
+            secs.append((cur, '\n'.join(buf).strip()))
+    for kind, text in chapters(session):
+        if kind in ('h1', 'h2') and not (kind == 'h2' and cur is not None and cur.startswith('4.') and not text.startswith(('가.', '나.', '다.', '라.'))):
+            if kind == 'h1' and text.startswith('1.'):
+                continue   # 1.은 가·나·다·라로 나뉜다
+            flush(); cur, buf = text, []
+        elif kind == 'h3':
+            buf.append('[%s]' % text)
+        elif kind == 'p':
+            buf.append(text)
+        elif kind == 'li':
+            buf.append('○ ' + text)
+        elif kind == 'sub':
+            buf.append('   - ' + text)
+    flush()
+    return secs
+
+
+def to_onnara_txt(session):
+    out = ['업무인계·인수서 — 온나라 붙여넣기용', head_block(session)[0], '']
+    for name, body in onnara_sections(session):
+        out += ['=' * 8 + ' ' + name + ' ' + '=' * 8, body, '']
     return '\n'.join(out) + '\n'
 
 
@@ -217,8 +249,8 @@ def _p(text, style=None, size=None, color=None, bold=False, indent=0):
 
 
 def to_docx(session, path):
-    body = [_p('업무 인수인계서(%s)' % session.get('title', '전임자 확인 후 확정'), style='Title')]
-    for l in header_lines(session):
+    body = [_p('업무인계·인수서(%s)' % session.get('title', '전임자 확인 후 확정'), style='Title')]
+    for l in head_block(session) + header_lines(session):
         body.append(_p(l, size=10.5, color='555555'))
     for kind, text in chapters(session):
         if kind == 'h1': body.append(_p(text, style='Heading1'))
@@ -227,7 +259,7 @@ def to_docx(session, path):
         elif kind == 'p': body.append(_p(text))
         elif kind == 'li': body.append(_p('• ' + text, indent=360))
         elif kind == 'sub': body.append(_p(text, size=10, color='666666', indent=720))
-    body.append(_p(CREDIT + ' · 항목마다 출처 파일과 원문 발췌를 붙였고, 원문에서 확인되지 않은 항목은 싣지 않았다. 원본 파일은 읽기만 했다.', size=9.5, color='888888'))
+    body.append(_p(CREDIT + ' · 문서마다 출처 파일을 붙였고, 문서에서 확인되지 않은 내용은 싣지 않았다. 원본 파일은 읽기만 했다.', size=9.5, color='888888'))
     W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     document = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 '<w:document xmlns:w="%s"><w:body>%s<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
@@ -271,4 +303,7 @@ def write_all(session, out_dir, stem='인수인계서'):
     with open(md, 'w', encoding='utf-8') as f:
         f.write(to_markdown(session))
     docx = to_docx(session, os.path.join(out_dir, stem + '.docx'))
-    return [md, docx]
+    txt = os.path.join(out_dir, stem + '_온나라.txt')
+    with open(txt, 'w', encoding='utf-8') as f:
+        f.write(to_onnara_txt(session))
+    return [md, docx, txt]
