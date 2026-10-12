@@ -15,7 +15,7 @@ import core
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '2.0 (2026-10-12)'
+VERSION = '2.0.2 (2026-10-12)'
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문)?\.(md|docx|csv)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
@@ -50,8 +50,14 @@ def _reload_units():
     try:
         files, _, _ = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | set(STATE.get('exclude', [])), skip_names=SKIP_NAMES)
         if STATE['folder'] == folder:   # 되읽는 사이에 다른 폴더를 읽었으면 버린다
+            mc = {}
             for f in files:
-                _units[f['file'].replace('\\', '/')] = f['units']
+                _units[f['file'].replace('\\', '/')] = f['units']; mc[f['file'].replace('\\', '/')] = f.get('mchars', f['chars'])
+            with LOCK:
+                for f in STATE['files']:
+                    if f['file'] in mc and not f.get('mchars'):
+                        f['mchars'] = mc[f['file']]
+                STATE['plan'] = make_plan()   # 옛 세션은 모델에 보내는 길이를 몰라 호출 수가 적게 잡혔던 것을 바로잡는다
         log('이전 폴더 되읽기 끝: %d개, %.0f초' % (len(files), time.time() - t0))
     except Exception as e:
         log('이전 폴더 되읽기 실패(다시 「읽기」를 누르세요): %s' % e)
@@ -113,7 +119,7 @@ def do_extract(folder, exclude=None):
     for x in failures + fps:
         x['file'] = x['file'].replace('\\', '/')
     with LOCK:
-        STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'year': year_of(f)} for f in files],
+        STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mchars': f.get('mchars', f['chars']), 'year': year_of(f)} for f in files],
                       'failures': failures, 'fingerprints': fps, 'items': [], 'dropped': [], 'errors': [], 'calls': [], 'exports': [], 'step': 2, 'progress': None})
         STATE['plan'] = make_plan()
     log('추출 %.1f초: 읽음 %d · 못 읽음 %d · 원본 변경 %d' % (time.time() - t0, len(files), len(failures), sum(1 for x in fps if not x['unchanged'])))

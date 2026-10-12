@@ -538,7 +538,8 @@ def extract_file(path, rel, results, failures, depth=0):
             return
         for u in units:
             u['text'] = clean_text(u.get('text', '')); u['loc'] = clean_text(str(u.get('loc', '')))
-        results.append({'file': clean_text(rel), 'kind': ext[1:], 'chars': sum(len(u['text']) for u in units), 'units': units})
+        results.append({'file': clean_text(rel), 'kind': ext[1:], 'chars': sum(len(u['text']) for u in units),
+                        'mchars': sum(len(u['loc']) + len(u['text']) + 3 for u in units) + max(0, len(units) - 1), 'units': units})
     except ValueError as e:
         failures.append({'file': clean_text(rel), 'reason': clean_text(str(e)[:160])})
     except Exception as e:

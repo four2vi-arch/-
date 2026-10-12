@@ -370,6 +370,18 @@ def merge_similar(draft, progress=None, time_budget=180, bucket_cap=400):
 
 
 # ---------------------------------------------------------------- 부하 계획·초안 만들기(화면·실측 공용)
+def model_text(units):
+    """모델에 보내는 글자 그대로(위치 표시 포함). 호출 수 계산과 토막 나누기가 같은 길이를 쓰도록 한 곳에 둔다."""
+    return '\n'.join('[%s] %s' % (u['loc'], u['text']) for u in units)
+
+
+def model_chars(f):
+    """plan_load·진행률이 쓰는 글자 수. units가 있으면 model_text 길이, 없으면 추출 때 적어 둔 mchars, 그것도 없으면 본문 글자 수."""
+    if f.get('units'):
+        return len(model_text(f['units']))
+    return f.get('mchars') or f.get('chars', 0)
+
+
 def plan_load(files, max_chars=6000, include_tables=False, avg_sec=22.0, only_files=None, max_calls_per_file=3, skip_reference=True):
     """파일별 모델 호출 횟수와 예상 시간. 추출은 수 초 안이라 부하는 거의 모델 호출(호출당 avg_sec초; 모의 폴더 21~23초, 실제 긴 공문은 2분 넘기도 함).
     skip_reference: 지침·매뉴얼·길라잡이 같은 참고 문서는 모델에 보내지 않는다(길고, 할 일·담당은 규칙으로 충분히 잡힘)."""
@@ -380,8 +392,9 @@ def plan_load(files, max_chars=6000, include_tables=False, avg_sec=22.0, only_fi
             to_model = False
         if only_files is not None:
             to_model = to_model and f['file'] in only_files
-        calls = min(max_calls_per_file, max(1, math.ceil(f['chars'] / max_chars))) if to_model else 0  # 긴 파일은 앞부분 max_calls_per_file 토막까지만
-        rows.append({'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'calls': calls, 'to_model': to_model})
+        mc = model_chars(f)
+        calls = min(max_calls_per_file, max(1, math.ceil(mc / max_chars))) if to_model else 0  # 긴 파일은 앞부분 max_calls_per_file 토막까지만
+        rows.append({'file': f['file'], 'kind': f['kind'], 'chars': mc, 'calls': calls, 'to_model': to_model})
     n_calls = sum(r['calls'] for r in rows)
     return {'rows': rows, 'calls': n_calls, 'est_sec': round(n_calls * avg_sec), 'avg_sec': avg_sec,
             'files_model': sum(1 for r in rows if r['to_model']), 'files_rule_only': sum(1 for r in rows if not r['to_model'])}
@@ -471,7 +484,7 @@ def build_draft(files, model, url='http://127.0.0.1:11434/v1/chat/completions', 
                              for d in replay['draft'] + replay['dropped'] if d['file'] == f['file'] and d['src'].startswith('모델')]
                 chunks = ['(재채점)']
             else:
-                full = '\n'.join('[%s] %s' % (u['loc'], u['text']) for u in f['units'])
+                full = model_text(f['units'])
                 chunks = ([full[i:i + max_chars] for i in range(0, len(full), max_chars)] or [''])[:max_calls_per_file]
             for ci, chunk in enumerate(chunks):
                 if should_stop and should_stop():
