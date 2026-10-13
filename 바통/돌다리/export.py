@@ -77,6 +77,11 @@ def chapters(session):
         out.append(('li', '%s — %s' % (a, desc or '(설명을 적지 않음) 문서 %d건' % len(rows))))
         if isinstance(ov, dict) and (ov.get('tip') or '').strip():
             out.append(('sub', '조심할 것: ' + ov['tip'].strip()))
+        hist = sorted([it for it in rows if it.get('kind3') == '연혁' or it.get('hist')], key=lambda it: it.get('date') or '')
+        for it in hist:   # 연혁: 전환점 문서를 연도순으로
+            out.append(('sub', '연혁 %s · %s%s' % ((it.get('date') or '')[:7], it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '')))
+        for it in sorted([it for it in rows if it.get('kind3') == '현황'], key=lambda it: it.get('title', '')):
+            out.append(('sub', '현황 자료: %s (%s 기준) — %s' % (it.get('title', ''), it.get('date') or '날짜 없음', it.get('file', ''))))
     out.append(('h2', '나. 주요 업무계획 및 진행사항'))
     out.append(('p', '해마다·정기적으로 오는 업무(최근 %d개월 문서와 지난 3년 파일 날짜로 찾음). 달은 가장 최근 문서의 달.' % int(session.get('months') or 12)))
     if not recur:
@@ -138,7 +143,7 @@ def chapters(session):
         out.append(('h2', '%s (%d건)' % (a, len(rows))))
         for it in rows:
             star = '★ ' if (info.get('manual') and it.get('cls') == '공문' and not it.get('reflected')) else ''
-            out.append(('li', '%s%s · %s' % (star, doc_line(it), it.get('cls', ''))))
+            out.append(('li', '%s%s · %s%s' % (star, doc_line(it), it.get('cls', ''), {'연혁': ' · 연혁', '현황': ' · 현황 자료'}.get(it.get('kind3'), ''))))
             out.append(('sub', src_line(it)))
     out.append(('h1', '3. 주요 물품 및 예산 등'))
     AS = [('acct', '계정·비밀번호 보관처'), ('goods', '열쇠·물품·비품'), ('budget', '예산·미지급·정산'), ('etc', '그 밖의 당부')]
@@ -164,9 +169,23 @@ def chapters(session):
     if info.get('manual'):
         out.append(('h2', '누적 업무 매뉴얼'))
         out.append(('p', '%s (문서번호 %d개 반영). 위 2절의 ★ 공문은 매뉴얼에 아직 들어가지 않았으니 후임자가 해당 절에 반영할 것.' % (info['manual'], info.get('manual_refs', 0))))
+    old = info.get('docs_old') or []
+    out.append(('h1', '붙임 1. 참고 문서 목록(기간 밖, 업무·연도별)'))
+    out.append(('p', '최근 %d개월 밖의 문서 %d건. 연혁·현황으로 올린 것은 뺐다. 제목만 적었으니 필요하면 폴더에서 연 이름으로 찾는다.' % (int(session.get('months') or 12), len(old))))
+    for a in [a['name'] for a in (session.get('areas') or [])] + ['기타']:
+        rows = [d for d in old if (d.get('area') or '기타') == a]
+        if not rows:
+            continue
+        out.append(('h2', '%s (%d건)' % (a, len(rows))))
+        by_year = {}
+        for d in rows:
+            by_year.setdefault((d.get('date') or '')[:4] or '날짜 없음', []).append(d)
+        for y in sorted(by_year, reverse=True):
+            g = sorted(by_year[y], key=lambda d: d.get('date') or '', reverse=True)
+            out.append(('li', '%s년 %d건: %s%s' % (y, len(g), ' / '.join(d.get('title', '')[:40] for d in g[:15]), (' / 외 %d건' % (len(g) - 15)) if len(g) > 15 else '')))
     failures = [x for x in session.get('failures', []) if not x.get('skip')]
     skipped = [x for x in session.get('failures', []) if x.get('skip')]
-    out.append(('h1', '붙임. 확인하지 못한 자료(후임자가 직접 열어 볼 것)'))
+    out.append(('h1', '붙임 2. 확인하지 못한 자료(후임자가 직접 열어 볼 것)'))
     for x in failures:
         out.append(('li', '%s: %s' % (x['file'], x['reason'])))
     if skipped:
@@ -205,6 +224,8 @@ def onnara_sections(session):
         if kind in ('h1', 'h2') and not (kind == 'h2' and cur is not None and cur.startswith('4.') and not text.startswith(('가.', '나.', '다.', '라.'))):
             if kind == 'h1' and text.startswith('1.'):
                 continue   # 1.은 가·나·다·라로 나뉜다
+            if kind == 'h1' and text.startswith('붙임'):
+                flush(); cur = None; break   # 붙임 목록은 온나라 칸에 넣지 않는다
             flush(); cur, buf = text, []
         elif kind == 'h3':
             buf.append('[%s]' % text)

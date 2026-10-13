@@ -54,6 +54,8 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     const s2 = await state(); ok('인계자·인수자·입회자·일자·소속 저장', s2.handover_from === '갑돌' && s2.handover_to === '을순' && s2.witness === '병수' && s2.handover_date === '2026-02-20' && s2.org === '가온우체국 영업과');
     const firstArea = await page.$eval('#main input[data-ov="desc"]', el => el.dataset.a);
     await setVal('#main input[data-ov="desc"]', '설명 한 줄'); await sleep(300); await setVal('#main input[data-ov="tip"]', '조심할 것'); await sleep(400);
+    ok('1-가에 연혁·현황 카드', (await page.$$eval('#main .sug', x => x.length)) >= 2 && (await page.textContent('#main')).includes('현황 자료'), (await page.$$eval('#main .sug', x => x.length)) + '장');
+    const hb = await page.$('#main [data-bulk="in"]'); if (hb) { await hb.click(); await sleep(900); } ok('연혁·현황 제안 모두 넣기', (await items()).filter(i => (i.kind3 === '연혁' || i.kind3 === '현황') && i.decided !== true).length < (await items()).filter(i => i.kind3 === '연혁' || i.kind3 === '현황').length);
     ok('업무 설명·조심할 것 저장', ((await state()).overview[firstArea] || {}).desc === '설명 한 줄' && ((await state()).overview[firstArea] || {}).tip === '조심할 것');
     await page.screenshot({path: path.join(shots, 'v3_2_담당업무.png')});
     // 1-나 반복
@@ -90,7 +92,7 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     await page.click('#btnPrint'); ok('인쇄', (await page.evaluate(() => window.__printed)) === 1 && (await page.$eval('#printView', e => e.children.length)) > 8);
     await page.click('#btnExport'); await sleep(2500); const ex = (await state()).exports; ok('내려받기 4개(md·docx·온나라 txt·원본지문)', ex.length === 4, ex.join(', '));
     const md = fs.readFileSync(path.join(WORK, ex.find(n => n.endsWith('.md'))), 'utf8');
-    ok('서식 차례(1-가·나·다·라, 2, 3, 4)와 입력값', ['### 가. 담당 업무', '### 나. 주요 업무계획', '### 다. 현안사항', '### 라. 주요 미결사항', '## 2. 관련 문서 현황', '## 3. 주요 물품', '## 4. 그 밖의 참고사항'].every(k => md.includes(k)) && md.includes('병수') && md.includes('설명 한 줄') && md.includes('답 acct') && md.includes('★'));
+    ok('서식 차례(1-가·나·다·라, 2, 3, 4, 붙임 1·2)와 입력값', ['### 가. 담당 업무', '### 나. 주요 업무계획', '### 다. 현안사항', '### 라. 주요 미결사항', '## 2. 관련 문서 현황', '## 3. 주요 물품', '## 4. 그 밖의 참고사항', '## 붙임 1. 참고 문서 목록', '## 붙임 2.', '현황 자료:'].every(k => md.includes(k)) && md.includes('병수') && md.includes('설명 한 줄') && md.includes('답 acct') && md.includes('★'));
     const txt = fs.readFileSync(path.join(WORK, ex.find(n => n.endsWith('_온나라.txt'))), 'utf8'); ok('온나라 txt', txt.includes('가. 담당 업무') && txt.includes('본부 회신 오면 보고'));
     // 받는 사람 모드
     await page.click('#modeSeg button[data-m="take"]'); await sleep(400); await nav('s1c'); const seen = await page.$('#main .seen'); if (seen) { await seen.click(); await sleep(700); } ok('받는 사람 확인 체크', !!seen && (await items()).some(i => i.seen), await page.textContent('#progLbl'));

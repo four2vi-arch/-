@@ -1,7 +1,7 @@
 'use strict';
 // 돌다리 v3 화면: 문서 한 건 = 카드 한 장. 별지 제12호서식(업무인계·인수서) 차례대로 채운다.
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
-const KINDS = ['현안', '반복', '문서'];
+const KINDS = ['현안', '반복', '문서', '연혁', '현황'];
 const STATUS = {'진행': '진행 중', '미결': '미결(회신·결정 대기)', '완료': '끝남'};
 const AS = [['acct', '계정·비밀번호 보관처', '예) 우편영업 시스템 계정은 서무 담당이 관리, 비밀번호는 봉인 봉투'], ['goods', '열쇠·물품·비품', '예) 매대 열쇠 2개(서랍), 전시용 태블릿 1대'], ['budget', '예산·미지급·정산', '예) 홍보 예산 잔액, 업체 미지급 1건(12월 정산)'], ['etc', '그 밖의 당부', '예) 국장 보고는 매주 월요일 오전']];
 const SECS = [['s1a', '1-가. 담당 업무'], ['s1b', '1-나. 업무계획·반복 업무'], ['s1c', '1-다. 현안사항'], ['s1d', '1-라. 미결사항'], ['s2', '2. 관련 문서 현황'], ['s3', '3. 물품·예산'], ['s4', '4. 참고(연락처·매뉴얼)']];
@@ -112,6 +112,8 @@ function card(it, o) {
   const sug = isSug(it), off = !sug && !it.keep, ro = mode === 'take';
   const chips = [`<span class="chip">${esc(it.cls || '')}</span>`];
   if (it.recur && it.recur.years) chips.push(`<span class="chip cy">매년 ${it.recur.month}월 · ${it.recur.years.join('·')}</span>`);
+  if (it.hist && it.kind3 !== '연혁') chips.push('<span class="chip">연혁</span>');
+  if (it.kind3 === '현황') chips.push('<span class="chip">현황 자료</span>');
   if (it.kind3 === '현안' && !sug && it.keep) chips.push(`<span class="chip st">${STATUS[it.status || '진행']}</span>`);
   if (ST.info && ST.info.manual && it.cls === '공문' && !it.reflected) chips.push('<span class="chip st" title="누적 매뉴얼에 이 문서번호·제목이 없음">★ 매뉴얼 미반영</span>');
   if (it.src === '모델') chips.push('<span class="chip">AI 요지</span>');
@@ -185,7 +187,7 @@ function renderPrep(m) {
   else {
     const p = ST.plan || {};
     h += `<div class="row"><label>기간 <select id="months">${[6, 12, 18, 24, 36].map(n => `<option value="${n}" ${(+ST.months || 12) === n ? 'selected' : ''}>최근 ${n}개월</option>`).join('')}</select></label><span class="s">업무마다 다르게 두려면 아래 「업무 키워드」 줄 끝에 「| 24개월」처럼 적습니다. 해마다 오는 업무는 기간과 상관없이 지난 3년 파일 날짜로 찾습니다.</span></div>`;
-    h += `<div class="pills"><span class="pill">기간 안 문서 <b>${p.n_items || 0}</b></span><span class="pill">현안 후보 <b>${p.n_issue || 0}</b></span><span class="pill">반복 업무 <b>${p.n_recur || 0}</b></span><span class="pill">그 밖의 문서 <b>${p.n_doc || 0}</b></span><span class="pill">기간 밖 <b>${p.n_old || 0}</b></span><span class="pill">붙임 <b>${p.n_attach || 0}</b></span></div>`;
+    h += `<div class="pills"><span class="pill">기간 안 문서 <b>${p.n_items || 0}</b></span><span class="pill">현안 후보 <b>${p.n_issue || 0}</b></span><span class="pill">반복 업무 <b>${p.n_recur || 0}</b></span><span class="pill">연혁 <b>${p.n_hist || 0}</b></span><span class="pill">현황 자료 <b>${p.n_status || 0}</b></span><span class="pill">그 밖의 문서 <b>${p.n_doc || 0}</b></span><span class="pill">기간 밖 <b>${p.n_old || 0}</b></span><span class="pill">붙임 <b>${p.n_attach || 0}</b></span></div>`;
     h += `<div class="row"><div class="seg" id="engineSeg"><button data-e="rules" class="${engine === 'rules' ? 'on' : ''}">규칙만 · 몇 초</button><button data-e="model" class="${engine === 'model' ? 'on' : ''}">AI 모델도 사용 · 요지·할 일 받기</button></div>
       <span id="modelRow" ${engine === 'model' ? '' : 'hidden'}><select id="model"><option value="">모델 고르기</option>${ST.model ? `<option value="${esc(ST.model)}" selected>${esc(ST.model)}</option>` : ''}</select> <input type="text" id="url" value="${esc(ST.url || '')}" style="width:280px"> <button class="ghost sm" id="btnModels">목록 새로고침</button>
       <div class="seg" id="scopeSeg" style="display:inline-flex;margin-left:8px"><button data-sc="issues" class="${(ST.model_scope || 'issues') === 'issues' ? 'on' : ''}">현안 후보만</button><button data-sc="all" class="${ST.model_scope === 'all' ? 'on' : ''}">기간 안 전부</button></div></span><span class="s" id="planHint"></span></div>`;
@@ -256,8 +258,11 @@ function renderS1a(m) {
   let h = head('1-가. 담당 업무', '인계자·인수자·입회자(바로 위 상급자)와 일자를 적고, 업무마다 한 줄 설명과 조심할 것을 적습니다. 숫자는 문서에서 센 것입니다.');
   h += `<div class="q"><div class="row"><label>인계자 <input type="text" id="hFrom" value="${esc(ST.handover_from || '')}" placeholder="이름(직급)" ${ro ? 'disabled' : ''}></label><label>인수자 <input type="text" id="hTo" value="${esc(ST.handover_to || '')}" placeholder="이름(직급)" ${ro ? 'disabled' : ''}></label><label>입회자 <input type="text" id="hWit" value="${esc(ST.witness || '')}" placeholder="바로 위 상급자" ${ro ? 'disabled' : ''}></label><label>일자 <input type="text" id="hDate" value="${esc(ST.handover_date || '')}" placeholder="YYYY-MM-DD" style="width:130px" ${ro ? 'disabled' : ''}></label><label>소속 <input type="text" id="hOrg" value="${esc(ST.org || '')}" placeholder="예) 정읍우체국 영업과 우편영업실" style="width:260px" ${ro ? 'disabled' : ''}></label></div></div>`;
   h += '<div class="sec"><h3>업무별 설명 <span class="chip">키워드로 나눈 것 · 준비 화면에서 고칠 수 있음</span></h3>' + used.map(a => { const r = ITEMS.filter(i => areaOf(i) === a); const c = completeness(a); const ov = OV[a] || {}; const n = k => r.filter(i => i.kind3 === k && i.keep && !isSug(i)).length;
-    return `<div class="q"><div class="qt">${esc(a)} <span class="chip">현안 ${n('현안')} · 반복 ${n('반복')} · 문서 ${r.filter(i => i.keep && !isSug(i)).length}</span> ${c.done ? '<span class="st ok">작성</span>' : c.sug ? `<span class="st ai">제안 ${c.sug}</span>` : ''}</div><input data-ov="desc" data-a="${esc(a)}" value="${esc(ov.desc || '')}" placeholder="이 업무가 무엇인지 한 줄 (예: 요금후납 계약 체결·갱신·미납 관리)" ${ro ? 'disabled' : ''}><input data-ov="tip" data-a="${esc(a)}" value="${esc(ov.tip || '')}" placeholder="자주 틀리거나 조심할 것 (예: 미납 2개월째 업체는 발송 정지 전에 유선 통보)" style="margin-top:6px" ${ro ? 'disabled' : ''}></div>`; }).join('') + '</div>';
-  m.innerHTML = h; bindCopy();
+    const hist = r.filter(i => i.kind3 === '연혁' || i.hist).sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
+    const stat = r.filter(i => i.kind3 === '현황');
+    return `<div class="q"><div class="qt">${esc(a)} <span class="chip">현안 ${n('현안')} · 반복 ${n('반복')} · 연혁 ${hist.length} · 현황 ${stat.length} · 문서 ${r.filter(i => i.keep && !isSug(i)).length}</span> ${c.done ? '<span class="st ok">작성</span>' : c.sug ? `<span class="st ai">제안 ${c.sug}</span>` : ''}</div><input data-ov="desc" data-a="${esc(a)}" value="${esc(ov.desc || '')}" placeholder="이 업무가 무엇인지 한 줄 (예: 요금후납 계약 체결·갱신·미납 관리)" ${ro ? 'disabled' : ''}><input data-ov="tip" data-a="${esc(a)}" value="${esc(ov.tip || '')}" placeholder="자주 틀리거나 조심할 것 (예: 미납 2개월째 업체는 발송 정지 전에 유선 통보)" style="margin-top:6px" ${ro ? 'disabled' : ''}>${hist.length || stat.length ? `<details ${hist.filter(isSug).length || stat.filter(isSug).length ? 'open' : ''}><summary>연혁 ${hist.length}건 · 현황 자료 ${stat.length}건 ${bulkBtns(hist.concat(stat), '연혁·현황 제안')}</summary>${hist.map(i => card(i)).join('')}${stat.map(i => card(i)).join('')}</details>` : ''}</div>`; }).join('') + '</div>';
+  h += '<div class="s">연혁은 제목에 협약·계약·개정·변경·도입·종료·이관·지정·시범 같은 전환점 말이 있거나 옛 인수인계서·누적 매뉴얼에 든 문서입니다. 기간 밖이어도 업무마다 최근 12건까지 올립니다. 현황 자료는 대장·현황·명단·실적 파일의 최신판입니다. 그 밖의 기간 밖 문서는 내보내기의 붙임 1에 업무·연도별 제목으로 실립니다.</div>';
+  m.innerHTML = h; bindCopy(); bindCards(m); bindBulk(m, b => { const q = b.closest('.q'); const a = q.querySelector('input[data-ov="desc"]').dataset.a; return ITEMS.filter(i => areaOf(i) === a && (i.kind3 === '연혁' || i.hist || i.kind3 === '현황')); });
   const sv = () => settings({handover_from: $('#hFrom').value, handover_to: $('#hTo').value, witness: $('#hWit').value, handover_date: $('#hDate').value, org: $('#hOrg').value}).then(() => renderNav()).catch(e => alert(e.message));
   ['#hFrom', '#hTo', '#hWit', '#hDate', '#hOrg'].forEach(s => $(s).onchange = sv);
   m.querySelectorAll('input[data-ov]').forEach(t => t.onchange = async () => { const a = t.dataset.a; OV[a] = Object.assign({}, OV[a] || {}, {[t.dataset.ov]: t.value}); await settings({overview: OV}); ST.overview = OV; renderNav(); renderAside(); });
@@ -357,7 +362,7 @@ function renderPrintView() {
   const k = kept(); const used = usedAreas();
   const pi = it => `<div class="pi">${it.date ? '[' + esc(it.date) + '] ' : ''}${esc(it.title)}${it.docno ? ' (' + esc(it.docno) + ')' : ''}${it.kind3 === '현안' ? ' [' + STATUS[it.status || '진행'] + ']' : ''}${it.due_next ? ' · 기한 ' + esc(it.due_next) : ''}${it.todo ? ' → 할 일: ' + esc(it.todo) : ''}${it.next ? ' → 다음: ' + esc(it.next) : ''}${it.note ? ' — ' + esc(it.note) : ''}<span class="s">${it.file ? esc(it.file) : '전임자가 직접 적음'}</span></div>`;
   let h = `<h2>업무인계·인수서 · ${esc(ST.title || '')}</h2><p>인계자 ${esc(ST.handover_from || '')} · 인수자 ${esc(ST.handover_to || '')} · 입회자 ${esc(ST.witness || '')} · ${esc(ST.handover_date || new Date().toLocaleDateString('ko-KR'))} · ${esc(ST.org || '')} · 돌다리 v${esc(ST.version || '')}</p>`;
-  h += '<h3>1. 업무현황</h3><h4>가. 담당 업무</h4>' + used.map(a => { const ov = OV[a] || {}; return `<p><b>${esc(a)}</b> ${esc(ov.desc || '')}${ov.tip ? ' · 조심할 것: ' + esc(ov.tip) : ''}</p>`; }).join('');
+  h += '<h3>1. 업무현황</h3><h4>가. 담당 업무</h4>' + used.map(a => { const ov = OV[a] || {}; return `<p><b>${esc(a)}</b> ${esc(ov.desc || '')}${ov.tip ? ' · 조심할 것: ' + esc(ov.tip) : ''}</p>` + k.filter(i => areaOf(i) === a && (i.kind3 === '연혁' || i.hist || i.kind3 === '현황')).map(i => `<div class="pi">${i.kind3 === '현황' ? '현황 자료' : '연혁'} ${esc((i.date || '').slice(0, 7))} · ${esc(i.title)}<span class="s">${esc(i.file)}</span></div>`).join(''); }).join('');
   h += '<h4>나. 주요 업무계획 및 진행사항</h4>' + (recurs().filter(i => i.keep && !isSug(i)).map(pi).join('') || '<p>(없음)</p>');
   h += '<h4>다. 현안사항 및 문제점</h4>' + (issues().filter(i => i.keep && !isSug(i) && i.status !== '미결').map(pi).join('') || '<p>(없음)</p>');
   h += '<h4>라. 주요 미결사항</h4>' + (issues().filter(i => i.keep && !isSug(i) && i.status === '미결').map(pi).join('') || '<p>(없음)</p>');

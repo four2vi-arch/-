@@ -30,6 +30,9 @@ SYS3 = ('너는 공공기관 업무 인수인계 도우미다. 전임자의 문�
         '형식: {"요지":"이 문서가 무엇을 요구하거나 알리는지 한 문장","할 일":"우리 부서(전임자 자리)가 해야 하는 일 한 문장, 없으면 빈 문자열","기한":"YYYY-MM-DD 또는 빈 문자열","담당":"문의할 사람·부서와 전화, 없으면 빈 문자열","상태":"진행 중|끝남|모름"}\n'
         '규칙: (1) 문서에 없는 내용은 만들지 않는다. (2) 기한은 문서에 적힌 날짜만 쓴다. (3) 한 문장은 60자 안. (4) 설명문·코드 펜스 없이 JSON만.')
 CLS_ISSUE = {'공문', '메일', '메모', '회의록', '보고서·계획'}
+HISTORY = re.compile(r'협약|체결|계약|신설|폐지|개정|변경|도입|종료|이관|지정|선정|개편|설치|시범|확정|개소|폐국|통합|승인|감사|지적|제정|전환|위탁|수탁')   # 업무의 전환점을 뜻하는 제목 말
+STATUS_NAME = re.compile(r'(현황|대장|명단|목록|일정표?|리스트|실적표?)\s*(\(.*\)|_?\d{4}(년)?)?\s*$')                                  # 현황 자료: 제목이 현황·대장·명단·목록으로 끝나는 것(최신판 하나만)
+HIST_CAP = 12   # 업무마다 연혁으로 올리는 기간 밖 문서 상한(최근 것부터)
 
 
 def text_of(f):
@@ -325,6 +328,28 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
         else:
             d['kind3'] = '기간 밖'
         d['to_model'] = d['kind3'] == '현안' if model_scope == 'issues' else d['kind3'] in ('현안', '반복', '문서')
+    # 현황 자료: 표·대장이거나 이름에 현황·대장·명단·실적·일정 — 같은 제목 꼴은 최신판 하나만
+    latest = {}
+    for d in docs:
+        is_status = (d['cls'] == '표·대장' or (STATUS_NAME.search(d['title']) and d['cls'] in ('보고서·계획', '기타', '메모') and ' ▸ ' not in d['file'])) and not d.get('parent') and not d.get('dup')
+        d['is_status'] = bool(is_status)
+        if is_status:
+            k = recur_key(d['title']) or core.norm(d['title'])
+            if k not in latest or (d['date'] or '') > (latest[k]['date'] or ''):
+                latest[k] = d
+    for k, d in latest.items():
+        if d['kind3'] in ('기간 밖', '문서') or d['cls'] == '표·대장':
+            d['kind3'] = '현황'
+    # 연혁: 전환점 말이 든 제목·옛 인수인계서·매뉴얼에 반영된 문서. 기간 밖이면 업무마다 최근 HIST_CAP건까지 「연혁」 항목으로
+    per_area = collections.defaultdict(list)
+    for d in docs:
+        d['hist'] = bool(d['cls'] in ('공문', '보고서·계획', '회의록', '인수인계서', '기타') and not d.get('parent') and not d.get('dup') and (d['cls'] == '인수인계서' or HISTORY.search(d['title'])))
+        if d['hist'] and d['kind3'] == '기간 밖':
+            per_area[d['area']].append(d)
+    for a, g in per_area.items():
+        g.sort(key=lambda d: d['date'] or '', reverse=True)
+        for d in g[:HIST_CAP]:
+            d['kind3'] = '연혁'
     return docs
 
 
@@ -352,8 +377,8 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                 ck.write(json.dumps({'folder': folder, 'model': model, 'max_chars': max_chars, 'started': time.strftime('%Y-%m-%d %H:%M:%S')}, ensure_ascii=False) + '\n'); ck.flush()
         except Exception:
             ck = None
-    cand = [d for d in docs if d['kind3'] in ('현안', '반복', '문서')]
-    cand.sort(key=lambda d: (d['kind3'] != '현안', d['kind3'] != '반복', d['date']), reverse=False)
+    cand = [d for d in docs if d['kind3'] in ('현안', '반복', '문서', '연혁', '현황')]
+    cand.sort(key=lambda d: (d['kind3'] != '현안', d['kind3'] != '반복', d['date'] or ''), reverse=False)
     to_model = [d for d in cand if d['to_model']] if model != 'none' else []
     total_calls = len(to_model)
     done_calls, consecutive_fail, stopped = 0, 0, False
@@ -369,8 +394,10 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
         n += 1
         it = {'id': n, 'file': d['file'], 'kind': d['kind'], 'cls': d['cls'], 'date': d['date'], 'docno': d['docno'], 'title': d['title'], 'area': d['area'],
               'due': d['due'], 'due_next': d['due_next'], 'contacts': d['contacts'], 'recur': d['recur'], 'attachments': d['attachments'], 'kind3': d['kind3'],
-              'reflected': reflected(d, nos, line_grams) if manual is not None else '', 'summary': '', 'todo': '', 'owner': '', 'model_status': '',
+              'reflected': reflected(d, nos, line_grams) if manual is not None else '', 'hist': d.get('hist', False), 'is_status': d.get('is_status', False), 'summary': '', 'todo': '', 'owner': '', 'model_status': '',
               'src': '규칙', 'keep': True, 'decided': False, 'status': '진행', 'next': '', 'note': '', 'seen': False, 'quote': ''}
+        if manual is not None and it['reflected'] and d['kind3'] in ('연혁', '문서'):
+            it['hist'] = True
         if d['to_model'] and model != 'none' and not stopped and not (should_stop and should_stop()):
             f = by_file.get(d['file'])
             chunk = ('제목: %s\n' % d['title']) + text_of(f)[:max_chars]
@@ -440,13 +467,15 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
             'n_items': len(items), 'n_issue': sum(1 for i in items if i['kind3'] == '현안'), 'n_recur': sum(1 for i in items if i['kind3'] == '반복'),
             'n_doc': sum(1 for i in items if i['kind3'] == '문서'), 'n_old': sum(1 for d in docs if d['kind3'] == '기간 밖'), 'n_attach': sum(1 for d in docs if d['kind3'] == '붙임'),
             'n_unreflected': sum(1 for i in items if manual is not None and not i['reflected'] and i['cls'] == '공문'), 'sec': round(time.time() - t_all, 1), 'stopped': stopped,
-            'docs_old': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'cls': d['cls']} for d in docs if d['kind3'] == '기간 밖'][:3000]}
+            'n_hist': sum(1 for i in items if i['kind3'] == '연혁'), 'n_status': sum(1 for i in items if i['kind3'] == '현황'),
+            'docs_old': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'cls': d['cls']} for d in docs if d['kind3'] == '기간 밖'][:5000]}
     return items, calls, errors, info
 
 
 def plan_summary(files, areas, months=12, model_scope='issues', avg_sec=30.0, today=None):
     docs = plan_docs(files, areas, months, model_scope, today=today)
     n_model = sum(1 for d in docs if d['to_model'])
-    return {'calls': n_model, 'est_sec': round(n_model * avg_sec), 'avg_sec': avg_sec, 'n_items': sum(1 for d in docs if d['kind3'] in ('현안', '반복', '문서')),
+    return {'calls': n_model, 'est_sec': round(n_model * avg_sec), 'avg_sec': avg_sec, 'n_items': sum(1 for d in docs if d['kind3'] in ('현안', '반복', '문서', '연혁', '현황')),
+            'n_hist': sum(1 for d in docs if d['kind3'] == '연혁'), 'n_status': sum(1 for d in docs if d['kind3'] == '현황'),
             'n_issue': sum(1 for d in docs if d['kind3'] == '현안'), 'n_recur': sum(1 for d in docs if d['kind3'] == '반복'), 'n_doc': sum(1 for d in docs if d['kind3'] == '문서'),
             'n_old': sum(1 for d in docs if d['kind3'] == '기간 밖'), 'n_attach': sum(1 for d in docs if d['kind3'] == '붙임'), 'files_model': n_model, 'files_rule_only': len(docs) - n_model}

@@ -83,7 +83,7 @@ check('모델이 JSON 아님·빈 글·예외·엉뚱한 구조를 줘도 끝까
 check('문서 한 건 = 항목 한 개(읽은 파일보다 많지 않음)', 0 < len(items) <= len(files), '%d / %d' % (len(items), len(files)))
 check('문서에 없는 기한·담당은 싣지 않음', not any(i['due_next'] == '2099-01-01' for i in items) and not any('홍길동' in (i.get('owner') or '') for i in items))
 check('문서에 있는 담당은 실림', any('박세진' in (i.get('owner') or '') for i in items))
-check('표 파일은 항목이 되지 않음(명단 2,000행 csv)', not any(i['file'].endswith('고객명단_2000.csv') for i in items))
+check('표 파일은 현황 자료로만 오르고 현안·문서는 아님(명단 2,000행 csv)', all(i['kind3'] == '현황' for i in items if i['file'].endswith('고객명단_2000.csv')))
 check('깨진 글자가 든 항목도 JSON으로 저장됨', json.dumps(items, ensure_ascii=False).encode('utf-8') is not None)
 
 # 연속 접속 실패 → 모델 포기, 규칙 항목은 남김
