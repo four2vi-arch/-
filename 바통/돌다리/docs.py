@@ -354,11 +354,12 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
 
 
 def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:11434/v1/chat/completions', key='', model_scope='issues', max_chars=4000,
-               progress=None, should_stop=None, checkpoint=None, folder='', prev_items=None, fake=None, max_consecutive_failures=5, today=None):
-    """문서 항목을 만든다. 반환: items, calls, errors, info."""
+               progress=None, should_stop=None, checkpoint=None, folder='', prev_items=None, fake=None, max_consecutive_failures=5, today=None, manual=None):
+    """문서 항목을 만든다. 반환: items, calls, errors, info. manual: 폴더 밖 매뉴얼을 직접 넘길 때(파일 dict)."""
     t_all = time.time()
     docs = plan_docs(files, areas, months, model_scope, today=today)
-    manual = find_manual(files)
+    if manual is None:
+        manual = find_manual(files)
     nos, lines = (set(), [])
     if manual is not None:
         nos, lines = manual_refs(manual)

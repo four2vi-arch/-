@@ -25,7 +25,7 @@ STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'sug
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
          'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': [],
          'areas': core.DEFAULT_AREAS, 'overview': {}, 'handover_from': '', 'handover_to': '', 'assets': {}, 'keyfiles': [],
-         'months': 12, 'model_scope': 'issues', 'witness': '', 'handover_date': '', 'org': '', 'info': {}}
+         'months': 12, 'model_scope': 'issues', 'witness': '', 'handover_date': '', 'org': '', 'info': {}, 'manual_path': ''}
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
 CHECKPOINT = '모델응답_이어하기.jsonl'   # 모델 응답을 호출마다 바로 적어 두는 파일. 같은 폴더·모델이면 다음 「초안 만들기」가 재사용한다(죽어도 한 호출만 잃음)
 _extracting = False
@@ -159,9 +159,22 @@ def run_draft():
             STATE['progress'] = dict(p, sec=round(time.time() - t0))
 
     try:
+        manual = None
+        mp = str(STATE.get('manual_path') or '').strip().strip('"')
+        if mp:   # 폴더 밖의 누적 매뉴얼을 직접 지정한 경우(「그 사이 문서만」 폴더로 돌릴 때)
+            if os.path.isfile(mp):
+                res, fl = [], []
+                EX.extract_file(mp, os.path.basename(mp), res, fl)
+                if res:
+                    manual = dict(res[0], file=mp)
+                    log('누적 매뉴얼 파일 지정: %s (%d자)' % (mp, manual.get('chars', 0)))
+                else:
+                    log('누적 매뉴얼 파일을 읽지 못했습니다: %s' % (fl[0]['reason'] if fl else mp))
+            else:
+                log('누적 매뉴얼 파일이 없습니다: ' + mp)
         items, calls, errors, info = docs.build_docs(files, STATE.get('areas') or core.DEFAULT_AREAS, int(STATE.get('months') or 12), STATE['model'] or 'none', STATE['url'], '',
                                                       STATE.get('model_scope') or 'issues', MAX_CHARS3, progress=progress, should_stop=lambda: STATE['stop'],
-                                                      checkpoint=os.path.join(WORK, CHECKPOINT), folder=STATE['folder'], prev_items=STATE['items'])
+                                                      checkpoint=os.path.join(WORK, CHECKPOINT), folder=STATE['folder'], prev_items=STATE['items'], manual=manual)
         n_reused = sum(1 for c in calls if c.get('reused'))
         if n_reused:
             log('이전 회차의 모델 응답 %d회를 다시 부르지 않고 재사용' % n_reused)
@@ -383,7 +396,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:
-                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org'):
+                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path'):
                     if k in body:
                         STATE[k] = body[k]
                 if 'areas_text' in body:

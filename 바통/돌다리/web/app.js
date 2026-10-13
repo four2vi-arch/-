@@ -193,9 +193,10 @@ function renderPrep(m) {
       <div class="seg" id="scopeSeg" style="display:inline-flex;margin-left:8px"><button data-sc="issues" class="${(ST.model_scope || 'issues') === 'issues' ? 'on' : ''}">현안 후보만</button><button data-sc="all" class="${ST.model_scope === 'all' ? 'on' : ''}">기간 안 전부</button></div></span><span class="s" id="planHint"></span></div>`;
     h += engine === 'model' && ST.model ? `<div class="note">모델 <b>${esc(ST.model)}</b>에 문서 ${p.calls || 0}건(한 건에 한 번). 예상 약 ${secText(p.est_sec || 0)}. 「여기까지만」으로 끊어도 결과는 남고, 모델 응답은 호출마다 저장되어 중간에 꺼져도 이어서 갑니다.${ST.checkpoint && ST.checkpoint.reusable ? ` 저장된 이전 응답 ${ST.checkpoint.reusable}회는 다시 부르지 않습니다.` : ''}</div>` : `<div class="s">규칙만: 문서마다 날짜·문서번호·제목·기한·담당·소관 업무를 읽습니다. 수천 파일도 몇 초입니다. 모델은 현안 후보의 「요지·할 일」 한 줄을 보탭니다(없어도 됩니다).</div>`;
     const pr = ST.progress;
-    h += `<div class="row"><button class="btn" id="btnDraft" ${ST.running ? 'disabled' : ''}>초안 만들기</button>${ST.running ? '<button class="ghost sm" id="btnStop" style="color:var(--fail);border-color:var(--fail)">여기까지만(중단)</button>' : ''}<span class="s" id="progText">${ST.running && pr ? progText(pr) : ST.step >= 4 && pr ? `끝났습니다. 문서 ${ITEMS.length}건 · 모델 호출 ${pr.calls_done || 0}회 · ${secText(pr.sec || 0)}. 왼쪽 서식 차례대로 넣기·버리기만 하면 됩니다.` : ''}</span></div>`;
+    h += `<div class="row"><button class="btn" id="btnDraft" ${ST.running ? 'disabled' : ''}>초안 만들기</button>${ST.running ? '<button class="ghost sm" id="btnStop" style="color:var(--fail);border-color:var(--fail)">여기까지만(중단)</button>' : ''}<span class="s" id="progText">${ST.running && pr ? progText(pr) : ST.step >= 4 && pr ? `끝났습니다. 문서 ${ITEMS.length}건 · 모델 호출 ${pr.calls_done || 0}회 · ${secText(pr.sec || 0)}. 왼쪽 서식 차례대로 넣기·버리기만 하면 됩니다. 넣기 전 제안도 인쇄·내보내기에 「확인 전」으로 실립니다.` : ''}</span></div>`;
     if (ST.running && pr) h += `<div class="bar"><i style="width:${pr.calls_total ? Math.round(100 * pr.calls_done / pr.calls_total) : 0}%"></i></div>`;
     if (ITEMS.length) h += `<div class="s">다시 만들어도 넣기·버리기·상태·메모는 파일 기준으로 그대로 남습니다.</div>`;
+    h += `<div class="row"><label>누적 매뉴얼 파일 <input type="text" id="manualPath" value="${esc(ST.manual_path || '')}" placeholder="비우면 폴더 안에서 자동으로 찾음. 폴더 밖이면 파일 주소(docx·hwpx·md)" style="width:520px"></label>${ST.info && ST.info.manual ? `<span class="s">지금 잡힌 매뉴얼: ${esc(ST.info.manual)}</span>` : ''}</div>`;
     h += `<details><summary>업무 키워드·기간 설정</summary><div class="s" style="margin-top:8px">한 줄에 「업무 이름: 키워드, 키워드 | 기간」. 문서 제목·앞부분에 키워드가 많이 든 업무로 분류합니다. 기간을 안 적으면 위 기본 기간.</div><textarea id="areas" style="width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(ST.areas_text || '')}</textarea><div class="row"><button class="ghost sm" id="btnAreas">적용(다시 분류)</button><button class="ghost sm" id="btnAreasDefault">기본값으로</button></div></details>`;
   }
   h += '</div>';
@@ -213,7 +214,7 @@ function bindPrep() {
   const seg = $('#engineSeg'); if (seg) {
     seg.querySelectorAll('button').forEach(b => b.onclick = async () => { engine = b.dataset.e; ls('engine', engine); if (engine === 'rules') { await settings({model: ''}); } renderMain(); if (engine === 'model') loadModels(); });
     $('#scopeSeg').querySelectorAll('button').forEach(b => b.onclick = () => settings({model_scope: b.dataset.sc}).then(() => renderMain()).catch(e => alert(e.message)));
-    ['#model', '#url', '#months'].forEach(s => { const el = $(s); if (el) el.onchange = () => settings().then(() => renderMain()).catch(e => alert(e.message)); });
+    ['#model', '#url', '#months', '#manualPath'].forEach(s => { const el = $(s); if (el) el.onchange = () => settings().then(() => renderMain()).catch(e => alert(e.message)); });
     $('#btnModels').onclick = loadModels; if (engine === 'model') loadModels();
     $('#btnDraft').onclick = async () => { try { await settings(); await api('/api/draft', {}); await refresh(); } catch (e) { alert(e.message); } };
     const st = $('#btnStop'); if (st) st.onclick = () => { api('/api/stop', {}); $('#progText').textContent = '중단 요청… 진행 중이던 호출 하나가 끝나면 멈춥니다.'; };
@@ -224,7 +225,7 @@ function bindPrep() {
 async function settings(extra) {
   const body = Object.assign({}, extra || {});
   const take = (sel, k, f) => { const el = $(sel); if (el) body[k] = f ? f(el) : el.value; };
-  if (!('model' in body)) take('#model', 'model'); take('#url', 'url', el => el.value.trim()); take('#months', 'months', el => +el.value);
+  if (!('model' in body)) take('#model', 'model'); take('#url', 'url', el => el.value.trim()); take('#months', 'months', el => +el.value); take('#manualPath', 'manual_path', el => el.value.trim());
   if (engine === 'rules') body.model = '';
   else if (body.model === '') delete body.model;
   const j = await api('/api/settings', body);
@@ -359,12 +360,13 @@ $('#btnExport').onclick = async () => {
 };
 $('#btnPrint').onclick = () => { if (!ITEMS.length) return alert('인쇄할 초안이 없습니다.'); renderPrintView(); window.print(); };
 function renderPrintView() {
-  const k = kept(); const used = usedAreas();
-  const pi = it => `<div class="pi">${it.date ? '[' + esc(it.date) + '] ' : ''}${esc(it.title)}${it.docno ? ' (' + esc(it.docno) + ')' : ''}${it.kind3 === '현안' ? ' [' + STATUS[it.status || '진행'] + ']' : ''}${it.due_next ? ' · 기한 ' + esc(it.due_next) : ''}${it.todo ? ' → 할 일: ' + esc(it.todo) : ''}${it.next ? ' → 다음: ' + esc(it.next) : ''}${it.note ? ' — ' + esc(it.note) : ''}<span class="s">${it.file ? esc(it.file) : '전임자가 직접 적음'}</span></div>`;
+  const k = ITEMS.filter(i => i.keep); const used = usedAreas();
+  const pi = it => `<div class="pi">${it.date ? '[' + esc(it.date) + '] ' : ''}${esc(it.title)}${it.docno ? ' (' + esc(it.docno) + ')' : ''}${isSug(it) ? ' [확인 전]' : it.kind3 === '현안' ? ' [' + STATUS[it.status || '진행'] + ']' : ''}${it.due_next ? ' · 기한 ' + esc(it.due_next) : ''}${it.todo ? ' → 할 일: ' + esc(it.todo) : ''}${it.next ? ' → 다음: ' + esc(it.next) : ''}${it.note ? ' — ' + esc(it.note) : ''}<span class="s">${it.file ? esc(it.file) : '전임자가 직접 적음'}</span></div>`;
   let h = `<h2>업무인계·인수서 · ${esc(ST.title || '')}</h2><p>인계자 ${esc(ST.handover_from || '')} · 인수자 ${esc(ST.handover_to || '')} · 입회자 ${esc(ST.witness || '')} · ${esc(ST.handover_date || new Date().toLocaleDateString('ko-KR'))} · ${esc(ST.org || '')} · 돌다리 v${esc(ST.version || '')}</p>`;
-  h += '<h3>1. 업무현황</h3><h4>가. 담당 업무</h4>' + used.map(a => { const ov = OV[a] || {}; return `<p><b>${esc(a)}</b> ${esc(ov.desc || '')}${ov.tip ? ' · 조심할 것: ' + esc(ov.tip) : ''}</p>` + k.filter(i => areaOf(i) === a && (i.kind3 === '연혁' || i.hist || i.kind3 === '현황')).map(i => `<div class="pi">${i.kind3 === '현황' ? '현황 자료' : '연혁'} ${esc((i.date || '').slice(0, 7))} · ${esc(i.title)}<span class="s">${esc(i.file)}</span></div>`).join(''); }).join('');
-  h += '<h4>나. 주요 업무계획 및 진행사항</h4>' + (recurs().filter(i => i.keep && !isSug(i)).map(pi).join('') || '<p>(없음)</p>');
-  h += '<h4>다. 현안사항 및 문제점</h4>' + (issues().filter(i => i.keep && !isSug(i) && i.status !== '미결').map(pi).join('') || '<p>(없음)</p>');
+  const nUnd = ITEMS.filter(i => i.keep && isSug(i)).length;
+  h += '<h3>1. 업무현황</h3>' + (nUnd ? `<p>※ [확인 전] ${nUnd}건은 아직 넣기·버리기를 누르지 않은 제안입니다.</p>` : '') + '<h4>가. 담당 업무</h4>' + used.map(a => { const ov = OV[a] || {}; return `<p><b>${esc(a)}</b> ${esc(ov.desc || '')}${ov.tip ? ' · 조심할 것: ' + esc(ov.tip) : ''}</p>` + k.filter(i => areaOf(i) === a && (i.kind3 === '연혁' || i.hist || i.kind3 === '현황')).map(i => `<div class="pi">${i.kind3 === '현황' ? '현황 자료' : '연혁'} ${esc((i.date || '').slice(0, 7))} · ${esc(i.title)}${isSug(i) ? ' [확인 전]' : ''}<span class="s">${esc(i.file)}</span></div>`).join(''); }).join('');
+  h += '<h4>나. 주요 업무계획 및 진행사항</h4>' + (recurs().filter(i => i.keep).map(pi).join('') || '<p>(없음)</p>');
+  h += '<h4>다. 현안사항 및 문제점</h4>' + (issues().filter(i => i.keep && (isSug(i) || i.status !== '미결')).map(pi).join('') || '<p>(없음)</p>');
   h += '<h4>라. 주요 미결사항</h4>' + (issues().filter(i => i.keep && !isSug(i) && i.status === '미결').map(pi).join('') || '<p>(없음)</p>');
   h += '<h3>2. 관련 문서 현황</h3>' + used.map(a => `<h4>${esc(a)}</h4>` + k.filter(i => areaOf(i) === a).map(pi).join('')).join('');
   h += '<h3>3. 주요 물품 및 예산 등</h3>' + AS.map(([kk, q]) => `<p><b>${q}</b> ${esc(ASSETS[kk] || '(적지 않음)')}</p>`).join('');

@@ -37,7 +37,7 @@ STATUS_LABEL = {'진행': '진행 중', '미결': '미결(회신·결정 대기)
 
 
 def kept_docs(session):
-    return [it for it in session.get('items', []) if it.get('keep', True) and it.get('decided') is not False]
+    return [it for it in session.get('items', []) if it.get('keep', True)]   # 넣기 전 제안도 싣는다(「확인 전」 표시). 버리기·빼기만 뺀다.
 
 
 def area_list(session, items):
@@ -45,9 +45,13 @@ def area_list(session, items):
     return [a for a in areas if any((it.get('area') or '기타') == a for it in items)]
 
 
+def undecided(it):
+    return it.get('decided') is not True and it.get('src') != '직접 입력'
+
+
 def doc_line(it):
-    """[2026-02-01] 제목 (우편영업과-658)"""
-    return '%s%s%s' % (('[%s] ' % it['date']) if it.get('date') else '', it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '')
+    """[2026-02-01] 제목 (우편영업과-658) · 확인 전"""
+    return '%s%s%s%s' % (('[%s] ' % it['date']) if it.get('date') else '', it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', ' · 확인 전' if undecided(it) else '')
 
 
 def src_line(it):
@@ -68,7 +72,10 @@ def chapters(session):
     used = area_list(session, items)
     issues = [it for it in items if it.get('kind3') == '현안']
     recur = [it for it in items if it.get('kind3') == '반복' or (it.get('kind3') == '현안' and it.get('recur'))]
+    n_und = sum(1 for it in items if undecided(it))
     out.append(('h1', '1. 업무현황'))
+    if n_und:
+        out.append(('p', '※ 「확인 전」 %d건은 전임자가 아직 넣기·버리기를 누르지 않은 제안이다. 화면에서 정리하면 표시가 사라진다.' % n_und))
     out.append(('h2', '가. 담당 업무'))
     for a in used:
         rows = [it for it in items if (it.get('area') or '기타') == a]
@@ -93,7 +100,7 @@ def chapters(session):
     for m in range(1, 13):
         for it in months[m]:
             r = it.get('recur') or {}
-            out.append(('li', '%d월 · %s%s' % (m, it.get('title', ''), (' (%s년 %d회)' % ('·'.join(r['years']), r['n'])) if r.get('years') else '')))
+            out.append(('li', '%d월 · %s%s%s' % (m, it.get('title', ''), (' (%s년 %d회)' % ('·'.join(r['years']), r['n'])) if r.get('years') else '', ' · 확인 전' if undecided(it) else '')))
             if it.get('todo'):
                 out.append(('sub', '할 일: ' + it['todo']))
             if it.get('note'):
