@@ -212,8 +212,31 @@ def extract_pdf(path):
         if t:
             units.append({'loc': '%d쪽' % i, 'text': t})
     if not units:
-        raise ValueError('글자가 없는 PDF(스캔 이미지로 보임, OCR 미지원)')
+        if OCR_CONFIG.get('engine'):   # 스캔 PDF: OCR 엔진이 잡혀 있으면 글자를 읽는다(앞 N쪽, 결과는 캐시)
+            import ocr
+            try:
+                units = ocr.ocr_pdf(path, OCR_CONFIG['engine'], OCR_CONFIG.get('cache') or None, int(OCR_CONFIG.get('dpi') or 200), int(OCR_CONFIG.get('pages') or 5))
+            except Exception as ex:
+                raise ValueError('스캔 PDF OCR 실패(%s): %s' % (OCR_CONFIG['engine'], str(ex)[:100]))
+            if not units:
+                raise ValueError('스캔 PDF에서 글자를 읽지 못함(OCR %s, 앞 %d쪽)' % (OCR_CONFIG['engine'], int(OCR_CONFIG.get('pages') or 5)))
+            return units
+        raise ValueError('글자가 없는 PDF(스캔 이미지로 보임). 준비 화면에서 OCR을 켜면 읽습니다')
     return units
+
+
+OCR_CONFIG = {'engine': '', 'cache': '', 'pages': 5, 'dpi': 200, 'images': False}   # server.py가 읽기 전에 채운다. engine이 비면 OCR 안 함
+IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp'}
+
+
+def extract_image(path):
+    if not (OCR_CONFIG.get('engine') and OCR_CONFIG.get('images')):
+        raise ValueError('읽지 않는 형식(그림). 준비 화면에서 「그림 파일도 OCR」을 켜면 읽습니다')
+    import ocr
+    try:
+        return ocr.ocr_image_file(path, OCR_CONFIG['engine'], OCR_CONFIG.get('cache') or None)
+    except Exception as ex:
+        raise ValueError('그림 OCR 실패(%s): %s' % (OCR_CONFIG['engine'], str(ex)[:100]))
 
 
 # ---------------------------------------------------------------- 엑셀
@@ -520,6 +543,8 @@ def extract_file(path, rel, results, failures, depth=0):
         failures.append({'file': rel, 'reason': '임시·시스템 파일', 'skip': True}); return
     if ext in HANCOM_HINT:
         failures.append({'file': rel, 'reason': HANCOM_HINT[ext]}); return
+    if not fn and ext in IMAGE_EXT and OCR_CONFIG.get('engine') and OCR_CONFIG.get('images'):
+        fn = extract_image
     if not fn:
         if ext in NON_DOC:
             failures.append({'file': rel, 'reason': '읽지 않는 형식(%s: 그림·영상·프로그램·글꼴·임시 파일)' % ext, 'skip': True})

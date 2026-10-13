@@ -13,10 +13,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract as EX
 import core
 import docs
+import ocr
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '3.3.1 (2026-10-14)'
+VERSION = '3.4 (2026-10-14)'
 MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
@@ -25,12 +26,31 @@ STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'sug
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
          'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': [],
          'areas': core.DEFAULT_AREAS, 'overview': {}, 'handover_from': '', 'handover_to': '', 'assets': {}, 'keyfiles': [],
-         'months': 12, 'model_scope': 'issues', 'witness': '', 'handover_date': '', 'org': '', 'info': {}, 'manual_path': ''}
+         'months': 12, 'model_scope': 'issues', 'witness': '', 'handover_date': '', 'org': '', 'info': {}, 'manual_path': '', 'ocr': 'auto', 'ocr_pages': 5, 'ocr_images': False}
+_ocr_status = None   # ocr.available() 결과(시작·설정 때만 다시 센다)
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
 CHECKPOINT = '모델응답_이어하기.jsonl'   # 모델 응답을 호출마다 바로 적어 두는 파일. 같은 폴더·모델이면 다음 「초안 만들기」가 재사용한다(죽어도 한 호출만 잃음)
 _extracting = False
 LOCK = threading.Lock()
 WORK = ''
+
+
+def ocr_status(refresh=False):
+    global _ocr_status
+    if _ocr_status is None or refresh:
+        try:
+            _ocr_status = ocr.available()
+        except Exception as e:
+            _ocr_status = {'error': str(e)[:120]}
+    return _ocr_status
+
+
+def set_ocr_config():
+    """읽기 전에 extract.OCR_CONFIG를 채운다. 엔진을 못 찾으면 OCR 없이 읽는다(스캔 PDF는 못 읽음으로 남는다)."""
+    want = str(STATE.get('ocr') or 'off')
+    eng = '' if want == 'off' else ocr.pick(want)
+    EX.OCR_CONFIG.update({'engine': eng, 'cache': os.path.join(WORK, 'ocr_cache'), 'pages': int(STATE.get('ocr_pages') or 5), 'dpi': 200, 'images': bool(STATE.get('ocr_images'))})
+    return eng
 
 
 def log(msg):
@@ -51,6 +71,7 @@ def _reload_units():
     """이전 세션의 폴더를 뒤에서 다시 읽어 발췌 확인·재실행에 쓸 글자를 채운다(원본은 읽기만). 끝날 때까지 ③은 기다리라고 답한다."""
     t0 = time.time(); folder = STATE['folder']
     try:
+        set_ocr_config()
         files, _, _ = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | set(STATE.get('exclude', [])), skip_names=SKIP_NAMES)
         if STATE['folder'] == folder:   # 되읽는 사이에 다른 폴더를 읽었으면 버린다
             mc = {}
@@ -118,14 +139,19 @@ def do_extract(folder, exclude=None):
     def prog(p):
         STATE['extracting'] = dict(p, sec=round(time.time() - t0))
     STATE['extracting'] = {'index': 0, 'total': 0, 'file': '', 'sec': 0}
+    eng = set_ocr_config()
+    log('OCR: %s' % (eng or '끔(엔진 없음 또는 설정 끔)'))
     files, failures, fps = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | exclude, skip_names=SKIP_NAMES, skip_root_files=bool(warn), progress=prog)
+    n_ocr = 0
     for f in files:
         f['file'] = f['file'].replace('\\', '/')
         _units[f['file']] = f['units']
+        if any('(OCR)' in u.get('loc', '') for u in f['units']):
+            n_ocr += 1; f['ocr'] = True
     for x in failures + fps:
         x['file'] = x['file'].replace('\\', '/')
     with LOCK:
-        STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mchars': f.get('mchars', f['chars']), 'mtime': f.get('mtime', ''), 'year': year_of(f)} for f in files],
+        STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mchars': f.get('mchars', f['chars']), 'mtime': f.get('mtime', ''), 'year': year_of(f), 'ocr': bool(f.get('ocr'))} for f in files], 'n_ocr': n_ocr,
                       'failures': failures, 'fingerprints': fps, 'items': [], 'dropped': [], 'errors': [], 'calls': [], 'exports': [], 'step': 2, 'progress': None})
         fa = docs.folder_areas(files)   # 맨 위 폴더가 업무 이름이면 그것으로 업무를 나눈다(사용자가 키워드를 손본 뒤에는 그대로 둔다)
         if fa and STATE.get('areas_src') in (None, '', '기본', '폴더'):
@@ -331,6 +357,7 @@ class H(BaseHTTPRequestHandler):
                 st['extracting'] = STATE.get('extracting') if _extracting else None; st['extract_error'] = STATE.get('extract_error', '')
                 st['areas_text'] = docs.areas_text(STATE.get('areas') or core.DEFAULT_AREAS)
                 st['n_skip'] = sum(1 for x in STATE['failures'] if x.get('skip')); st['n_fail'] = len(STATE['failures']) - st['n_skip']
+                st['ocr_status'] = ocr_status(); st['ocr_engine'] = EX.OCR_CONFIG.get('engine', '')
             return self._send(200, st)
         if p.path == '/api/items':
             with LOCK:
@@ -419,7 +446,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:
-                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path'):
+                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path', 'ocr', 'ocr_pages', 'ocr_images'):
                     if k in body:
                         STATE[k] = body[k]
                 if 'areas_text' in body:
@@ -433,6 +460,8 @@ class H(BaseHTTPRequestHandler):
                     STATE['url'] = str(body['url'])
                 if STATE['files']:
                     STATE['plan'] = make_plan()
+                if any(k in body for k in ('ocr', 'ocr_pages', 'ocr_images')):
+                    ocr_status(refresh=True); set_ocr_config()
             save_session()
             return self._send(200, {'ok': True, 'plan': STATE['plan']})
         if p == '/api/draft':

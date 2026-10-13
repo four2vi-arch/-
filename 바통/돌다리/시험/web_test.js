@@ -28,6 +28,8 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
   try {
     await page.goto(`http://127.0.0.1:${PORT}/`); await sleep(600);
     ok('첫 화면은 준비(폴더 읽기)', await page.$eval('#nav a.cur', a => a.dataset.s) === 'prep');
+    ok('OCR 설정 줄', !!(await page.$('#ocr')) && (await page.textContent('#main')).includes('OCR'));
+    await page.selectOption('#ocr', 'off'); await sleep(500); ok('OCR 끄기 저장', (await state()).ocr === 'off');
     await page.click('#fsup'); await page.click('#fsdn'); await page.click('#thm'); const dark = await page.evaluate(() => document.documentElement.dataset.theme); await page.click('#thm'); ok('글자 크기·밝기', dark === 'dark');
     await page.click('#btnPick'); await page.waitForSelector('#picker:not([hidden])'); const nd = await page.$$eval('#pkList .d', d => d.length); await page.click('#pkList .d'); await sleep(200); await page.click('#pkUp'); await sleep(200); await page.click('#pkClose'); ok('찾기 창', nd > 0 && await page.$eval('#picker', el => el.hidden));
     await page.fill('#folder', MOCK); await page.click('#btnExtract'); await page.waitForSelector('.pills', {timeout: 40000}); await sleep(500);

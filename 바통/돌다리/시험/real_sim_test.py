@@ -77,8 +77,16 @@ G = ['국제우편 길라잡이 (2026 개정판)', '제1장 국제우편 상품 
 write_docx(os.path.join(SRC, '00_업무총괄·규정·매뉴얼·서식', '국제우편_길라잡이_2026_10.docx'), G)
 open(os.path.join(SRC, '00_업무총괄·규정·매뉴얼·서식', '국제우편_길라잡이_2026_10.md'), 'w', encoding='utf-8').write('# ' + G[0] + '\n\n' + '\n\n'.join(G[1:]) + '\n')
 # 스캔 PDF(글자 없음) · .cell · 이름만 .xlsx인 옛 .xls · 대문자 확장자 · 긴 이름
-from PIL import Image
-Image.new('RGB', (600, 800), 'white').save(os.path.join(SRC, '05_고객만족CS·전광판', '20260922_19_2026년 한국산업의 고객만족도 1위 달성 현수막.pdf'))
+from PIL import Image, ImageDraw, ImageFont
+_img = Image.new('L', (2480, 3508), 255); _d = ImageDraw.Draw(_img)
+try:
+    _font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 56)
+except Exception:
+    _font = ImageFont.load_default()
+for _i, _l in enumerate(['JEONGEUP POST OFFICE', 'Subject: KCSI banner notice 2026', 'Submit by 2026-10-31. Contact 063-530-7771']):
+    _d.text((200, 300 + _i * 120), _l, font=_font, fill=0)
+_img.rotate(0.8, expand=False, fillcolor=255).save(os.path.join(SRC, '05_고객만족CS·전광판', '20260922_19_2026년 한국산업의 고객만족도 1위 달성 현수막.pdf'), 'PDF', resolution=300.0)
+Image.new('RGB', (600, 800), 'white').save(os.path.join(SRC, '07_민원·손해배상', '20260930_09_빈 스캔.pdf'))
 open(os.path.join(SRC, '10_전략상품·준등기', '20261012_11_통상우편 전략상품 이벤트 실적현황(7.1.-9.30.).cell'), 'wb').write(os.urandom(2000))
 open(os.path.join(SRC, '16_안부살핌·복지사업', '20261008_02_4차 안부살핌 우편서비스 지원대상자 명단(최종).xlsx'), 'wb').write(b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1' + b'\x00' * 2000)
 shutil.copy(os.path.join(ROOT, '모의데이터', '가온우체국_모의업무폴더', '02_보고서·계획(한글)', '03_2026년_우편영업_업무_추진계획_초안_.hwpx'), os.path.join(SRC, '00_업무총괄·규정·매뉴얼·서식', '20261006_19_제5절 우편사서함 사용계약.HWPX'))
@@ -112,9 +120,15 @@ def wait(key, secs=180):
         time.sleep(0.2)
     return api('/api/state')[1]
 try:
+    st0 = api('/api/state')[1]; has_rapid = bool((st0.get('ocr_status') or {}).get('rapidocr', {}).get('ok'))
+    code, r = api('/api/settings', {'ocr': 'rapidocr' if has_rapid else 'off', 'ocr_pages': 3}); check('OCR 설정 저장', code == 200, 'rapidocr %s' % has_rapid)
     code, r = api('/api/extract', {'folder': SRC, 'exclude': []}); check('읽기 시작', code == 200 and r.get('started'))
     st = wait('extracting')
-    check('읽기 결과: 못 읽은 문서가 스캔 PDF·cell·옛 xls', st['n_fail'] >= 3 and st['files'] and len(st['files']) > 90, '읽음 %d · 못 읽음 %d · 읽지 않음 %d' % (len(st['files']), st['n_fail'], st['n_skip']))
+    check('읽기 결과: 못 읽은 문서가 빈 스캔·cell·옛 xls', st['n_fail'] >= 3 and st['files'] and len(st['files']) > 90, '읽음 %d · 못 읽음 %d · 읽지 않음 %d · OCR %d' % (len(st['files']), st['n_fail'], st['n_skip'], st.get('n_ocr', 0)))
+    if has_rapid:
+        check('스캔 PDF를 OCR로 읽음(영문·숫자)', st.get('n_ocr', 0) >= 1 and any(f.get('ocr') and '현수막' in f['file'] for f in st['files']))
+        check('빈 스캔 PDF는 「글자를 읽지 못함」으로', any('읽지 못함' in x['reason'] for x in api('/api/state')[1]['failures']))
+        check('OCR 캐시 생성', os.path.isdir(os.path.join(LOGW, 'ocr_cache')) and len(os.listdir(os.path.join(LOGW, 'ocr_cache'))) >= 1)
     check('업무를 폴더 이름으로 나눔', st.get('areas_src') == '폴더' and any(a.startswith('창구운영') for a in st['areas_text'].split('\n')), st['areas_text'].split('\n')[1][:30])
     p = st['plan']; check('계획: 붙임이 공문에 접힘(붙임 수 ≥ 60)', p['n_attach'] >= 60, json.dumps({k: p[k] for k in ('n_items', 'n_issue', 'n_recur', 'n_hist', 'n_status', 'n_old', 'n_attach')}, ensure_ascii=False))
     check('계획: 반복 업무 1건 이상(현안이기도 한 것은 현안으로 셈)', p['n_recur'] >= 1, str(p['n_recur']))
