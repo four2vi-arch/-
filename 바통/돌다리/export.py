@@ -36,6 +36,17 @@ CLS_ORDER = ['공문', '메일', '회의록', '보고서·계획', '메모', '�
 STATUS_LABEL = {'진행': '진행 중', '미결': '미결(회신·결정 대기)', '완료': '끝남'}
 
 
+def month_of(s):
+    """'2026-09-10' → 9, '매년 3월' → 3, '매주 화요일' → 0. 사람이 적은 날짜는 아무 꼴이나 올 수 있다."""
+    s = str(s or '')
+    m = re.match(r'^\d{4}-(\d{2})', s) or re.search(r'(\d{1,2})\s*월', s)
+    try:
+        v = int(m.group(1)) if m else 0
+    except Exception:
+        v = 0
+    return v if 1 <= v <= 12 else 0
+
+
 def kept_docs(session):
     return [it for it in session.get('items', []) if it.get('keep', True)]   # 넣기 전 제안도 싣는다(「확인 전」 표시). 버리기·빼기만 뺀다.
 
@@ -95,7 +106,7 @@ def chapters(session):
         out.append(('p', '(없음)'))
     months = {m: [] for m in range(1, 13)}
     for it in recur:
-        m = (it.get('recur') or {}).get('month') or (int(it['date'][5:7]) if it.get('date') else 0)
+        m = (it.get('recur') or {}).get('month') or month_of(it.get('date') or it.get('when') or '')
         months.setdefault(m if 1 <= m <= 12 else 0, []).append(it)
     for m in range(1, 13):
         for it in months[m]:

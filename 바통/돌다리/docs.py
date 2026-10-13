@@ -30,7 +30,10 @@ SYS3 = ('너는 공공기관 업무 인수인계 도우미다. 전임자의 문�
         '형식: {"요지":"이 문서가 무엇을 요구하거나 알리는지 한 문장","할 일":"우리 부서(전임자 자리)가 해야 하는 일 한 문장, 없으면 빈 문자열","기한":"YYYY-MM-DD 또는 빈 문자열","담당":"문의할 사람·부서와 전화, 없으면 빈 문자열","상태":"진행 중|끝남|모름"}\n'
         '규칙: (1) 문서에 없는 내용은 만들지 않는다. (2) 기한은 문서에 적힌 날짜만 쓴다. (3) 한 문장은 60자 안. (4) 설명문·코드 펜스 없이 JSON만.')
 CLS_ISSUE = {'공문', '메일', '메모', '회의록', '보고서·계획'}
-HISTORY = re.compile(r'협약|체결|계약|신설|폐지|개정|변경|도입|종료|이관|지정|선정|개편|설치|시범|확정|개소|폐국|통합|승인|감사|지적|제정|전환|위탁|수탁')   # 업무의 전환점을 뜻하는 제목 말
+HISTORY = re.compile(r'협약|체결|계약|신설|폐지|개정|변경|도입|종료|이관|지정|선정|개편|설치|시범|확정|개소|폐국|통합|승인|감사|지적|제정|전환|위탁|수탁')   # 업무의 전환점을 뜻하는 제목 말(기간 밖 문서용)
+HISTORY_STRONG = re.compile(r'협약|체결|신설|폐지|제정|이관|통합|개소|폐국|위탁|수탁')   # 기간 안 문서에도 연혁 꼬리표를 붙이는 센 말
+DOC_TYPE_FOLDER = re.compile(r'공문|보고서|대장|엑셀|워드|메일|메모|기타|한글|pdf|사진|그림|서식$|미분류|참고', re.I)   # 업무가 아니라 문서 종류로 나눈 폴더
+DUMMY_PHONE = re.compile(r'^0*-0*-0*$|123-?4567|1234-?5678|0000-?0000|^0\d{1,2}-(\d)\1{2,3}-(\d)\2{3}$')          # 서식의 보기 번호
 STATUS_NAME = re.compile(r'(현황|대장|명단|목록|일정표?|리스트|실적표?)\s*(\(.*\)|_?\d{4}(년)?)?\s*$')                                  # 현황 자료: 제목이 현황·대장·명단·목록으로 끝나는 것(최신판 하나만)
 HIST_CAP = 12   # 업무마다 연혁으로 올리는 기간 밖 문서 상한(최근 것부터)
 
@@ -168,7 +171,7 @@ def contacts_of(text):
             ph = m.group(0)
             if ph in seen or re.search(r'팩스|FAX|fax|Fax', s[max(0, m.start() - 12):m.start()]):
                 continue
-            if not CONTACT_LINE.search(s):
+            if not CONTACT_LINE.search(s) or DUMMY_PHONE.search(ph):
                 continue
             seen.add(ph)
             out.append({'name': core.name_near_phone(s, ph), 'phone': ph, 'line': s[:80]})
@@ -185,7 +188,12 @@ def recur_key(title):
     return t if len(t) >= 6 else ''
 
 
-def area_of(title, text, areas):
+def area_of(title, text, areas, file=''):
+    """업무 이름이 맨 위 폴더 이름과 같으면 그 업무(폴더로 정리한 폴더). 아니면 키워드 많이 든 업무."""
+    if file:
+        fa = folder_area_name(file)
+        if fa and any(a['name'] == fa for a in areas):
+            return fa
     hay = (title + ' ') * 3 + text[:800]
     hay = hay.lower()
     best, score = '기타', 0
@@ -195,6 +203,28 @@ def area_of(title, text, areas):
         if n > score:
             best, score = a['name'], n
     return best
+
+
+def top_folder(file):
+    f = str(file or '').replace('\\', '/')
+    return f.split('/')[0] if '/' in f else ''
+
+
+def folder_area_name(file):
+    return re.sub(r'^\d+[_\-.\s]*', '', top_folder(file)).strip()
+
+
+def folder_areas(files):
+    """맨 위 하위 폴더 이름이 업무 이름이면(공문·보고서 같은 문서 종류 이름이 아니면) 그 이름으로 업무 목록을 만든다. 아니면 None."""
+    names = []
+    for f in files:
+        n = folder_area_name(f['file'])
+        if n and n not in names:
+            names.append(n)
+    good = [n for n in names if not DOC_TYPE_FOLDER.search(n)]
+    if len(good) < 3 or len(good) < len(names) * 0.5:
+        return None
+    return [{'name': n, 'keys': ', '.join(p for p in re.split(r'[·,/\s]+', n) if len(p) >= 2)} for n in good]
 
 
 def parse_areas(text):
@@ -270,7 +300,7 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
         cls = classify(f, text)
         title = doc_title(f, text)
         d = {'file': f['file'], 'kind': f.get('kind', ''), 'cls': cls, 'date': date, 'date_src': date_src, 'docno': doc_no(text), 'title': title,
-             'area': area_of(title, text, areas), 'due': due_dates(text, date) if cls in CLS_ISSUE | {'붙임'} else [], 'contacts': contacts_of(text) if cls != '표·대장' else [],
+             'area': area_of(title, text, areas, f['file']), 'due': due_dates(text, date) if cls in CLS_ISSUE | {'붙임'} else [], 'contacts': contacts_of(text) if cls != '표·대장' else [],
              'issue_words': bool(ISSUE.search(text[:6000])) if cls in CLS_ISSUE else False, 'chars': f.get('chars', 0), 'recur': None, 'attachments': []}
         docs.append(d)
     # 붙임은 같은 날짜 머리의 공문에 붙인다(파일 이름 「YYYYMMDD_NN」 꼴일 때)
@@ -279,14 +309,21 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
         m = re.match(r'^(\d{8})_', base_name({'file': d['file']}))
         if m:
             by_prefix[(os.path.dirname(d['file']), m.group(1))].append(d)
+    def seq_of(d):
+        m = re.match(r'^\d{8}_(\d{1,3})', base_name({'file': d['file']}))
+        return int(m.group(1)) if m else 0
     for key, group in by_prefix.items():
-        parents = [d for d in group if d['cls'] == '공문']
-        if len(parents) == 1:
-            for d in group:
-                if d['cls'] == '붙임':
-                    parents[0]['attachments'].append(d['file']); d['parent'] = parents[0]['file']
-                    if d['due'] and not parents[0]['due']:
-                        parents[0]['due'] = d['due']
+        parents = sorted([d for d in group if d['cls'] == '공문'], key=seq_of)
+        if not parents:
+            continue
+        for d in group:
+            if d['cls'] != '붙임':
+                continue
+            before = [p for p in parents if seq_of(p) < seq_of(d)]
+            p = before[-1] if before else parents[0]   # 순번이 바로 앞인 공문, 없으면 그 날의 첫 공문
+            p['attachments'].append(d['file']); d['parent'] = p['file']
+            if d['due'] and not p['due']:
+                p['due'] = d['due']
     # 반복 업무: 같은 제목 꼴이 서로 다른 해에 2번 이상
     groups = collections.defaultdict(list)
     lim_recur = (today - datetime.timedelta(days=30 * recur_months)).isoformat()
@@ -308,9 +345,13 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
     for d in docs:
         d['dup'] = False
         by_title[(d['cls'], core.norm(d['title']))].append(d)
+    RANK = {'hwpx': 0, 'hwp': 1, 'docx': 2, 'odt': 3, 'md': 4, 'txt': 5, 'pdf': 6}
     for k, g in by_title.items():
-        for d in g:
-            if d['kind'] == 'pdf' and any(o is not d and o['kind'] != 'pdf' and abs(o['chars'] - d['chars']) <= 0.3 * max(o['chars'], d['chars'], 1) for o in g):
+        if len(g) < 2:
+            continue
+        g2 = sorted(g, key=lambda d: (RANK.get(d['kind'], 9), -d['chars']))
+        for d in g2[1:]:   # 형식이 다른 같은 문서(docx와 그 pdf·md)만 중복. 이름만 같은 같은 형식 파일은 각각 다른 문서로 둔다
+            if d['kind'] in RANK and d['kind'] != g2[0]['kind'] and abs(g2[0]['chars'] - d['chars']) <= 0.5 * max(g2[0]['chars'], d['chars'], 1):
                 d['dup'] = True
     for d in docs:
         am = area_months.get(d['area'], months)
@@ -351,7 +392,8 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
     # 연혁: 전환점 말이 든 제목·옛 인수인계서·매뉴얼에 반영된 문서. 기간 밖이면 업무마다 최근 HIST_CAP건까지 「연혁」 항목으로
     per_area = collections.defaultdict(list)
     for d in docs:
-        d['hist'] = bool(d['cls'] in ('공문', '보고서·계획', '회의록', '인수인계서', '기타') and not d.get('parent') and not d.get('dup') and (d['cls'] == '인수인계서' or HISTORY.search(d['title'])))
+        words = HISTORY if d['kind3'] == '기간 밖' else HISTORY_STRONG
+        d['hist'] = bool(d['cls'] in ('공문', '보고서·계획', '회의록', '인수인계서', '기타') and not d.get('parent') and not d.get('dup') and (d['cls'] == '인수인계서' or words.search(d['title'])))
         if d['hist'] and d['kind3'] == '기간 밖':
             per_area[d['area']].append(d)
     for a, g in per_area.items():

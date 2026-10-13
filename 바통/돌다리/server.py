@@ -16,7 +16,7 @@ import docs
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '3.2.1 (2026-10-14)'
+VERSION = '3.3 (2026-10-14)'
 MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
@@ -127,6 +127,10 @@ def do_extract(folder, exclude=None):
     with LOCK:
         STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mchars': f.get('mchars', f['chars']), 'mtime': f.get('mtime', ''), 'year': year_of(f)} for f in files],
                       'failures': failures, 'fingerprints': fps, 'items': [], 'dropped': [], 'errors': [], 'calls': [], 'exports': [], 'step': 2, 'progress': None})
+        fa = docs.folder_areas(files)   # 맨 위 폴더가 업무 이름이면 그것으로 업무를 나눈다(사용자가 키워드를 손본 뒤에는 그대로 둔다)
+        if fa and STATE.get('areas_src') in (None, '', '기본', '폴더'):
+            STATE['areas'] = fa; STATE['areas_src'] = '폴더'
+            log('업무를 폴더 이름으로 나눕니다: %d개' % len(fa))
         STATE['plan'] = make_plan()
     log('추출 %.1f초: 읽음 %d · 못 읽음 %d · 원본 변경 %d' % (time.time() - t0, len(files), len(failures), sum(1 for x in fps if not x['unchanged'])))
     save_session()
@@ -400,10 +404,10 @@ class H(BaseHTTPRequestHandler):
                     if k in body:
                         STATE[k] = body[k]
                 if 'areas_text' in body:
-                    STATE['areas'] = docs.parse_areas(body['areas_text']) or core.DEFAULT_AREAS
+                    STATE['areas'] = docs.parse_areas(body['areas_text']) or core.DEFAULT_AREAS; STATE['areas_src'] = '사람' if body['areas_text'].strip() else '기본'
                     for it in STATE['items']:
                         if it.get('area_by') != '사람':
-                            it['area'] = docs.area_of(it.get('title', ''), '', STATE['areas'])
+                            it['area'] = docs.area_of(it.get('title', ''), '', STATE['areas'], it.get('file', ''))
                 if 'url' in body:
                     if not core.is_local_url(str(body['url'])):
                         return self._send(400, {'error': '모델 주소는 127.0.0.1 또는 localhost만 허용합니다'})
@@ -441,7 +445,7 @@ class H(BaseHTTPRequestHandler):
                             it[k] = str(ch[k]); it[k + '_by'] = '사람'
                     if 'area' in ch:
                         it['area'] = str(ch['area']); it['area_by'] = '사람'
-                    if 'kind3' in ch and ch['kind3'] in ('현안', '반복', '문서'):
+                    if 'kind3' in ch and ch['kind3'] in ('현안', '반복', '문서', '연혁', '현황'):
                         it['kind3'] = ch['kind3']
                 for b in body.get('bulk', []):          # 일괄: {'ids': [...], 'keep': true/false}
                     for i in b.get('ids', []):
@@ -452,7 +456,7 @@ class H(BaseHTTPRequestHandler):
                     nid = max([0] + [it['id'] for it in STATE['items']]) + 1
                     rec = {'id': nid, 'file': '', 'kind': '', 'cls': '직접 입력', 'date': str(new.get('date', '')).strip()[:10], 'docno': '', 'title': str(new.get('title', '')).strip()[:160],
                            'area': str(new.get('area') or '기타'), 'area_by': '사람', 'due': [], 'due_next': str(new.get('due_next', '')).strip()[:10], 'contacts': [], 'recur': None, 'attachments': [],
-                           'kind3': new.get('kind3') if new.get('kind3') in ('현안', '반복', '문서') else '현안', 'reflected': '', 'summary': '', 'todo': str(new.get('todo', '')).strip()[:160], 'todo_by': '사람',
+                           'kind3': new.get('kind3') if new.get('kind3') in ('현안', '반복', '문서', '연혁', '현황') else '현안', 'reflected': '', 'summary': '', 'todo': str(new.get('todo', '')).strip()[:160], 'todo_by': '사람',
                            'owner': '', 'model_status': '', 'src': '직접 입력', 'keep': True, 'decided': True, 'status': '진행', 'next': '', 'note': str(new.get('note', '')).strip(), 'seen': False, 'quote': '',
                            'when': str(new.get('when', '')).strip()[:40]}
                     STATE['items'].append(rec)

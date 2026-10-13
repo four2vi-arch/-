@@ -141,7 +141,7 @@ function card(it, o) {
 function bindCards(root) {
   root.querySelectorAll('.sug[data-id]').forEach(el => {
     const id = +el.dataset.id; const it = ITEMS.find(i => i.id === id); if (!it) return;
-    el.querySelectorAll('[data-k]').forEach(inp => inp.onchange = () => { mark(id, inp.dataset.k, inp.value); if (inp.dataset.k === 'area' || inp.dataset.k === 'kind3') rerender(); });
+    el.querySelectorAll('[data-k]').forEach(inp => inp.onchange = () => { mark(id, inp.dataset.k, inp.value); if (inp.dataset.k === 'area' || inp.dataset.k === 'kind3') { renderNav(); renderAside(); } });   // 업무·절을 바꿔도 카드는 다음 화면 이동 때까지 제자리(바뀌어 사라진 줄 알던 것)
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { const on = b.dataset.act === 'in'; mark(id, 'keep', on); mark(id, 'decided', true); rerender(); });
     const sn = el.querySelector('.seen'); if (sn) sn.onchange = () => { mark(id, 'seen', sn.checked); renderNav(); renderAside(); };
   });
@@ -208,7 +208,7 @@ function renderPrep(m) {
     if (ST.running && pr) h += `<div class="bar"><i style="width:${pr.calls_total ? Math.round(100 * pr.calls_done / pr.calls_total) : 0}%"></i></div>`;
     if (ITEMS.length) h += `<div class="s">다시 만들어도 넣기·버리기·상태·메모는 파일 기준으로 그대로 남습니다.</div>`;
     h += `<div class="row"><label>누적 매뉴얼 파일 <input type="text" id="manualPath" value="${esc(ST.manual_path || '')}" placeholder="비우면 폴더 안에서 자동으로 찾음. 폴더 밖이면 파일 주소(docx·hwpx·md)" style="width:520px"></label>${ST.info && ST.info.manual ? `<span class="s">지금 잡힌 매뉴얼: ${esc(ST.info.manual)}</span>` : ''}</div>`;
-    h += `<details><summary>업무 키워드·기간 설정</summary><div class="s" style="margin-top:8px">한 줄에 「업무 이름: 키워드, 키워드 | 기간」. 문서 제목·앞부분에 키워드가 많이 든 업무로 분류합니다. 기간을 안 적으면 위 기본 기간.</div><textarea id="areas" style="width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(ST.areas_text || '')}</textarea><div class="row"><button class="ghost sm" id="btnAreas">적용(다시 분류)</button><button class="ghost sm" id="btnAreasDefault">기본값으로</button></div></details>`;
+    h += `<details><summary>업무 키워드·기간 설정${ST.areas_src === '폴더' ? ' <span class="chip">폴더 이름으로 나눔</span>' : ''}</summary><div class="s" style="margin-top:8px">한 줄에 「업무 이름: 키워드, 키워드 | 기간」. 맨 위 폴더 이름이 업무 이름과 같으면 그 업무로, 아니면(미분류·서식 폴더 등) 제목·앞부분에 키워드가 많이 든 업무로 분류합니다. 기간을 안 적으면 위 기본 기간.</div><textarea id="areas" style="width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(ST.areas_text || '')}</textarea><div class="row"><button class="ghost sm" id="btnAreas">적용(다시 분류)</button><button class="ghost sm" id="btnAreasDefault">기본값으로</button></div></details>`;
   }
   h += '</div>';
   if (ITEMS.length) h += `<div class="good">초안이 있습니다. 왼쪽 「1-가. 담당 업무」부터 차례로 채우세요. <button class="btn sm" id="goS1">서식으로</button></div>`;
