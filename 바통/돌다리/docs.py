@@ -13,7 +13,7 @@ import core
 TABLE_KINDS = core.TABLE_KINDS
 MANUAL_NAME = re.compile(r'매뉴얼|업무편람|편람', re.I)
 HANDOVER_NAME = re.compile(r'인수인계', re.I)
-ATTACH_NAME = re.compile(r'^\(?붙임|\[붙임|\(별첨|별지|별표', re.I)
+ATTACH_NAME = re.compile(r'^[\(\[]?\s*(붙임|별첨|별지|별표)', re.I)
 DOCNO = re.compile(r'(?<![가-힣A-Za-z])([가-힣A-Za-z]{2,12}(?:과|실|팀|국|청|부|원|센터|본부|처|관|소))-(\d{2,6})(?!\d)')
 SI_LINE = re.compile(r'시행\s+([가-힣A-Za-z]{2,14}-\d{2,6})')
 FULLDATE = re.compile(r'(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})')
@@ -95,9 +95,17 @@ def doc_no(text):
     return ''
 
 
+def stem_wo_prefix(name):
+    """「20260911_07_붙임3_홍보물.pdf」 → 「붙임3_홍보물」: 날짜·순번 머리를 뗀 파일 이름."""
+    stem = os.path.splitext(name)[0]
+    stem = re.sub(r'^\d{6,8}[_\-\s]*(?:\d{1,3}(?:\(\d+\))?[_\-\s]*)?', '', stem)
+    return re.sub(r'^\d{1,3}[_\-\s]+', '', stem)
+
+
 def classify(f, text):
     name = base_name(f); kind = f.get('kind', '')
     head = text[:400]
+    stem = stem_wo_prefix(name)
     if kind in TABLE_KINDS:
         return '표·대장'
     if kind == 'eml':
@@ -110,7 +118,7 @@ def classify(f, text):
         return '매뉴얼'
     if core.REFERENCE_NAME.search(name):
         return '규정·지침'
-    if ATTACH_NAME.search(name):
+    if ATTACH_NAME.search(stem) or re.match(r'^[\(\[]?(붙임|별첨|별지|별표)\s*\d*', stem):
         return '붙임'
     if re.search(r'(^|\n)\s*제\s*목\s', head) and (re.search(r'(^|\n)\s*수\s*신\s', head) or SI_LINE.search(text)):
         return '공문'
