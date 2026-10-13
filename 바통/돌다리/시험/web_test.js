@@ -101,6 +101,9 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     // 재시작 → 이어서
     srv.kill(); await sleep(500); srv = startSrv(); await sleep(1500); await page.goto(`http://127.0.0.1:${PORT}/`); await sleep(1200);
     ok('재시작 뒤 이어서 열림', (await state()).step >= 4 && (await page.$eval('#nav a.cur', a => a.dataset.s)) !== 'prep');
+    // 고르는 중에는 화면을 다시 그리지 않는다: 모델 목록에 초점을 두고 폴링이 지나가도 같은 요소가 남아야 한다
+    await nav('prep'); await page.click('#engineSeg button[data-e="model"]'); await sleep(300); await page.focus('#model'); await page.evaluate(() => { window.__sel = document.querySelector('#model'); }); await page.evaluate(() => refresh()); await sleep(600);
+    ok('모델 고르는 중 화면 유지', await page.evaluate(() => window.__sel === document.querySelector('#model')));
     // 다시 만들기 → 결정 유지 + 이전 응답 재사용
     const before = (await items()).filter(i => i.decided === true && i.file).length;
     await nav('prep'); await page.click('#btnDraft'); await waitDone();

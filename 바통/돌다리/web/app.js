@@ -34,10 +34,14 @@ async function refresh() {
   $('#subline').textContent = (ST.folder ? ST.folder + ' · ' : '') + (ST.handover_from || ST.handover_to ? `인계자 ${ST.handover_from || '?'} → 인수자 ${ST.handover_to || '?'} · ` : '') + '이 PC 안에서만 작동';
   renderNav(); renderAside();
   const pr = ST.progress;
+  const el = document.activeElement;
+  const busy = el && $('#main') && $('#main').contains(el) && ['SELECT', 'INPUT', 'TEXTAREA'].includes(el.tagName);   // 사용자가 고르는 중이면 화면을 다시 그리지 않는다(모델 목록이 닫히던 것)
   if (ST.running && sec === 'prep' && $('#btnStop') && pr) {
     $('#progText').textContent = progText(pr);
     const bar = $('#main .bar i'); if (bar) bar.style.width = (pr.calls_total ? Math.round(100 * pr.calls_done / pr.calls_total) : 0) + '%';
-  } else renderMain();
+  } else if ((ST.reloading || ST.extracting) && sec === 'prep' && $('#extractMsg')) {
+    $('#extractMsg').innerHTML = extractMsgHtml();   // 되읽기·읽기 중에는 진행 글만 바꾼다
+  } else if (!busy) renderMain();
   if (ST.running || ST.reloading || ST.extracting) { clearTimeout(timer); timer = setTimeout(refresh, ST.running ? 1500 : 2500); }
 }
 function progText(pr) {
@@ -171,12 +175,19 @@ function bindAdd(kind3) {
 }
 function sortRows(r) { return r.slice().sort((x, y) => (isSug(y) - isSug(x)) || String(y.date || '').localeCompare(String(x.date || ''))); }
 
+function extractMsgHtml() {
+  const x = ST.extracting;
+  if (x) return `<div class="note">읽는 중 ${x.index}/${x.total} · ${secText(x.sec || 0)} · ${esc(x.file || '')}</div><div class="bar"><i style="width:${x.total ? Math.round(100 * x.index / x.total) : 0}%"></i></div>`;
+  if (ST.reloading) return '<div class="note">이전 폴더의 글자를 뒤에서 되읽는 중입니다(큰 폴더는 몇 분). 그동안 모델·기간 설정은 할 수 있고, 「초안 만들기」는 끝난 뒤 누르세요.</div>';
+  if (ST.extract_error) return `<div class="bad">${esc(ST.extract_error)}</div>`;
+  return '';
+}
 // --- 준비
 function renderPrep(m) {
   const x = ST.extracting; const f = ST.files || [];
   let h = head('폴더 읽기 · 초안 만들기', '처음 한 번만 하는 준비입니다. 문서 한 건이 카드 한 장이 되고, 왼쪽 서식 차례대로 넣기·버리기만 하면 됩니다.');
   h += `<div class="sec"><h3>① 업무 폴더</h3><div class="row"><input type="text" id="folder" class="wide" value="${esc(ST.folder || '')}" placeholder="예) C:\\업무\\우편영업실  (주소를 붙여 넣거나 「찾기」)"><button class="ghost" id="btnPick">찾기…</button><button class="ghost" id="btnBrowse">창으로 찾기</button><button class="btn" id="btnExtract" ${x ? 'disabled' : ''}>읽기</button></div>
-    <div id="picker" class="picker" hidden><div class="row"><b>폴더 고르기</b> <span id="pkPath" class="s"></span><button class="ghost sm" id="pkUp">위로</button><button class="btn sm" id="pkUse">이 폴더로</button><button class="ghost sm" id="pkClose">닫기</button></div><div id="pkList"></div></div><div id="extractMsg">${x ? `<div class="note">읽는 중 ${x.index}/${x.total} · ${secText(x.sec || 0)} · ${esc(x.file || '')}</div><div class="bar"><i style="width:${x.total ? Math.round(100 * x.index / x.total) : 0}%"></i></div>` : ST.extract_error ? `<div class="bad">${esc(ST.extract_error)}</div>` : ''}</div>`;
+    <div id="picker" class="picker" hidden><div class="row"><b>폴더 고르기</b> <span id="pkPath" class="s"></span><button class="ghost sm" id="pkUp">위로</button><button class="btn sm" id="pkUse">이 폴더로</button><button class="ghost sm" id="pkClose">닫기</button></div><div id="pkList"></div></div><div id="extractMsg">${extractMsgHtml()}</div>`;
   if (f.length) {
     h += `<div class="pills"><span class="pill">읽은 문서 <b>${f.length}</b></span><span class="pill">못 읽은 문서 <b>${ST.n_fail || 0}</b></span><span class="pill">읽지 않는 형식 <b>${ST.n_skip || 0}</b></span><span class="pill">원본 변경 <b>${ST.originals_changed || 0}</b></span></div>`;
     if (ST.warn) h += `<div class="note">${esc(ST.warn)}</div>`;
