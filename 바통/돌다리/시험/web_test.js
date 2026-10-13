@@ -109,6 +109,7 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     await nav('prep'); await page.click('#btnDraft'); await waitDone();
     const after = await items(); ok('다시 만들어도 넣기·버리기·상태·메모 유지', after.filter(i => i.decided === true && i.file).length >= before - 1 && after.some(i => i.next === '본부 회신 오면 보고') && after.some(i => i.src === '직접 입력'), `${before} → ${after.filter(i => i.decided === true && i.file).length}`);
     ok('다시 만들기에서 이전 응답 재사용', !!(await state()).log.find(l => l.includes('재사용')));
+    const allIn = await page.$('#btnAllIn'); ok('준비 화면에 「제안 전부 넣기」', !!allIn || (await items()).filter(i => i.decided !== true && i.src !== '직접 입력').length === 0);
     // 매뉴얼 파일 직접 지정(폴더 밖)
     await setVal('#manualPath', path.join(MOCK, '04_매뉴얼·회의록(워드)', '우편영업실_업무매뉴얼_v3.docx')); await sleep(400); await page.click('#engineSeg button[data-e="rules"]'); await sleep(300); await page.click('#btnDraft'); await waitDone();
     ok('매뉴얼 파일 직접 지정', (await state()).info.manual_refs === 3 && !!(await state()).log.find(l => l.includes('매뉴얼 파일 지정')));

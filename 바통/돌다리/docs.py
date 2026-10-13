@@ -109,6 +109,8 @@ def classify(f, text):
     name = base_name(f); kind = f.get('kind', '')
     head = text[:400]
     stem = stem_wo_prefix(name)
+    if ATTACH_NAME.search(stem) or re.match(r'^[\(\[]?(붙임|별첨|별지|별표)\s*\d*', stem):   # 「(붙임2) ….xlsx」도 붙임(표보다 먼저 본다)
+        return '붙임'
     if kind in TABLE_KINDS:
         return '표·대장'
     if kind == 'eml':
@@ -119,12 +121,10 @@ def classify(f, text):
         return '인수인계서'
     if MANUAL_NAME.search(name):
         return '매뉴얼'
+    if re.search(r'(^|\n)\s*제\s*목\s', head) and (re.search(r'(^|\n)\s*수\s*신\s', head) or SI_LINE.search(text)):
+        return '공문'   # 공문 꼴(제목+수신·시행)이면 제목에 「안내서」가 있어도 공문(「위조 도착안내서 조치 안내」 같은 것)
     if core.REFERENCE_NAME.search(name):
         return '규정·지침'
-    if ATTACH_NAME.search(stem) or re.match(r'^[\(\[]?(붙임|별첨|별지|별표)\s*\d*', stem):
-        return '붙임'
-    if re.search(r'(^|\n)\s*제\s*목\s', head) and (re.search(r'(^|\n)\s*수\s*신\s', head) or SI_LINE.search(text)):
-        return '공문'
     if kind in ('txt', 'md'):
         return '메모'
     if re.search(r'(^|\n)\s*[□ㅇ○◦]\s', text[:2000]):
@@ -372,7 +372,7 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
             d['kind3'] = '현안'
         elif d['recur'] and d['recur']['latest'] == d['file'] and d['cls'] in ('공문', '보고서·계획', '회의록'):
             d['kind3'] = '반복'
-        elif in_window and d['cls'] not in ('표·대장', '붙임'):
+        elif in_window and d['cls'] != '표·대장':   # 부모 공문을 못 읽은(스캔 PDF 등) 붙임도 문서로 남긴다
             d['kind3'] = '문서'
         else:
             d['kind3'] = '기간 밖'

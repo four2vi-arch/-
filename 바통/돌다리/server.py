@@ -16,7 +16,7 @@ import docs
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '3.3 (2026-10-14)'
+VERSION = '3.3.1 (2026-10-14)'
 MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
@@ -157,6 +157,11 @@ def make_plan():
 def run_draft():
     files = _files_with_units()
     t0 = time.time()
+    fa = docs.folder_areas(files)
+    if fa and STATE.get('areas_src') in (None, '', '기본', '폴더') and [a['name'] for a in fa] != [a['name'] for a in (STATE.get('areas') or [])]:
+        with LOCK:
+            STATE['areas'] = fa; STATE['areas_src'] = '폴더'
+        log('업무를 폴더 이름으로 나눕니다: %d개' % len(fa))
 
     def progress(p):
         with LOCK:
@@ -298,6 +303,13 @@ class H(BaseHTTPRequestHandler):
         return h in ('127.0.0.1', 'localhost')
 
     def do_GET(self):
+        try:
+            return self._get()
+        except Exception as e:   # 어떤 예외든 화면에 한글로(「Failed to fetch」 대신), 서버는 계속
+            log('요청 처리 실패(%s): %s' % (self.path.split('?')[0], str(e)[:160]))
+            return self._send(500, {'error': '처리 중 오류: %s' % str(e)[:200]})
+
+    def _get(self):
         if not self._ok_host():
             return self._send(403, {'error': 'localhost만'})
         p = urllib.parse.urlsplit(self.path)
@@ -366,6 +378,13 @@ class H(BaseHTTPRequestHandler):
         return self._send(404, {'error': '없는 주소'})
 
     def do_POST(self):
+        try:
+            return self._post()
+        except Exception as e:
+            log('요청 처리 실패(%s): %s' % (self.path.split('?')[0], str(e)[:160]))
+            return self._send(500, {'error': '처리 중 오류: %s' % str(e)[:200]})
+
+    def _post(self):
         if not self._ok_host():
             return self._send(403, {'error': 'localhost만'})
         n = int(self.headers.get('Content-Length') or 0)

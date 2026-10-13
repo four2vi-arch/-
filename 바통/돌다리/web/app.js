@@ -211,11 +211,14 @@ function renderPrep(m) {
     h += `<details><summary>업무 키워드·기간 설정${ST.areas_src === '폴더' ? ' <span class="chip">폴더 이름으로 나눔</span>' : ''}</summary><div class="s" style="margin-top:8px">한 줄에 「업무 이름: 키워드, 키워드 | 기간」. 맨 위 폴더 이름이 업무 이름과 같으면 그 업무로, 아니면(미분류·서식 폴더 등) 제목·앞부분에 키워드가 많이 든 업무로 분류합니다. 기간을 안 적으면 위 기본 기간.</div><textarea id="areas" style="width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(ST.areas_text || '')}</textarea><div class="row"><button class="ghost sm" id="btnAreas">적용(다시 분류)</button><button class="ghost sm" id="btnAreasDefault">기본값으로</button></div></details>`;
   }
   h += '</div>';
-  if (ITEMS.length) h += `<div class="good">초안이 있습니다. 왼쪽 「1-가. 담당 업무」부터 차례로 채우세요. <button class="btn sm" id="goS1">서식으로</button></div>`;
+  if (ITEMS.length) { const nS = ITEMS.filter(isSug).length; h += `<div class="good">초안이 있습니다. 왼쪽 「1-가. 담당 업무」부터 차례로 채우세요. <button class="btn sm" id="goS1">서식으로</button>${nS && mode === 'give' ? ` <button class="ghost sm" id="btnAllIn">제안 ${nS}건 전부 넣기(나중에 「빼기」로 정리)</button>` : ''}</div>`; }
+  h += `<details><summary>처음 쓰는 분 — 다섯 단계</summary><div class="s" style="margin-top:6px">① 폴더를 읽고 「초안 만들기」(규칙만이면 몇 초). ② 1-가에서 인계자·인수자·입회자와 업무별 한 줄 설명. ③ 1-다 현안에서 넣기·버리기, 미결은 상태를 「미결」로. ④ 3절 물품·예산을 직접 적기. ⑤ 「인계·인수서 내려받기」 → docx는 서식에 맞추고 _온나라.txt는 칸마다 붙여 넣기. 넣기 전 제안도 「확인 전」으로 함께 실립니다.</div></details>`;
   m.innerHTML = h; bindPrep();
 }
 function bindPrep() {
   const g = $('#goS1'); if (g) g.onclick = () => { sec = 's1a'; rerender(); };
+  const ai = $('#btnAllIn'); if (ai) ai.onclick = async () => { const ids = ITEMS.filter(isSug).map(i => i.id); if (!confirm(`제안 ${ids.length}건을 모두 넣을까요? 필요 없는 것은 각 절에서 「빼기」로 정리하면 됩니다.`)) return;
+    try { const j = await api('/api/items', {changes: Object.values(pending), bulk: [{ids, keep: true}]}); pending = {}; ITEMS = j.items; sec = 's1c'; rerender(); } catch (e) { alert(e.message); } };
   $('#btnExtract').onclick = () => doExtract($('#folder').value, []);
   $('#btnPick').onclick = () => pkLoad($('#folder').value.trim() || '').catch(e => alert(e.message));
   $('#pkClose').onclick = () => { $('#picker').hidden = true; };
