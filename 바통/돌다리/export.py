@@ -5,7 +5,7 @@ import os, re, json, zipfile, datetime
 from xml.sax.saxutils import escape
 
 TYPES = ['월별 할 일', '협의할 사람', '진행 중 현안']
-CREDIT = '돌다리 v3.0(업무바통) · 이희재(정읍우체국)'
+CREDIT = '돌다리(업무바통) · 이희재(정읍우체국)'
 
 
 def kept_items(session):
@@ -111,7 +111,7 @@ def chapters(session):
     for m in range(1, 13):
         for it in months[m]:
             r = it.get('recur') or {}
-            out.append(('li', '%d월 · %s%s%s' % (m, it.get('title', ''), (' (%s년 %d회)' % ('·'.join(r['years']), r['n'])) if r.get('years') else '', ' · 확인 전' if undecided(it) else '')))
+            out.append(('li', '%s · %s%s%s' % ('매월' if r.get('cycle') == '매월' else '%d월' % m, it.get('title', ''), (' (%s년 %d회)' % ('·'.join(r['years']), r['n'])) if r.get('years') and r.get('cycle') != '매월' else ((' (%d개월 %d회)' % (len(r['months']), r['n'])) if r.get('months') else ''), ' · 확인 전' if undecided(it) else '')))
             if it.get('todo'):
                 out.append(('sub', '할 일: ' + it['todo']))
             if it.get('note'):
@@ -164,7 +164,7 @@ def chapters(session):
             out.append(('li', '%s%s · %s%s' % (star, doc_line(it), it.get('cls', ''), {'연혁': ' · 연혁', '현황': ' · 현황 자료'}.get(it.get('kind3'), ''))))
             out.append(('sub', src_line(it)))
     out.append(('h1', '3. 주요 물품 및 예산 등'))
-    AS = [('acct', '계정·비밀번호 보관처'), ('goods', '열쇠·물품·비품'), ('budget', '예산·미지급·정산'), ('etc', '그 밖의 당부')]
+    AS = [('acct', '계정·비밀번호 보관처(비밀번호 자체는 적지 않음)'), ('goods', '열쇠·물품·비품'), ('budget', '예산·미지급·정산'), ('etc', '그 밖의 당부')]
     for k, label in AS:
         out.append(('p', '%s: %s' % (label, assets.get(k) or '(적지 않음)')))
     out.append(('h1', '4. 그 밖의 참고사항'))
@@ -239,13 +239,13 @@ def onnara_sections(session):
         if cur is not None:
             secs.append((cur, '\n'.join(buf).strip()))
     for kind, text in chapters(session):
-        if kind in ('h1', 'h2') and not (kind == 'h2' and cur is not None and cur.startswith('4.') and not text.startswith(('가.', '나.', '다.', '라.'))):
+        if kind == 'h1' or (kind == 'h2' and text.startswith(('가.', '나.', '다.', '라.'))):   # 칸은 1-가·나·다·라, 2, 3, 4뿐. 그 안의 작은 제목은 [제목] 줄로
             if kind == 'h1' and text.startswith('1.'):
                 continue   # 1.은 가·나·다·라로 나뉜다
             if kind == 'h1' and text.startswith('붙임'):
                 flush(); cur = None; break   # 붙임 목록은 온나라 칸에 넣지 않는다
             flush(); cur, buf = text, []
-        elif kind == 'h3':
+        elif kind in ('h2', 'h3'):
             buf.append('[%s]' % text)
         elif kind == 'p':
             buf.append(text)

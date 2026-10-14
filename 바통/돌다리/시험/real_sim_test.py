@@ -64,6 +64,9 @@ for i in range(40):
 for y in (2024, 2025, 2026):
     gongmun('13_이벤트·명절마케팅', '%d. 8. 20.' % y, 1, '우편영업과-%d' % (1500 + y), '%d년 추석 명절 소포우편물 특별소통 대책 추진' % y, '9월 10일까지 통보')
     gongmun('17_실적·목표·평가', '%d. 2. 10.' % y, 1, '우편영업과-%d' % (600 + y), '%d년도 우편매출액 목표 배정 알림' % y, '3월 13일까지 제출')
+# 매월 오는 공문(같은 제목 꼴, 다른 달)
+for mm in (7, 8, 9):
+    gongmun('12_국제우편', '2026. %d. 17.' % mm, 1, '우편영업과-%d' % (3900 + mm), "'26년 %d월 국제 선편소포 우편물 과오취급 현황 알림" % (mm - 1), '%d월 25일까지 회신' % mm)
 # 연혁(기간 밖, 전환점 말)
 gongmun('02_창구운영·요금납부', '2023. 5. 2.', 1, '영업과-800', '우편요금 후납 계약 체결(가온물류)', '5월 30일까지 서류 제출')
 gongmun('16_안부살핌·복지사업', '2025. 3. 4.', 1, '영업과-310', '안부살핌 우편서비스 업무협약 체결(정읍시)', '3월 31일까지 협약서 제출')
@@ -146,7 +149,9 @@ try:
     check('보기 번호(123-4567·000-0000-0000) 제외, 실제 번호는 실림', not any(c['phone'] in ('02-123-4567', '000-0000-0000') for i in items for c in i['contacts']) and any(c['phone'] == '063-530-7771' for i in items for c in i['contacts']))
     check('기간 안 공문에 연혁 꼬리표 남발 없음(센 말만)', sum(1 for i in items if i['hist'] and i['kind3'] != '연혁') <= 6, str(sum(1 for i in items if i['hist'] and i['kind3'] != '연혁')))
     check('기간 밖 전환점 문서가 연혁으로', sum(1 for i in items if i['kind3'] == '연혁') >= 2, str(sum(1 for i in items if i['kind3'] == '연혁')))
-    check('해마다 오는 공문 2묶음(추석·목표 배정) 찾음', len({tuple(i['recur']['years']) + (i['recur']['month'],) for i in items if i.get('recur')}) >= 2)
+    check('해마다 오는 공문 2묶음(추석·목표 배정) 찾음', len({tuple(i['recur']['years']) + (i['recur']['month'],) for i in items if i.get('recur') and i['recur'].get('cycle') == '매년'}) >= 2)
+    check('매월 오는 공문(과오취급 현황) 찾음', any(i.get('recur') and i['recur'].get('cycle') == '매월' for i in items))
+    check('기간 안 문서에 매뉴얼 반영만으로 연혁 꼬리표 안 붙음', sum(1 for i in items if i['hist'] and i['kind3'] != '연혁') <= 6, str(sum(1 for i in items if i['hist'] and i['kind3'] != '연혁')))
     check('붙임 xlsx가 현황 자료로 따로 오르지 않음', not any('(붙임2)' in i['title'] for i in items))
     check('모델 요지 붙음·오류 0', sum(1 for i in items if i['src'] == '모델') >= 10 and not st['errors'], '모델 %d · 호출 %d' % (sum(1 for i in items if i['src'] == '모델'), len(st['calls'])))
     # 사용자 조작: 절 바꾸기(연혁·현황), 업무 바꾸기, 미결, 직접 적기(날짜 글), 일괄 넣기
@@ -159,7 +164,7 @@ try:
     code, r = api('/api/export', {}); check('내보내기(날짜 글 항목 포함) 성공', code == 200 and len(r.get('files', [])) == 4, json.dumps(r, ensure_ascii=False)[:160])
     md = open(os.path.join(LOGW, [f for f in r['files'] if f.endswith('.md')][0]), encoding='utf-8').read()
     check('md: 서식 차례·확인 전·★·연혁·현황·직접 적은 항목', all(k in md for k in ('### 가. 담당 업무', '### 라. 주요 미결사항', '회신 대기', '★', '현황 자료:', '소속국 실적 산출', '확인 전', '붙임 1.', '붙임 2.')))
-    code, r = api('/api/onnara'); check('온나라 절별 글', code == 200 and len(r['sections']) >= 7)
+    code, r = api('/api/onnara'); check('온나라 절별 글은 칸 7개(1-가·나·다·라, 2, 3, 4)', code == 200 and len(r['sections']) == 7, ' / '.join(x['name'] for x in r['sections']))
     code, r = api('/api/search?q=' + urllib.parse.quote('안부살핌')); check('물어보기 검색', code == 200 and r['hits'])
     # 재시작 → 이어서 → 다시 초안(재사용) → 내보내기
     srv.terminate(); srv.wait(timeout=10); out1 = srv.stdout.read()

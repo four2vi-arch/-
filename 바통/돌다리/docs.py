@@ -35,6 +35,7 @@ HISTORY_STRONG = re.compile(r'협약|체결|신설|폐지|제정|이관|통합|�
 DOC_TYPE_FOLDER = re.compile(r'공문|보고서|대장|엑셀|워드|메일|메모|기타|한글|pdf|사진|그림|서식$|미분류|참고', re.I)   # 업무가 아니라 문서 종류로 나눈 폴더
 DUMMY_PHONE = re.compile(r'^0*-0*-0*$|123-?4567|1234-?5678|0000-?0000|^0\d{1,2}-(\d)\1{2,3}-(\d)\2{3}$')          # 서식의 보기 번호
 STATUS_NAME = re.compile(r'(현황|대장|명단|목록|일정표?|리스트|실적표?)\s*(\(.*\)|_?\d{4}(년)?)?\s*$')                                  # 현황 자료: 제목이 현황·대장·명단·목록으로 끝나는 것(최신판 하나만)
+HR_NAME = re.compile(r'인사|임용|경력|신상|요약카드|근무평정|발령')
 HIST_CAP = 12   # 업무마다 연혁으로 올리는 기간 밖 문서 상한(최근 것부터)
 
 
@@ -194,6 +195,10 @@ def area_of(title, text, areas, file=''):
         fa = folder_area_name(file)
         if fa and any(a['name'] == fa for a in areas):
             return fa
+        if fa:
+            for a in areas:
+                if fa.lower() in [k.strip().lower() for k in str(a.get('keys', '')).split(',')]:
+                    return a['name']
     hay = (title + ' ') * 3 + text[:800]
     hay = hay.lower()
     best, score = '기타', 0
@@ -300,7 +305,8 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
         cls = classify(f, text)
         title = doc_title(f, text)
         d = {'file': f['file'], 'kind': f.get('kind', ''), 'cls': cls, 'date': date, 'date_src': date_src, 'docno': doc_no(text), 'title': title,
-             'area': area_of(title, text, areas, f['file']), 'due': due_dates(text, date) if cls in CLS_ISSUE | {'붙임'} else [], 'contacts': contacts_of(text) if cls != '표·대장' else [],
+             'area': area_of(title, text, areas, f['file']), 'due': due_dates(text, date) if cls in CLS_ISSUE | {'붙임'} else [],
+             'contacts': contacts_of(text) if (cls != '표·대장' and not HR_NAME.search(title)) else [],   # 인사·임용·경력 자료의 번호는 개인정보 → 연락처로 쓰지 않는다
              'issue_words': bool(ISSUE.search(text[:6000])) if cls in CLS_ISSUE else False, 'chars': f.get('chars', 0), 'recur': None, 'attachments': []}
         docs.append(d)
     # 붙임은 같은 날짜 머리의 공문에 붙인다(파일 이름 「YYYYMMDD_NN」 꼴일 때)
@@ -332,14 +338,19 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
             k = recur_key(d['title'])
             if k:
                 groups[k].append(d)
+    lim12 = (today - datetime.timedelta(days=365)).isoformat()
     for k, g in groups.items():
         years = sorted({d['date'][:4] for d in g})
+        yms = sorted({d['date'][:7] for d in g if d['date'] >= lim12})
+        latest = max(g, key=lambda d: d['date'])
         if len(years) >= 2:
             months_seen = collections.Counter(int(d['date'][5:7]) for d in g)
             mon = months_seen.most_common(1)[0][0]
-            latest = max(g, key=lambda d: d['date'])
             for d in g:
-                d['recur'] = {'years': years, 'month': mon, 'n': len(g), 'latest': latest['file']}
+                d['recur'] = {'years': years, 'month': mon, 'n': len(g), 'latest': latest['file'], 'cycle': '매년'}
+        elif len(yms) >= 3:   # 같은 제목 꼴이 1년 안에 서로 다른 달 3번 이상 → 매월 업무(과오취급 현황 알림 같은 것)
+            for d in g:
+                d['recur'] = {'years': years, 'month': int(latest['date'][5:7]), 'n': len(g), 'latest': latest['file'], 'cycle': '매월', 'months': yms}
     # 항목이 되는 문서: 기간 안(업무별) 또는 반복 업무의 최근 판
     by_title = collections.defaultdict(list)   # 같은 문서를 docx와 pdf로 둘 다 둔 경우: pdf 쪽만 중복으로 뺀다(제목만 같은 다른 문서는 남긴다)
     for d in docs:
@@ -447,7 +458,7 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
               'due': d['due'], 'due_next': d['due_next'], 'contacts': d['contacts'], 'recur': d['recur'], 'attachments': d['attachments'], 'kind3': d['kind3'],
               'reflected': reflected(d, nos, line_grams) if manual is not None else '', 'hist': d.get('hist', False), 'is_status': d.get('is_status', False), 'summary': '', 'todo': '', 'owner': '', 'model_status': '',
               'src': '규칙', 'keep': True, 'decided': False, 'status': '진행', 'next': '', 'note': '', 'seen': False, 'quote': ''}
-        if manual is not None and it['reflected'] and d['kind3'] in ('연혁', '문서'):
+        if manual is not None and it['reflected'] and d['kind3'] == '연혁':
             it['hist'] = True
         if d['to_model'] and model != 'none' and not stopped and not (should_stop and should_stop()):
             f = by_file.get(d['file'])
@@ -476,7 +487,8 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                         it['due_next'] = due
                     owner = str(obj.get('담당') or '').strip()[:60]
                     ph = core.PHONE.search(owner)
-                    if owner and ((ph and ph.group(0) in text) or (not ph and owner[:4] in text)):
+                    nm = re.search(r'([가-힣]{2,4})\s*(?:주무관|담당|과장|팀장|실장|국장|계장|사무관|서기관)', owner)
+                    if owner and not re.search(r'미기재|확인 필요|없음|모름|○○', owner) and ((ph and ph.group(0) in text) or (nm and nm.group(1) in text and nm.group(1) not in ('담당자',))):
                         it['owner'] = owner
                     st = str(obj.get('상태') or '')
                     it['model_status'] = '끝남' if '끝' in st else ('진행 중' if '진행' in st else '')

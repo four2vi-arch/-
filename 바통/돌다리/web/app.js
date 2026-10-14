@@ -3,7 +3,7 @@
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const KINDS = ['현안', '반복', '문서', '연혁', '현황'];
 const STATUS = {'진행': '진행 중', '미결': '미결(회신·결정 대기)', '완료': '끝남'};
-const AS = [['acct', '계정·비밀번호 보관처', '예) 우편영업 시스템 계정은 서무 담당이 관리, 비밀번호는 봉인 봉투'], ['goods', '열쇠·물품·비품', '예) 매대 열쇠 2개(서랍), 전시용 태블릿 1대'], ['budget', '예산·미지급·정산', '예) 홍보 예산 잔액, 업체 미지급 1건(12월 정산)'], ['etc', '그 밖의 당부', '예) 국장 보고는 매주 월요일 오전']];
+const AS = [['acct', '계정·비밀번호 보관처 (비밀번호 자체는 적지 마세요 — 어디에 보관돼 있는지만)', '예) 우편영업 시스템 계정은 서무 담당이 관리, 비밀번호는 봉인 봉투'], ['goods', '열쇠·물품·비품', '예) 매대 열쇠 2개(서랍), 전시용 태블릿 1대'], ['budget', '예산·미지급·정산', '예) 홍보 예산 잔액, 업체 미지급 1건(12월 정산)'], ['etc', '그 밖의 당부', '예) 국장 보고는 매주 월요일 오전']];
 const SECS = [['s1a', '1-가. 담당 업무'], ['s1b', '1-나. 업무계획·반복 업무'], ['s1c', '1-다. 현안사항'], ['s1d', '1-라. 미결사항'], ['s2', '2. 관련 문서 현황'], ['s3', '3. 물품·예산'], ['s4', '4. 참고(연락처·매뉴얼)']];
 const ONNARA = {s1a: '가. 담당 업무', s1b: '나. 주요 업무계획 및 진행사항', s1c: '다. 현안사항 및 문제점', s1d: '라. 주요 미결사항', s2: '2. 관련 문서 현황', s3: '3. 주요 물품 및 예산 등', s4: '4. 그 밖의 참고사항'};
 let ST = null, ITEMS = [], AREAS = [], OV = {}, ASSETS = {};
@@ -115,7 +115,7 @@ function card(it, o) {
   o = o || {};
   const sug = isSug(it), off = !sug && !it.keep, ro = mode === 'take';
   const chips = [`<span class="chip">${esc(it.cls || '')}</span>`];
-  if (it.recur && it.recur.years) chips.push(`<span class="chip cy">매년 ${it.recur.month}월 · ${it.recur.years.join('·')}</span>`);
+  if (it.recur && it.recur.years) chips.push(`<span class="chip cy">${it.recur.cycle === '매월' ? '매월 · ' + (it.recur.months || []).length + '개월' : '매년 ' + it.recur.month + '월 · ' + it.recur.years.join('·')}</span>`);
   if (it.hist && it.kind3 !== '연혁') chips.push('<span class="chip">연혁</span>');
   if (it.kind3 === '현황') chips.push('<span class="chip">현황 자료</span>');
   if (it.kind3 === '현안' && !sug && it.keep) chips.push(`<span class="chip st">${STATUS[it.status || '진행']}</span>`);

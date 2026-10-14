@@ -175,7 +175,21 @@ def _png_bytes(img):
     b = io.BytesIO(); img.convert('L').save(b, format='PNG'); return b.getvalue()
 
 
+def _fit_windows(img):
+    """윈도 OCR은 한 변이 MaxImageDimension(보통 2600)을 넘으면 거부한다 → 미리 줄인다."""
+    try:
+        from winrt.windows.media.ocr import OcrEngine
+        mx = int(OcrEngine.max_image_dimension)
+    except Exception:
+        mx = 2600
+    w, h = img.size
+    if max(w, h) > mx:
+        k = (mx - 1) / max(w, h); img = img.resize((max(1, int(w * k)), max(1, int(h * k))))
+    return img
+
+
 def ocr_windows(img, lang='ko'):
+    img = _fit_windows(img)
     try:
         import winocr
         res = winocr.recognize_pil_sync(img.convert('RGB'), lang)
@@ -196,14 +210,6 @@ def ocr_windows(img, lang='ko'):
     from winrt.windows.globalization import Language
     from winrt.windows.graphics.imaging import BitmapDecoder
     from winrt.windows.storage.streams import InMemoryRandomAccessStream, DataWriter
-    # 윈도 OCR은 한 변이 MaxImageDimension(보통 2600)을 넘으면 거부한다
-    try:
-        mx = int(OcrEngine.max_image_dimension)
-    except Exception:
-        mx = 2600
-    w, h = img.size
-    if max(w, h) > mx:
-        k = mx / max(w, h); img = img.resize((int(w * k), int(h * k)))
 
     async def run():
         stream = InMemoryRandomAccessStream()
