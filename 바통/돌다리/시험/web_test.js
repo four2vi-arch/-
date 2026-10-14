@@ -66,17 +66,17 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     ok('반복 업무 넣기 → 달력에 듦', (await page.$$eval('#main .cal .m:not(.empty)', x => x.length)) >= 1);
     // 1-다 현안
     await nav('s1c'); const nSug = (await items()).filter(i => i.kind3 === '현안' && i.decided !== true).length;
-    const inC = await page.$('#main .sug button[data-act="in"]'); await inC.click(); await sleep(700);
-    const outC = await page.$('#main .sug button[data-act="out"]'); await outC.click(); await sleep(700);
+    const inC = await page.$('#main [data-id] button[data-act="in"]'); await inC.click(); await sleep(700);
+    const outC = await page.$('#main [data-id] button[data-act="out"]'); await outC.click(); await sleep(700);
     ok('현안 넣기·버리기 저장', (await items()).filter(i => i.kind3 === '현안' && i.decided === true).length >= 2);
-    await page.selectOption('#main select[data-k="status"]', '미결'); await sleep(300); await setVal('#main input[data-k="next"]', '본부 회신 오면 보고'); await sleep(700);
+    await page.selectOption('#main select[data-k="status"]', '미결'); await sleep(300); await page.evaluate(() => { const row = document.querySelector('#main select[data-k="status"]').closest('[data-id]'); const el = row.querySelector('input[data-k="next"]'); el.value = '본부 회신 오면 보고'; el.dispatchEvent(new Event('change')); }); await sleep(700);
     ok('현안 상태 미결·다음 할 일 저장', (await items()).some(i => i.status === '미결' && i.next === '본부 회신 오면 보고'));
-    await setVal('#main input[data-k="todo"]', '후임자 할 일(시험)'); await sleep(700); ok('할 일 직접 고침(todo_by=사람)', (await items()).some(i => i.todo === '후임자 할 일(시험)' && i.todo_by === '사람'));
+    await page.evaluate(() => { const row = document.querySelector('#main select[data-k="status"]').closest('[data-id]'); const el = row.querySelector('input[data-k="todo"]'); el.value = '후임자 할 일(시험)'; el.dispatchEvent(new Event('change')); }); await sleep(700); ok('할 일 직접 고침(todo_by=사람)', (await items()).some(i => i.todo === '후임자 할 일(시험)' && i.todo_by === '사람'));
     const bulk = await page.$('#main [data-bulk="in"]'); if (bulk) { await bulk.click(); await sleep(900); }
     ok('남은 현안 제안 모두 넣기', (await items()).filter(i => i.kind3 === '현안' && i.decided !== true).length === 0, `제안 ${nSug}개였음`);
     await page.fill('#addTitle', '직접 적은 현안(시험)'); await page.fill('#addTodo', '전화하기'); await page.click('#btnAdd'); await sleep(600);
     ok('직접 적기', (await items()).some(i => i.src === '직접 입력' && i.title === '직접 적은 현안(시험)' && i.kind3 === '현안'));
-    await page.selectOption('#main .sug select[data-k="area"]', '기타'); await sleep(600); ok('업무 바꾸기', (await items()).some(i => i.area_by === '사람' && i.area === '기타'));
+    await page.selectOption('#main [data-id] select[data-k="area"]', '기타'); await sleep(600); ok('업무 바꾸기', (await items()).some(i => i.area_by === '사람' && i.area === '기타'));
     await page.screenshot({path: path.join(shots, 'v3_3_현안.png')});
     // 1-라 미결
     await nav('s1d'); ok('미결 절에 미결 현안', (await page.$$eval('#main input[data-k="next"]', x => x.map(e => e.value))).includes('본부 회신 오면 보고'));
@@ -84,17 +84,19 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     const onn = await (await fetch(`http://127.0.0.1:${PORT}/api/onnara`)).json(); ok('온나라 절별 글', onn.sections.length >= 7 && onn.sections.some(s => s.name.startsWith('라.') && s.text.includes('본부 회신')), onn.sections.map(s => s.name).join(' / '));
     await page.click('#btnCopy'); await sleep(400); ok('복사 단추', true);
     // 2·3·4
-    await nav('s2'); ok('관련 문서 현황에 ★ 미반영 표시', (await page.textContent('#main')).includes('매뉴얼 미반영'));
+    await nav('s2'); ok('관련 문서 현황에 ★ 미반영 표시', (await page.textContent('#main')).includes('★'));
     await nav('s3'); for (const k of ['acct', 'goods', 'budget', 'etc']) { await page.fill(`textarea[data-as="${k}"]`, '답 ' + k); await page.dispatchEvent(`textarea[data-as="${k}"]`, 'change'); await sleep(250); } ok('물품·예산 4칸 저장', Object.keys((await state()).assets).length === 4);
     await nav('s4'); const np = await page.$$eval('#main .person', x => x.length); ok('연락처(같은 번호 하나로)', np >= 2, np + '명'); ok('매뉴얼 안내·못 읽은 자료', (await page.textContent('#main')).includes('매뉴얼') && (await page.textContent('#main')).includes('못 읽은 문서'));
     // 물어보기
     await page.fill('#q', '마감'); await sleep(800); const na = await page.$$eval('#answers .ans', x => x.length); ok('물어보기 검색', na >= 1, na + '건');
     const lbl = await page.textContent('#progLbl'); ok('머리글 완성도', /완성도 \d+\/\d+/.test(lbl), lbl);
     // 인쇄·내보내기
-    await page.click('#btnPrint'); ok('인쇄', (await page.evaluate(() => window.__printed)) === 1 && (await page.$eval('#printView', e => e.children.length)) > 8);
+    await page.click('#btnPrint'); await sleep(1200); ok('인쇄(서식 표)', (await page.evaluate(() => window.__printed)) === 1 && (await page.$$eval('#printView table.f', x => x.length)) >= 6);
+    await page.click('#btnPreview'); await sleep(1200); ok('미리보기', (await page.$$eval('#main table.f', x => x.length)) >= 6); await page.screenshot({path: path.join(shots, 'v3_5_미리보기.png'), fullPage: true});
+    await nav('s1c'); ok('현안 표 보기', (await page.$$eval('#main table.tri tr.trow', x => x.length)) >= 1); await page.screenshot({path: path.join(shots, 'v3_5_현안표.png')});
     await page.click('#btnExport'); await sleep(2500); const ex = (await state()).exports; ok('내려받기 4개(md·docx·온나라 txt·원본지문)', ex.length === 4, ex.join(', '));
     const md = fs.readFileSync(path.join(WORK, ex.find(n => n.endsWith('.md'))), 'utf8');
-    ok('서식 차례(1-가·나·다·라, 2, 3, 4, 붙임 1·2)와 입력값', ['### 가. 담당 업무', '### 나. 주요 업무계획', '### 다. 현안사항', '### 라. 주요 미결사항', '## 2. 관련 문서 현황', '## 3. 주요 물품', '## 4. 그 밖의 참고사항', '## 붙임 1. 참고 문서 목록', '## 붙임 2.', '현황 자료:'].every(k => md.includes(k)) && md.includes('병수') && md.includes('설명 한 줄') && md.includes('답 acct') && md.includes('★'));
+    ok('서식 차례(1-가·나·다·라, 2, 3, 4, 붙임 1·2)와 입력값', ['### 가. 담당 업무', '### 나. 주요 업무계획', '### 다. 현안사항', '### 라. 주요 미결사항', '## 2. 관련 문서 현황', '## 3. 주요 물품', '## 4. 그 밖의 참고사항', '## 붙임 1. 참고 문서 목록', '## 붙임 2.', '현황 자료(최신 대장)'].every(k => md.includes(k)) && md.includes('병수') && md.includes('설명 한 줄') && md.includes('답 acct') && md.includes('★'));
     ok('넣기 전 제안도 「확인 전」으로 실림', md.includes('확인 전'));
     const txt = fs.readFileSync(path.join(WORK, ex.find(n => n.endsWith('_온나라.txt'))), 'utf8'); ok('온나라 txt', txt.includes('가. 담당 업무') && txt.includes('본부 회신 오면 보고'));
     // 받는 사람 모드
@@ -111,13 +113,13 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     await nav('prep'); await page.click('#btnDraft'); await waitDone();
     const after = await items(); ok('다시 만들어도 넣기·버리기·상태·메모 유지', after.filter(i => i.decided === true && i.file).length >= before - 1 && after.some(i => i.next === '본부 회신 오면 보고') && after.some(i => i.src === '직접 입력'), `${before} → ${after.filter(i => i.decided === true && i.file).length}`);
     ok('다시 만들기에서 이전 응답 재사용', !!(await state()).log.find(l => l.includes('재사용')));
-    const allIn = await page.$('#btnAllIn'); ok('준비 화면에 「제안 전부 넣기」', !!allIn || (await items()).filter(i => i.decided !== true && i.src !== '직접 입력').length === 0);
+    await nav('prep'); const allIn = await page.$('#btnAllIn'); ok('준비 화면에 「제안 전부 넣기」', !!allIn || (await items()).filter(i => i.decided !== true && i.src !== '직접 입력').length === 0);
     // 매뉴얼 파일 직접 지정(폴더 밖)
     await setVal('#manualPath', path.join(MOCK, '04_매뉴얼·회의록(워드)', '우편영업실_업무매뉴얼_v3.docx')); await sleep(400); await page.click('#engineSeg button[data-e="rules"]'); await sleep(300); await page.click('#btnDraft'); await waitDone();
     ok('매뉴얼 파일 직접 지정', (await state()).info.manual_refs === 3 && !!(await state()).log.find(l => l.includes('매뉴얼 파일 지정')));
-    await setVal('#manualPath', ''); await sleep(300); await page.click('#engineSeg button[data-e="model"]'); await sleep(400);
+    await nav('prep'); await setVal('#manualPath', ''); await sleep(300); await page.click('#engineSeg button[data-e="model"]'); await sleep(400);
     // 중단
-    await page.evaluate(() => { const s = document.querySelector('#model'); s.insertAdjacentHTML('beforeend', '<option value="slow-fake">slow-fake</option>'); s.value = 'slow-fake'; s.dispatchEvent(new Event('change')); }); await sleep(500);
+    await nav('prep'); await page.evaluate(() => { const s = document.querySelector('#model'); s.insertAdjacentHTML('beforeend', '<option value="slow-fake">slow-fake</option>'); s.value = 'slow-fake'; s.dispatchEvent(new Event('change')); }); await sleep(500);
     await page.click('#btnDraft'); await sleep(2500); await page.click('#btnStop'); await waitDone();
     const st3 = await state(); ok('중단', st3.progress.stopped === true, `호출 ${st3.progress.calls_done}/${st3.progress.calls_total}`);
     ok('콘솔 오류 없음(외부 주소 거부 400 제외)', errors.filter(e => !/400/.test(e)).length === 0, errors.filter(e => !/400/.test(e)).join(' | '));

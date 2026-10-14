@@ -17,7 +17,7 @@ import ocr
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '3.4.1 (2026-10-15)'
+VERSION = '3.5 (2026-10-15)'
 MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
@@ -362,11 +362,14 @@ class H(BaseHTTPRequestHandler):
         if p.path == '/api/items':
             with LOCK:
                 return self._send(200, {'items': STATE['items'], 'dropped': STATE['dropped']})
-        if p.path == '/api/onnara':   # 온나라 붙여넣기용 절별 평문(현재 상태로 바로 만든다)
+        if p.path in ('/api/onnara', '/api/report'):   # 온나라 붙여넣기용 절별 평문 / 인쇄용 서식 HTML(현재 상태로 바로 만든다)
             with LOCK:
                 session = {'items': STATE['items'], 'areas': STATE.get('areas') or core.DEFAULT_AREAS, 'overview': STATE.get('overview') or {}, 'assets': STATE.get('assets') or {},
                            'info': STATE.get('info') or {}, 'months': STATE.get('months', 12), 'failures': STATE['failures'], 'handover_from': STATE.get('handover_from', ''),
                            'handover_to': STATE.get('handover_to', ''), 'witness': STATE.get('witness', ''), 'handover_date': STATE.get('handover_date', ''), 'org': STATE.get('org', '')}
+                session.update({'title': STATE.get('title') or '', 'files': STATE['files'], 'fingerprints': STATE['fingerprints'], 'model': STATE['model'] or '없음(규칙층만)', 'version': VERSION})
+            if p.path == '/api/report':
+                return self._send(200, {'html': export.to_html(session)})
             return self._send(200, {'sections': [{'name': n, 'text': t} for n, t in export.onnara_sections(session)]})
         if p.path == '/api/search':   # 물어보기(1안): 파일 이름·본문 검색. 모델 없이 즉시. 이 PC 안에서만.
             q = urllib.parse.parse_qs(p.query).get('q', [''])[0].strip().lower()

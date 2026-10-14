@@ -163,7 +163,8 @@ try:
     code, r = api('/api/settings', {'handover_from': '갑돌', 'handover_to': '을순', 'witness': '병수', 'handover_date': '2026-10-14', 'org': '정읍우체국 영업과', 'overview': {'창구운영·요금납부': {'desc': '창구 운영', 'tip': '마감 확인'}}, 'assets': {'acct': '봉투'}})
     code, r = api('/api/export', {}); check('내보내기(날짜 글 항목 포함) 성공', code == 200 and len(r.get('files', [])) == 4, json.dumps(r, ensure_ascii=False)[:160])
     md = open(os.path.join(LOGW, [f for f in r['files'] if f.endswith('.md')][0]), encoding='utf-8').read()
-    check('md: 서식 차례·확인 전·★·연혁·현황·직접 적은 항목', all(k in md for k in ('### 가. 담당 업무', '### 라. 주요 미결사항', '회신 대기', '★', '현황 자료:', '소속국 실적 산출', '확인 전', '붙임 1.', '붙임 2.')))
+    check('md: 서식 차례·확인 전·★·연혁·현황·직접 적은 항목', all(k in md for k in ('### 가. 담당 업무', '### 라. 주요 미결사항', '회신 대기', '★', '현황 자료(최신 대장)', '소속국 실적 산출', '확인 전', '붙임 1.', '붙임 2.')))
+    code, r = api('/api/report'); check('인쇄용 서식 HTML', code == 200 and r['html'].count('<table') >= 6)
     code, r = api('/api/onnara'); check('온나라 절별 글은 칸 7개(1-가·나·다·라, 2, 3, 4)', code == 200 and len(r['sections']) == 7, ' / '.join(x['name'] for x in r['sections']))
     code, r = api('/api/search?q=' + urllib.parse.quote('안부살핌')); check('물어보기 검색', code == 200 and r['hits'])
     # 재시작 → 이어서 → 다시 초안(재사용) → 내보내기

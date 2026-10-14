@@ -7,7 +7,7 @@ const AS = [['acct', '계정·비밀번호 보관처 (비밀번호 자체는 적
 const SECS = [['s1a', '1-가. 담당 업무'], ['s1b', '1-나. 업무계획·반복 업무'], ['s1c', '1-다. 현안사항'], ['s1d', '1-라. 미결사항'], ['s2', '2. 관련 문서 현황'], ['s3', '3. 물품·예산'], ['s4', '4. 참고(연락처·매뉴얼)']];
 const ONNARA = {s1a: '가. 담당 업무', s1b: '나. 주요 업무계획 및 진행사항', s1c: '다. 현안사항 및 문제점', s1d: '라. 주요 미결사항', s2: '2. 관련 문서 현황', s3: '3. 주요 물품 및 예산 등', s4: '4. 그 밖의 참고사항'};
 let ST = null, ITEMS = [], AREAS = [], OV = {}, ASSETS = {};
-let mode = 'give', sec = 'prep', area = '', pending = {}, timer = null, flushTimer = null, engine = 'rules';
+let mode = 'give', sec = 'prep', area = '', pending = {}, timer = null, flushTimer = null, engine = 'rules', wasRunning = false;
 
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
@@ -42,6 +42,8 @@ async function refresh() {
   } else if ((ST.reloading || ST.extracting) && sec === 'prep' && $('#extractMsg')) {
     $('#extractMsg').innerHTML = extractMsgHtml();   // 되읽기·읽기 중에는 진행 글만 바꾼다
   } else if (!busy) renderMain();
+  if (wasRunning && !ST.running && ST.step >= 4 && sec === 'prep' && ITEMS.length) { sec = 's1c'; ls('sec', sec); rerender(); }   // 초안이 끝나면 바로 현안 절로
+  wasRunning = !!ST.running;
   if (ST.running || ST.reloading || ST.extracting) { clearTimeout(timer); timer = setTimeout(refresh, ST.running ? 1500 : 2500); }
 }
 function progText(pr) {
@@ -95,6 +97,7 @@ function renderMain() {
   if (!ITEMS.length && sec !== 'prep' && sec !== 'log') sec = 'prep';
   if (sec === 'prep') return renderPrep(m);
   if (sec === 'log') { m.innerHTML = `<h2>작업 기록</h2><div id="log">${esc((ST.log || []).join('\n'))}</div>`; return; }
+  if (sec === 'preview') { renderPreview(); return; }
   const fn = {s1a: renderS1a, s1b: renderS1b, s1c: renderS1c, s1d: renderS1d, s2: renderS2, s3: renderS3, s4: renderS4}[sec];
   if (fn) fn(m);
 }
@@ -139,7 +142,7 @@ function card(it, o) {
   return `<div class="sug doc ${sug ? '' : it.keep ? 'me' : 'off'}" data-id="${it.id}"><div>${body}</div><div class="act">${act}</div></div>`;
 }
 function bindCards(root) {
-  root.querySelectorAll('.sug[data-id]').forEach(el => {
+  root.querySelectorAll('.sug[data-id], .trow[data-id]').forEach(el => {
     const id = +el.dataset.id; const it = ITEMS.find(i => i.id === id); if (!it) return;
     el.querySelectorAll('[data-k]').forEach(inp => inp.onchange = () => { mark(id, inp.dataset.k, inp.value); if (inp.dataset.k === 'area' || inp.dataset.k === 'kind3') { renderNav(); renderAside(); } });   // 업무·절을 바꿔도 카드는 다음 화면 이동 때까지 제자리(바뀌어 사라진 줄 알던 것)
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { const on = b.dataset.act === 'in'; mark(id, 'keep', on); mark(id, 'decided', true); rerender(); });
@@ -172,6 +175,24 @@ function bindAdd(kind3) {
   const b = $('#btnAdd'); if (!b) return;
   b.onclick = async () => { const title = $('#addTitle').value.trim(); if (!title) return $('#addTitle').focus();
     try { const j = await api('/api/items', {changes: Object.values(pending), add: [{kind3, title, date: $('#addDate').value, todo: $('#addTodo').value, area: $('#addArea').value}]}); pending = {}; ITEMS = j.items; rerender(); } catch (e) { alert(e.message); } };
+}
+let view = ls('view') || 'table';   // 'table' = 한 줄씩 표로 빠르게 정리, 'card' = 카드
+function viewSeg() { return mode === 'take' ? '' : `<span class="r"><span class="seg" id="viewSeg"><button data-v="table" class="${view === 'table' ? 'on' : ''}">표로 보기</button><button data-v="card" class="${view === 'card' ? 'on' : ''}">카드로 보기</button></span></span>`; }
+function bindView(root) { const s = root.querySelector('#viewSeg'); if (s) s.querySelectorAll('button').forEach(b => b.onclick = () => { view = b.dataset.v; ls('view', view); renderMain(); }); }
+// 한 줄 = 문서 한 건. 넣기/버리기/상태/할 일을 표 안에서 바로 고친다
+function triTable(rows, o) {
+  o = o || {}; const ro = mode === 'take';
+  const tr = it => { const sug = isSug(it); const chips = [];
+    if (it.recur && it.recur.years) chips.push(`<span class="chip cy">${it.recur.cycle === '매월' ? '매월' : '매년 ' + it.recur.month + '월'}</span>`);
+    if (ST.info && ST.info.manual && it.cls === '공문' && !it.reflected) chips.push('<span class="chip st">★</span>');
+    if (it.src === '모델') chips.push('<span class="chip">AI</span>');
+    const act = ro ? (sug ? '<span class="chip">미확인</span>' : `<label><input type="checkbox" class="seen" ${it.seen ? 'checked' : ''}> 확인</label>`)
+      : sug ? `<button class="y" data-act="in">넣기</button> <button class="n" data-act="out">버리기</button>` : it.keep ? `<button class="n" data-act="out">빼기</button>` : `<button class="y" data-act="in">되살리기</button>`;
+    return `<tr class="trow ${sug ? 'sugrow' : !it.keep ? 'offrow' : ''}" data-id="${it.id}"><td class="d">${esc(it.date || '')}</td><td><input class="text" data-k="title" value="${esc(it.title)}" ${ro ? 'disabled' : ''}><div class="s">${esc(it.cls || '')}${it.docno ? ' · ' + esc(it.docno) : ''} · ${esc(fileName(it.file))}${it.summary ? '<br>요지: ' + esc(it.summary) : ''}</div></td>
+      <td>${chips.join(' ')}</td>${o.issue ? `<td>${!sug && it.keep && !ro ? `<select class="mini" data-k="status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(it.status || '진행') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>` : esc(STATUS[it.status || '진행'])}<input class="when" data-k="due_next" value="${esc(it.due_next || '')}" placeholder="기한" style="width:100%;margin-top:3px" ${ro ? 'disabled' : ''}></td>` : ''}
+      <td>${ro ? esc(it.todo || '') + (it.next ? '<br>다음: ' + esc(it.next) : '') : `<input class="text" data-k="todo" value="${esc(it.todo || '')}" placeholder="할 일">${o.issue ? `<input class="text" data-k="next" value="${esc(it.next || '')}" placeholder="다음에 할 일" style="margin-top:3px">` : ''}`}</td>
+      <td class="act">${act}${!ro && !sug && it.keep ? `<select class="mini" data-k="area" title="업무">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select><select class="mini" data-k="kind3" title="절">${KINDS.map(k => `<option ${it.kind3 === k ? 'selected' : ''}>${k}</option>`).join('')}</select>` : ''}</td></tr>`; };
+  return `<table class="tri"><tr><th style="width:84px">날짜</th><th>문서</th><th style="width:70px"></th>${o.issue ? '<th style="width:150px">상태·기한</th>' : ''}<th style="width:28%">할 일${o.issue ? ' · 다음' : ''}</th><th style="width:170px"></th></tr>${rows.map(tr).join('')}</table>`;
 }
 function sortRows(r) { return r.slice().sort((x, y) => (isSug(y) - isSug(x)) || String(y.date || '').localeCompare(String(x.date || ''))); }
 
@@ -306,11 +327,11 @@ function renderS1b(m) {
 // --- 1-다. 현안
 function renderS1c(m) {
   const rows = issues().filter(i => isSug(i) || i.status !== '미결');
-  let h = head('1-다. 현안사항 및 문제점', '기한이 남았거나 최근에 온 문서, 미결·보류 같은 말이 든 문서입니다. 넣기 → 상태·다음에 할 일 한 줄. 「미결」로 두면 1-라로 갑니다.', bulkBtns(rows));
-  for (const a of usedAreas()) { const r = rows.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건${r.filter(isSug).length ? ' · 제안 ' + r.filter(isSug).length : ''}</span></h3>` + sortRows(r).map(i => card(i)).join('') + '</div>'; }
+  let h = head('1-다. 현안사항 및 문제점', '기한이 남았거나 최근에 온 문서, 미결·보류 같은 말이 든 문서입니다. 넣기 → 상태·다음에 할 일 한 줄. 「미결」로 두면 1-라로 갑니다.', bulkBtns(rows) + viewSeg());
+  for (const a of usedAreas()) { const r = rows.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건${r.filter(isSug).length ? ' · 제안 ' + r.filter(isSug).length : ''}</span></h3>` + (view === 'table' ? triTable(sortRows(r), {issue: true}) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
   if (!rows.length) h += '<div class="s">현안 후보가 없습니다. 아래에서 직접 적을 수 있습니다.</div>';
   h += addRow('현안');
-  m.innerHTML = h; bindCards(m); bindBulk(m, () => rows); bindAdd('현안'); bindCopy();
+  m.innerHTML = h; bindCards(m); bindBulk(m, () => rows); bindAdd('현안'); bindCopy(); bindView(m);
 }
 // --- 1-라. 미결
 function renderS1d(m) {
@@ -324,9 +345,10 @@ function renderS2(m) {
   const info = ST.info || {};
   const rows = ITEMS.filter(i => i.kind3 === '문서');
   let h = head('2. 관련 문서 현황', `최근 ${ST.months || 12}개월 문서를 업무별로. 현안·반복으로 간 것도 함께 실립니다. ${info.manual ? `누적 매뉴얼 「${esc(fileName(info.manual))}」(문서번호 ${info.manual_refs}개)에 없는 공문은 ★ 표시.` : '폴더에 누적 매뉴얼(이름에 「매뉴얼」)이 있으면 반영 여부를 대조합니다.'} 기간 밖 문서 ${info.n_old || 0}건은 폴더에 그대로 둡니다.`, bulkBtns(rows, '그 밖의 문서 제안'));
-  for (const a of usedAreas()) { const r = ITEMS.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건</span></h3>` + sortRows(r).map(i => card(i)).join('') + '</div>'; }
+  h = h.replace('</p>', '</p>' + (mode === 'take' ? '' : `<div class="row">${viewSeg().replace('class="r"', '')}</div>`));
+  for (const a of usedAreas()) { const r = ITEMS.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건</span></h3>` + (view === 'table' ? triTable(sortRows(r)) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
   h += addRow('문서');
-  m.innerHTML = h; bindCards(m); bindBulk(m, () => rows); bindAdd('문서'); bindCopy();
+  m.innerHTML = h; bindCards(m); bindBulk(m, () => rows); bindAdd('문서'); bindCopy(); bindView(m);
 }
 // --- 3. 물품·예산
 function renderS3(m) {
@@ -376,23 +398,16 @@ $('#btnExport').onclick = async () => {
   try { await api('/api/export', {}); ST = await api('/api/state'); const files = ST.exports || []; const m = $('#main');
     m.insertAdjacentHTML('afterbegin', `<div class="good">업무인계·인수서를 만들었습니다(작업 폴더 ${esc(ST.work)}). ${files.map(n => `<a href="/api/download?name=${encodeURIComponent(n)}">${esc(n)}</a>`).join(' · ')} — .docx는 워드·한글에서 열어 서식에 맞추고, _온나라.txt는 칸마다 붙여 넣는 글, 원본지문.csv는 원본이 바뀌지 않았다는 증빙입니다.</div>`); window.scrollTo(0, 0); } catch (e) { alert(e.message); }
 };
-$('#btnPrint').onclick = () => { if (!ITEMS.length) return alert('인쇄할 초안이 없습니다.'); renderPrintView(); window.print(); };
-function renderPrintView() {
-  const k = ITEMS.filter(i => i.keep); const used = usedAreas();
-  const pi = it => `<div class="pi">${it.date ? '[' + esc(it.date) + '] ' : ''}${esc(it.title)}${it.docno ? ' (' + esc(it.docno) + ')' : ''}${isSug(it) ? ' [확인 전]' : it.kind3 === '현안' ? ' [' + STATUS[it.status || '진행'] + ']' : ''}${it.due_next ? ' · 기한 ' + esc(it.due_next) : ''}${it.todo ? ' → 할 일: ' + esc(it.todo) : ''}${it.next ? ' → 다음: ' + esc(it.next) : ''}${it.note ? ' — ' + esc(it.note) : ''}<span class="s">${it.file ? esc(it.file) : '전임자가 직접 적음'}</span></div>`;
-  let h = `<h2>업무인계·인수서 · ${esc(ST.title || '')}</h2><p>인계자 ${esc(ST.handover_from || '')} · 인수자 ${esc(ST.handover_to || '')} · 입회자 ${esc(ST.witness || '')} · ${esc(ST.handover_date || new Date().toLocaleDateString('ko-KR'))} · ${esc(ST.org || '')} · 돌다리 v${esc(ST.version || '')}</p>`;
-  const nUnd = ITEMS.filter(i => i.keep && isSug(i)).length;
-  h += '<h3>1. 업무현황</h3>' + (nUnd ? `<p>※ [확인 전] ${nUnd}건은 아직 넣기·버리기를 누르지 않은 제안입니다.</p>` : '') + '<h4>가. 담당 업무</h4>' + used.map(a => { const ov = OV[a] || {}; return `<p><b>${esc(a)}</b> ${esc(ov.desc || '')}${ov.tip ? ' · 조심할 것: ' + esc(ov.tip) : ''}</p>` + k.filter(i => areaOf(i) === a && (i.kind3 === '연혁' || i.hist || i.kind3 === '현황')).map(i => `<div class="pi">${i.kind3 === '현황' ? '현황 자료' : '연혁'} ${esc((i.date || '').slice(0, 7))} · ${esc(i.title)}${isSug(i) ? ' [확인 전]' : ''}<span class="s">${esc(i.file)}</span></div>`).join(''); }).join('');
-  h += '<h4>나. 주요 업무계획 및 진행사항</h4>' + (recurs().filter(i => i.keep).map(pi).join('') || '<p>(없음)</p>');
-  h += '<h4>다. 현안사항 및 문제점</h4>' + (issues().filter(i => i.keep && (isSug(i) || i.status !== '미결')).map(pi).join('') || '<p>(없음)</p>');
-  h += '<h4>라. 주요 미결사항</h4>' + (issues().filter(i => i.keep && !isSug(i) && i.status === '미결').map(pi).join('') || '<p>(없음)</p>');
-  h += '<h3>2. 관련 문서 현황</h3>' + used.map(a => `<h4>${esc(a)}</h4>` + k.filter(i => areaOf(i) === a).map(pi).join('')).join('');
-  h += '<h3>3. 주요 물품 및 예산 등</h3>' + AS.map(([kk, q]) => `<p><b>${q}</b> ${esc(ASSETS[kk] || '(적지 않음)')}</p>`).join('');
-  h += '<h3>4. 그 밖의 참고사항</h3>' + (contactsAll().map(p => `<div class="pi">${esc(p.a)} · ${esc(p.c.name)} · ${esc(p.c.phone)} · ${esc(p.c.line)}</div>`).join('') || '<p>(없음)</p>');
-  const fails = (ST.failures || []).filter(x => !x.skip); h += `<h3>붙임. 확인하지 못한 자료</h3>` + (fails.slice(0, 300).map(x => `<div class="pi">${esc(x.file)} — ${esc(x.reason)}</div>`).join('') || '<p>(없음)</p>') + (fails.length > 300 ? `<p>…외 ${fails.length - 300}개</p>` : '');
-  $('#printView').innerHTML = h;
+$('#btnPrint').onclick = async () => { if (!ITEMS.length) return alert('인쇄할 초안이 없습니다.'); await renderPrintView(); window.print(); };
+$('#btnPreview').onclick = async () => { if (!ITEMS.length) return alert('초안이 없습니다.'); sec = 'preview'; ls('sec', sec); renderNav(); await renderPreview(); };
+async function renderPrintView() {
+  await flush();
+  const j = await api('/api/report'); $('#printView').innerHTML = j.html;
 }
-
+async function renderPreview() {
+  const m = $('#main'); m.innerHTML = head('인쇄 미리보기', '내려받는 docx·인쇄물과 같은 서식 표입니다. 고치려면 왼쪽 절로 가서 카드를 바꾸면 바로 반영됩니다.') + '<div class="previewWrap"><div id="printView" style="display:block"></div></div>';
+  const j = await api('/api/report'); m.querySelector('#printView').innerHTML = j.html;
+}
 // ---------------------------------------------------------------- 시작
 mode = ls('mode') || 'give'; $$('#modeSeg button').forEach(x => x.classList.toggle('on', x.dataset.m === mode));
 engine = ls('engine') || 'rules';

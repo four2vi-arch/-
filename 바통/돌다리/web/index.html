@@ -93,6 +93,7 @@ input.wide{flex:1;min-width:240px}
 .picker .d{display:inline-block;margin:3px 6px 3px 0;padding:4px 10px;border:1px solid var(--line);border-radius:7px;background:var(--card);cursor:pointer}
 details{margin:8px 0}summary{cursor:pointer;color:var(--info);font-size:.92rem}
 table{border-collapse:collapse;width:100%;font-size:.92rem;margin:6px 0}th,td{border-bottom:1px solid var(--line2);padding:6px 8px;text-align:left;vertical-align:top}th{color:var(--ink2);font-weight:600;white-space:nowrap}td.num,th.num{text-align:right}
+table.tri td{padding:4px 6px}table.tri input.text{width:100%;border:1px solid transparent;background:transparent;padding:2px 4px;border-radius:6px}table.tri input.text:hover,table.tri input.text:focus{border-color:var(--line);background:var(--card)}table.tri select{padding:2px 4px;font-size:.84rem;border-radius:6px;border:1px solid var(--line);background:var(--card)}table.tri tr.sugrow{background:var(--info-bg)}table.tri tr.offrow{opacity:.45}table.tri .d{color:var(--ink3);font-size:.82rem;white-space:nowrap}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
 .acard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;background:var(--card)}
 .acard:hover{border-color:var(--accent)}
@@ -102,7 +103,13 @@ table{border-collapse:collapse;width:100%;font-size:.92rem;margin:6px 0}th,td{bo
 #log{font-family:Consolas,monospace;font-size:.8rem;color:var(--ink2);white-space:pre-wrap;max-height:260px;overflow:auto;background:var(--tint);padding:8px;border-radius:8px}
 #printView{display:none}
 @page{margin:15mm}
-@media print{.top,nav,aside,main{display:none !important} #printView{display:block;font-size:12.5pt;line-height:1.5;padding:0 4mm} #printView h2{font-size:19pt;margin:0 0 6pt} #printView h3{font-size:15pt;margin:14pt 0 4pt;border-bottom:1px solid #999} #printView h4{font-size:13pt;margin:10pt 0 3pt} #printView p{margin:3pt 0} #printView .pi{padding:3pt 0 3pt 10pt;border-bottom:1px dotted #bbb;break-inside:avoid} #printView .s{display:block;color:#555;font-size:10.5pt;padding-left:10pt} .layout{display:block}}
+#printView{font:11pt/1.45 "Malgun Gothic","맑은 고딕",sans-serif;color:#000}
+#printView h2{font-size:18pt;margin:0 0 6pt;text-align:center;letter-spacing:.1em}#printView h3{font-size:14pt;margin:14pt 0 5pt;border-bottom:2px solid #333;padding-bottom:2pt;break-after:avoid}#printView h4{font-size:12.5pt;margin:10pt 0 4pt;break-after:avoid}#printView h5{font-size:11pt;margin:8pt 0 3pt;color:#333;break-after:avoid}
+#printView p{margin:3pt 0}#printView .meta{color:#555;font-size:9.5pt}#printView .pi{padding:2pt 0 2pt 8pt}#printView .pi.sub{color:#444;padding-left:18pt}
+#printView table{border-collapse:collapse;width:100%;table-layout:fixed;margin:3pt 0 8pt;font-size:10pt}#printView table.f th{background:#eef1f5;font-weight:700;border:1px solid #777;padding:3pt 4pt;text-align:left}#printView table.f td{border:1px solid #777;padding:3pt 4pt;vertical-align:top;word-break:break-all}#printView tr{break-inside:avoid}#printView thead{display:table-header-group}
+#printView table.hdr th{background:#eef1f5;border:1px solid #777;padding:3pt 5pt;width:9%;white-space:nowrap}#printView table.hdr td{border:1px solid #777;padding:3pt 5pt}
+.previewWrap{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18mm 16mm;max-width:210mm;margin:0 auto;box-shadow:var(--shadow)}
+@media print{.top,nav,aside,main{display:none !important} #printView{display:block;padding:0} .layout{display:block}}
 @media (max-width:1300px){.layout{grid-template-columns:240px minmax(0,1fr)} aside{display:none}}
 @media (max-width:860px){.layout{grid-template-columns:1fr} nav{position:static;height:auto} .cal{grid-template-columns:repeat(2,1fr)}}
 </style>
@@ -113,7 +120,7 @@ table{border-collapse:collapse;width:100%;font-size:.92rem;margin:6px 0}th,td{bo
   <div><h1>돌다리 · 업무인계·인수서 <span id="ver" class="sub" style="font-size:.78rem"></span></h1><div class="sub" id="subline">업무 폴더의 최근 문서를 한 건씩 정리해 법정 서식(별지 제12호)으로 채웁니다 · 이 PC 안에서만 작동</div></div>
   <div class="prog"><span id="progLbl">완성도 —</span><div class="bar"><i id="progBar"></i></div>
     <div class="seg" id="modeSeg" title="넘기는 사람은 넣고 고치고, 받는 사람은 확인합니다"><button data-m="give" class="on">넘기는 사람</button><button data-m="take">받는 사람</button></div>
-    <button class="ghost sm" id="fsdn" title="글자 작게">가−</button><button class="ghost sm" id="fsup" title="글자 크게">가＋</button><button class="ghost sm" id="thm" title="밝기">◐</button><button class="ghost sm" id="btnPrint">인쇄</button><button class="btn" id="btnExport">인계·인수서 내려받기</button></div>
+    <button class="ghost sm" id="fsdn" title="글자 작게">가−</button><button class="ghost sm" id="fsup" title="글자 크게">가＋</button><button class="ghost sm" id="thm" title="밝기">◐</button><button class="ghost sm" id="btnPreview" title="인쇄될 모양을 화면에서 먼저 봅니다">미리보기</button><button class="ghost sm" id="btnPrint">인쇄</button><button class="btn" id="btnExport">인계·인수서 내려받기</button></div>
 </div>
 <div class="layout">
 <nav id="nav"></nav>
