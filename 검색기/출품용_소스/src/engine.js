@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.5 (출품본) · 주소 판정 엔진 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.6 (출품본) · 주소 판정 엔진 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function (a, b) {
   if (typeof module === "object" && module.exports) {
     module.exports = b();
@@ -2262,7 +2262,9 @@
     }
     return prev[b.length];
   }
-  ZipEngine.prototype._sggTypoCandidates = function (tok) {
+  ZipEngine.prototype._sggTypoCandidates = function (tok, max) {
+    max = max === 2 ? 2 : 1;
+    var ckey = max === 2 ? tok + "|2" : tok;
     if (!this._typoCache) {
       this._typoCache = new Map();
       this._sggKeysByLen = new Map();
@@ -2278,17 +2280,17 @@
         arr.push([k, hangulJamo(k)]);
       });
     }
-    if (this._typoCache.has(tok)) {
-      return this._typoCache.get(tok);
+    if (this._typoCache.has(ckey)) {
+      return this._typoCache.get(ckey);
     }
     var tj = hangulJamo(tok);
     var out = [];
     (this._sggKeysByLen.get(tok.length) || []).forEach(function (e) {
-      if (editDistance(tj, e[1], 1) <= 1) {
+      if (editDistance(tj, e[1], max) <= max) {
         out.push(e[0]);
       }
     });
-    this._typoCache.set(tok, out);
+    this._typoCache.set(ckey, out);
     return out;
   };
   ZipEngine.prototype._fixRegionTypo = function (d, b) {
@@ -2307,6 +2309,12 @@
         continue;
       }
       var cands = this._sggTypoCandidates(t);
+      // 사진 글자 읽기(fuzz:2)는 글자 두 개가 틀리게 읽히기도 한다(정읍시→청릅시). 이때는 같은 주소·기본 지역으로 좁혀질 때만 받는다
+      var wide = false;
+      if (!cands.length && b && b.fuzz === 2) {
+        cands = this._sggTypoCandidates(t, 2);
+        wide = true;
+      }
       if (!cands.length) {
         continue;
       }
@@ -2350,6 +2358,9 @@
           viaDefault = true;
         }
       }
+      if (wide && !viaDefault && pick === cands && pick.length > 1) {
+        continue;
+      }
       var best = null;
       for (var m = 0; m < pick.length; m++) {
         var nt = toks.slice();
@@ -2373,7 +2384,7 @@
         }
       }
       if (best) {
-        adjustGrade(best.r, best.n > 1 ? "중" : "상", "시군구 오타 보정(" + t + "→" + best.to + (viaDefault ? ", 기본·앞뒤 지역 기준" : "") + ")");
+        adjustGrade(best.r, best.n > 1 || wide ? "중" : "상", "시군구 오타 보정(" + t + "→" + best.to + (viaDefault ? ", 기본·앞뒤 지역 기준" : "") + (wide ? ", 사진 읽기 오독" : "") + ")");
         return best.r;
       }
     }

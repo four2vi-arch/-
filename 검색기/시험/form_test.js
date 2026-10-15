@@ -1,4 +1,4 @@
-// 물어물어 v1.5 양식·오타·끌어 옮기기 시험 — 헤드리스 크로미움
+// 물어물어 v1.6 양식·오타·끌어 옮기기 시험 — 헤드리스 크로미움
 // 사용: node form_test.js <출품본.html> <주소록.xlsx> <결과 폴더> [infer]
 // 주소록은 「이름·우편번호·주소·상세」 꼴. 결과 파일은 결과 폴더에만 두고 저장소에는 넣지 않는다(개인정보).
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');

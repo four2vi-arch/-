@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.5 (출품본) · 어르신 직접 입력·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.6 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 /* 민원실에서 어르신이 직접 쓰는 대화형 주소 입력.
    - 말(인터넷 PC)·글자로 받은 주소를 정리해 엔진에 묻고, 빠진 부분만 되묻는다.
    - 우편번호는 언제나 엔진(우편번호 고시 DB)이 확정한다. AI는 주소 조각을 뽑는 보조 역할만 한다.
@@ -224,6 +224,9 @@
     '@media (max-width:899px){.k-keys button{min-height:66px}.k-num{min-height:1.15em}.k-padr .k-row{margin-top:10px}}' +
     '@media (max-width:760px){.k-brand{font-size:1.02em}.k-tools button{padding:6px 10px}}' +
     '@media (max-height:820px){.k-trail{display:none}.k-main{padding-top:12px}.k-keys{gap:8px;margin-top:6px}.k-keys button{min-height:50px;font-size:1.2em}.k-num{font-size:1.4em;padding:2px 0}.k-bubble{padding:10px 16px;margin:2px 0 8px;font-size:1.12em}.k-btn{min-height:64px}.k-foot{padding:6px 22px}}' +
+    '.k-cam{position:relative;background:#111;border-radius:18px;overflow:hidden;margin:6px 0 4px;min-height:220px}.k-cam video,.k-cam canvas{display:block;width:100%;max-height:min(36vh,400px);object-fit:contain;background:#111}' +
+    '.k-guide{position:absolute;inset:7% 10%;border:4px dashed rgba(255,255,255,.85);border-radius:20px;pointer-events:none;display:flex;align-items:flex-end;justify-content:center}.k-guide span{background:rgba(0,0,0,.55);color:#fff;font-size:.62em;font-weight:700;padding:4px 12px;border-radius:10px 10px 0 0}' +
+    '.k-prog{height:16px;background:#eee;border-radius:10px;overflow:hidden;margin:12px 0}.k-prog i{display:block;height:100%;width:6%;background:#c8102e;transition:width .4s}' +
     '.k-chip{display:inline-block;margin:8px 8px 0 0;font-size:.78em;padding:8px 12px;border-radius:12px;background:#f1f1f1;color:#444}' +
     '.k-big{font-size:2em;font-weight:900;color:#1b7f3b;margin:10px 0}' +
     '.k-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:5100}' +
@@ -239,6 +242,13 @@
     '#kPrint.p-th .p-it{border:0;border-top:1pt dashed #000;border-radius:0;padding:3pt 0 2pt;margin:3pt 0 0;font-size:11pt;font-weight:700}' +
     '#kPrint.p-th .p-zip{font-size:20pt;font-weight:900;letter-spacing:1pt}#kPrint.p-th.p-58 .p-zip{font-size:16pt}#kPrint.p-th.p-58 .p-it{font-size:9.5pt}' +
     '#kPrint.p-th .p-s{font-size:8.5pt;font-weight:400}#kPrint.p-th .p-foot{font-size:7.5pt;border-top:1pt dashed #000;padding-top:3pt;margin-top:4pt;text-align:center}' +
+    '#kPrint.p-lbl{width:auto;background:#fff;color:#000;font-family:"맑은 고딕","Malgun Gothic",sans-serif}' +
+    '#kPrint .p-lbl{box-sizing:border-box;overflow:hidden;padding:2mm 2.5mm;display:flex;flex-direction:column;justify-content:space-between;font-size:var(--b,12pt);line-height:1.22;font-weight:700;break-after:page;page-break-after:always;background:#fff}' +
+    '#kPrint .p-lbl:last-child{break-after:auto;page-break-after:auto}' +
+    '#kPrint .p-lbl .l-top{display:flex;align-items:baseline;justify-content:space-between;gap:3mm}#kPrint .p-lbl .l-zip{font-size:2.1em;font-weight:900;letter-spacing:.06em;line-height:1}' +
+    '#kPrint .p-lbl .l-name{font-size:1.3em;font-weight:800;text-align:right}#kPrint .p-lbl .l-addr{font-size:1.05em;word-break:keep-all}' +
+    '#kPrint .p-lbl .l-tel{font-size:.85em;font-weight:600}#kPrint .p-lbl .l-from{font-size:.62em;font-weight:400;color:#000;border-top:.2mm solid #000;padding-top:.8mm}#kPrint .p-lbl .l-chk{font-size:.7em;font-weight:800}' +
+    '#kPrint .p-lbl.l-test{border:.3mm solid #000}#kPrint .p-lbl .l-ruler{font-size:.6em;font-weight:400}' +
     '.k-chk{display:flex;gap:10px;align-items:center;font-size:16px;margin:10px 0}.k-chk input{width:22px;height:22px}' +
     '#kPrint.p-th .p-qr{text-align:center;margin-top:4pt}#kPrint.p-th .p-qr svg{width:36mm;height:36mm}#kPrint.p-th.p-58 .p-qr svg{width:34mm;height:34mm}' +
     '@media print{#kPrint .p-qr{text-align:center;margin-top:8pt;page-break-inside:avoid}#kPrint .p-qr svg{width:40mm;height:40mm}}' +
@@ -336,9 +346,11 @@
   function closeModal() { var m = $('#kModal'); if (m) { m.remove(); } }
 
   // 화면 하나 = 말풍선 + 입력/선택. trail 은 지금까지 주고받은 말.
-  function screen(fn, args) { hist.push([fn, args || []]); fn.apply(null, args || []); }
+  function stopCam() { try { if (window.__cam) { __cam.stop(); } } catch (e) { } }
+  function screen(fn, args) { stopCam(); hist.push([fn, args || []]); fn.apply(null, args || []); }
   function back() {
     if (hist.length < 2) { return; }
+    stopCam();
     hist.pop();
     var h = hist[hist.length - 1];
     h[0].apply(null, h[1]);
@@ -375,19 +387,22 @@
   }
 
   // ------------------------------------------------------------------ 2. 주소 묻기
-  function askAddress(again) {
+  function askAddress(again, prefill) {
     var c = st.cur;
     var who = c.kind === 'send' ? '보내시는 분(어르신) 주소를 말씀해 주세요.' : (st.entries.length ? '다음 분은 어디로 보내세요?' : '어디로 보내세요?');
     var sub = again || '동네 이름, 길 이름과 번호, 아파트 이름 중 아시는 대로 적어 주세요.';
     var mic = SR ? '<button type="button" class="k-btn" id="kMic">말로 하기</button>' : '';
+    var cam = camOk() ? '<button type="button" class="k-btn ok" id="kCam">📷 휴대폰 문자를 사진으로 찍기</button>' : '';
     frame(esc(who), esc(sub),
-      '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 정읍시 수성동 현대아파트 102동">' +
+      (cam ? '<div class="k-row" style="margin-top:0">' + cam + '</div>' : '') +
+      '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 정읍시 수성동 현대아파트 102동" value="' + esc(prefill || '') + '" style="margin-top:12px">' +
       '<div><span class="k-chip">예) 전주시 완산구 효자로 225</span><span class="k-chip">예) 기장군 기장읍 시랑리 408-1</span><span class="k-chip">예) 서산 힐스테이트서산 405동</span></div>' +
       '<div class="k-row">' + mic + '<button type="button" class="k-btn pri" id="kGo">다 적었어요</button></div>' +
       '<div class="k-row"><button type="button" class="k-btn sub sm" id="kRegion">지역부터 고르기</button>' +
       (hist.length > 1 ? '<button type="button" class="k-btn sub sm" id="kBack">이전으로</button>' : '') + '</div>');
     var inp = $('#kIn', main);
     setTimeout(function () { inp.focus(); }, 50);
+    if ($('#kCam', main)) { $('#kCam', main).onclick = function () { screen(camScreen); }; }
     function go() {
       var v = clean(inp.value);
       if (!v) { toast('주소를 조금이라도 적어 주세요.'); return; }
@@ -649,7 +664,7 @@
     })];
     if (mic) { b.unshift(mic); }
     if (!send) { b.push(btn('이전으로', 'sub', back)); }
-    frame(send ? '보내시는 분(어르신) 성함은요?' : '받으실 분 성함은요?', send ? '택배·소포에 보내는 분으로 적혀요.' : '', '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 홍길동">' + row(b));
+    frame(send ? '보내시는 분(어르신) 성함은요?' : '받으실 분 성함은요?', send ? '택배·소포에 보내는 분으로 적혀요.' : (c.ocr && c.ocr.name ? '사진에서 읽은 이름이에요. 맞는지 확인해 주세요.' : ''), '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 홍길동" value="' + esc(!send && c.ocr && c.ocr.name || '') + '">' + row(b));
     bindRow(b);
     var inp = $('#kIn', main);
     inp.onkeydown = function (e) { if (e.key === 'Enter') { b[mic ? 1 : 0].fn(); } };
@@ -659,8 +674,9 @@
     var c = st.cur, send = c.kind === 'send';
     keypad({
       q: send ? '보내시는 분 전화번호를 눌러 주세요.' : '받으실 분 전화번호를 아세요?',
-      sub: send ? '배달 소식을 알려 드릴 때 써요.' : '배달할 때 연락드려요. 모르시면 「건너뛰기」를 눌러 주세요.',
+      sub: send ? '배달 소식을 알려 드릴 때 써요.' : (c.ocr && c.ocr.phone ? '사진에서 읽은 번호예요. 맞는지 꼭 확인해 주세요. 다르면 「지우기」로 지우고 다시 눌러 주세요.' : '배달할 때 연락드려요. 모르시면 「건너뛰기」를 눌러 주세요.'),
       phone: true,
+      init: send ? '' : (c.ocr && c.ocr.phone || ''),
       done: function (v) {
         v = phoneFmt(v);
         if (v && !/^0\d{1,2}-\d{3,4}-\d{4}$/.test(v)) { toast('전화번호를 다시 확인해 주세요.'); return; }
@@ -681,6 +697,77 @@
     st.entries.push({ name: c.name, phone: c.phone, zip: r.zip || '', addr1: c.base || r.addr1 || '', addr2: c.detail, check: c.check, note: c.ai ? 'AI 정리' : '' });
     log('어르신 직접 입력', 1, '접수번호 ' + st.no + ' · ' + st.entries.length + '번째');
     screen(listView);
+  }
+
+  // ------------------------------------------------------------------ 사진으로 읽기(웹캠 → 글자 → 주소 후보)
+  function camOk() { return !!(window.__cam && __cam.supported()); }
+  function camScreen() {
+    var b = [btn('사진 찍기', 'pri', null, 'kShot'), btn('글자로 적을게요', 'sub', back)];
+    frame('휴대폰 문자 화면을 카메라에 보여 주세요', '받은 주소가 보이게 화면을 켜고, 글자가 크게 보이도록 선 안에 가득 차게 대 주세요. 화면은 밝게!',
+      '<div class="k-cam" id="kCamBox"><video id="kVid" playsinline muted></video><div class="k-guide"><span>이 선 안에 휴대폰 화면</span></div></div>' + row(b));
+    bindRow(b);
+    var vid = $('#kVid', main), shot = $('#kShot', main), box = $('#kCamBox', main);
+    shot.disabled = true;
+    __cam.start(vid).then(function () {
+      shot.disabled = false;
+      try { __cam.load(); } catch (e) { }   // 찍기 전에 글자 읽기 엔진을 미리 깨워 둔다
+    }, function (e) {
+      var denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+      box.innerHTML = '<div class="k-bubble" style="margin:0;border-color:#eee">' + (denied ? '카메라 사용이 허용되지 않았어요.' : '카메라를 켤 수 없어요.') +
+        '<small>직원에게 말씀해 주시거나, 글자로 적어 주세요.</small></div>';
+    });
+    shot.onclick = function () {
+      if (__cam.busy()) { return; }
+      var cv = __cam.grab(vid);
+      __cam.stop();
+      shot.disabled = true;
+      box.innerHTML = '<div class="k-bubble" style="margin:0;border-color:#eee">글자를 읽고 있어요. 잠시만 기다려 주세요.<div class="k-prog"><i id="kBar"></i></div></div>';
+      var bar = $('#kBar', box), tm = null;
+      var fin = function (res, err) {
+        clearTimeout(tm); cv.width = cv.height = 0;   // 찍은 사진은 바로 지운다
+        if (!root || root.hidden || !st) { return; }
+        if (err) { toast('사진을 읽지 못했어요. 다시 찍어 주세요.'); screen(camScreen); return; }
+        log('사진으로 읽기', res.cands.length, '주소 후보 ' + res.cands.length + '개');
+        screen(camResult, [res]);
+      };
+      tm = setTimeout(function () { fin(null, true); }, 90000);
+      __cam.read(cv, function (p) { if (bar) { bar.style.width = Math.max(12, Math.round(p * 100)) + '%'; } }).then(function (lines) {
+        fin(__cam.extract(lines, __cam.lookupFn(regionOpts())));
+      }, function () { fin(null, true); });
+    };
+  }
+  function camResult(res) {
+    var c = st.cur;
+    c.ocr = { name: res.name || '', phone: res.phone || '' };
+    var again = btn('다시 찍기', 'sub', function () { screen(camScreen); });
+    var typed = btn('글자로 적을게요', 'sub', function () { screen(askAddress, ['읽은 글자를 보고 고쳐 적어 주세요.', res.guess || '']); });
+    if (!res.cands.length) {
+      var b0 = [btn('다시 찍기', 'pri', function () { screen(camScreen); })];
+      if (res.guess) { b0.push(btn('읽은 글자를 고쳐 쓸게요', '', function () { screen(askAddress, ['읽은 글자를 보고 고쳐 적어 주세요.', res.guess]); })); }
+      b0.push(btn('이전으로', 'sub', back));
+      frame('주소를 잘 읽지 못했어요', '글자가 작거나 흐리면 어려워요. 휴대폰을 카메라에 가까이 대고, 화면을 밝게 해서 다시 찍어 보세요.' +
+        (res.guess ? '<br>읽은 글자: ' + esc(res.guess) : ''), row(b0));
+      bindRow(b0);
+      return;
+    }
+    var who = (res.name || res.phone) ? '<div class="k-card"><div class="k-sub">함께 읽은 내용 · 다음 화면에서 한 번 더 확인해요</div>' +
+      (res.name ? '받는 분 <b>' + esc(res.name) + '</b>' : '') + (res.name && res.phone ? ' · ' : '') + (res.phone ? '전화 <b>' + esc(res.phone) + '</b>' : '') + '</div>' : '';
+    var list = '<div>' + res.cands.map(function (x, i) {
+      var det = clean(x.addr2);
+      return '<button type="button" class="k-choice" data-c="' + i + '"><span class="k-zip" style="font-size:1.5em">' + esc(x.zip) + '</span> ' + esc(x.addr1) +
+        '<small>' + (det ? esc(det) + ' · ' : '') + (x.grade === '정확' ? '주소가 정확히 맞아요' : '비슷한 주소예요. 창구에서 한 번 더 확인해요') + '</small></button>';
+    }).join('') + '</div>';
+    var b = [again, typed];
+    frame(res.cands.length > 1 ? '이 중에 맞는 주소를 눌러 주세요' : '이 주소가 맞으면 눌러 주세요', '사진에서 읽은 주소를 우편번호 자료로 다시 확인했어요.', who + list + row(b));
+    bindRow(b);
+    Array.prototype.forEach.call(main.querySelectorAll('[data-c]'), function (el) {
+      el.onclick = function () {
+        var x = res.cands[Number(el.getAttribute('data-c'))];
+        c.raw = x.text; c.text = x.text; c.region = ''; c.regionToks = []; c.ai = false; c.aiDetail = '';
+        st.trail.push(['사진에서 읽은 주소', x.text]);
+        screen(confirmAddr, [x.r, x.grade !== '정확' || x.conf === '하']);
+      };
+    });
   }
 
   // ------------------------------------------------------------------ 7. 모은 주소
@@ -719,7 +806,7 @@
     main.innerHTML = '<div class="k-bubble" style="text-align:center">다 됐어요!<div class="k-big">접수 메모 ' + esc(st.no) + '번</div>' +
       '<small>창구 직원에게 「' + esc(st.no) + '번」이라고 말씀하시거나, 종이로 뽑아서 보여 주세요.</small></div>' +
       '<div class="k-sub">보내시는 분: ' + esc(s.name || '') + (s.phone ? ' · ' + esc(s.phone) : '') + (s.addr1 ? ' · ' + esc(s.zip) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' + list +
-      '<div class="k-row"><button type="button" class="k-btn pri" id="kPrintBtn">종이로 뽑기</button><button type="button" class="k-btn sub" id="kDone">처음 화면으로</button></div>' +
+      '<div class="k-row"><button type="button" class="k-btn pri" id="kPrintBtn">' + (paper() === 'lbl' ? '주소 스티커 뽑기' : '종이로 뽑기') + '</button><button type="button" class="k-btn sub" id="kDone">처음 화면으로</button></div>' +
       '<div class="k-row"><button type="button" class="k-btn sub sm" id="kHand">직원 확인: 접수 화면으로 넘기기</button></div>';
     speak('다 됐어요. 접수 메모 ' + st.no + '번입니다. 창구 직원에게 말씀해 주세요.');
     $('#kPrintBtn', main).onclick = printSlip;
@@ -810,13 +897,49 @@
       }).join('') + (qr ? '<div class="p-qr">' + qr + '<div class="p-s">창구에서 이 QR을 찍으면 주소가 바로 들어갑니다</div></div>' : '') +
       '<div class="p-foot">개인정보가 담긴 메모입니다. 접수가 끝나면 창구에서 파기합니다.</div>';
   }
-  function paper() { var p = cfg().paper; return p === '80' || p === '58' ? p : 'a4'; }
-  function preparePrint() {
+  function paper() { var p = cfg().paper; return p === '80' || p === '58' || p === 'lbl' ? p : 'a4'; }
+  // 스티커(라벨 프린터) 용지 크기 mm · 기본은 인터넷우체국 주소라벨 2×6 규격(100×45)과 같은 크기
+  var LBL_PRESETS = [[100, 45, '100×45 (인터넷우체국 라벨 2×6 규격)'], [100, 50, '100×50'], [80, 50, '80×50'], [70, 50, '70×50'], [60, 40, '60×40'], [100, 150, '100×150 (택배 송장 크기)']];
+  function lblSize() {
+    var c = cfg(), w = Number(c.lblW) || 100, h = Number(c.lblH) || 45;
+    return [Math.min(Math.max(w, 30), 210), Math.min(Math.max(h, 20), 300)];
+  }
+  // 받는 분 한 곳 = 스티커 한 장. 기표지 주소란에 바로 붙인다
+  function labelHtml(x, i, test) {
+    var s = st.sender || {};
+    var from = s.name ? '보내는 분 ' + esc(s.name) + (s.phone ? ' ' + esc(s.phone) : '') + (s.addr1 ? ' · ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') : '';
+    return '<div class="p-lbl' + (test ? ' l-test' : '') + '"><div class="l-top"><span class="l-zip">' + esc(x.zip || '확인필요') + '</span><span class="l-name">' + esc(x.name || '') + (x.name ? ' 귀하' : '') + '</span></div>' +
+      '<div class="l-addr">' + esc(x.addr1) + ' ' + esc(x.addr2 || '') + '</div>' +
+      (x.phone ? '<div class="l-tel">☎ ' + esc(x.phone) + '</div>' : '') +
+      (test ? '<div class="l-ruler">' + test + '</div>' : '<div class="l-from">' + (from || '') + (from ? ' · ' : '') + '접수 ' + esc(st.no) + '번' + (x.check ? ' <span class="l-chk">· 창구 확인</span>' : '') + '</div>') + '</div>';
+  }
+  function labelsHtml(list, test) { return list.map(function (x, i) { return labelHtml(x, i, test); }).join(''); }
+  // 글자가 칸을 넘치면 조금씩 줄여 맞춘다
+  function fitLabels(box, w, h) {
+    Array.prototype.forEach.call(box.querySelectorAll('.p-lbl'), function (el) {
+      el.style.width = w + 'mm'; el.style.height = h + 'mm';
+      var b = Math.min(20, h * 0.42);
+      el.style.setProperty('--b', b + 'pt');
+      for (var n = 0; n < 60 && b > 5 && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1); n++) { b -= 0.5; el.style.setProperty('--b', b + 'pt'); }
+    });
+  }
+  function preparePrint(test) {
     var box = $('#kPrint'), pp = paper();
-    box.className = pp === 'a4' ? '' : 'p-th' + (pp === '58' ? ' p-58' : '');
-    box.innerHTML = slipHtml();
     var ps = $('#kPageCss');
     if (!ps) { ps = document.createElement('style'); ps.id = 'kPageCss'; document.head.appendChild(ps); }
+    if (pp === 'lbl') {
+      var sz = lblSize();
+      box.className = 'p-lbl-wrap';
+      box.innerHTML = test ? labelsHtml([test.entry], test.note) : labelsHtml(st.entries);
+      box.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;visibility:hidden';
+      fitLabels(box, sz[0], sz[1]);
+      box.removeAttribute('style');
+      ps.textContent = '@page{size:' + sz[0] + 'mm ' + sz[1] + 'mm;margin:0}';
+      document.body.classList.add('k-printing');
+      return;
+    }
+    box.className = pp === 'a4' ? '' : 'p-th' + (pp === '58' ? ' p-58' : '');
+    box.innerHTML = slipHtml();
     if (pp === 'a4') { ps.textContent = '@page{size:A4;margin:12mm}'; }
     else {
       // 감열지는 폭을 용지에 맞추고, 길이는 내용만큼만 잡아 빈 종이가 나가지 않게 한다
@@ -834,7 +957,7 @@
   }
   function printSlip() {
     preparePrint();
-    log('어르신 입력 인쇄', st.entries.length, '접수번호 ' + st.no);
+    log(paper() === 'lbl' ? '어르신 입력 스티커 인쇄' : '어르신 입력 인쇄', st.entries.length, '접수번호 ' + st.no);
     setTimeout(function () {
       try { window.print(); } catch (e) { }
       cleanupPrint();
@@ -871,7 +994,7 @@
 
   // ------------------------------------------------------------------ 숫자판
   function keypad(o) {
-    var val = '';
+    var val = o.init ? String(o.init).replace(/\D/g, '').slice(0, o.phone ? 11 : 9) : '';
     var keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', o.dash ? '-' : '', '0', '지우기'];
     var body = '<div class="k-padwrap"><div class="k-padl"><div class="k-num" id="kNum">&nbsp;</div><div class="k-keys">' + keys.map(function (k) {
       return k ? '<button type="button" data-k="' + esc(k) + '">' + esc(k) + '</button>' : '<span></span>';
@@ -883,6 +1006,7 @@
     bindRow(b);
     var show = $('#kNum', main);
     function paint() { show.textContent = (o.phone ? phoneFmt(val) : val) || '\u00a0'; }
+    paint();
     Array.prototype.forEach.call(main.querySelectorAll('[data-k]'), function (el) {
       el.onclick = function () {
         var k = el.getAttribute('data-k');
@@ -908,6 +1032,22 @@
       m.textContent = '연결되지 않았어요. ' + aiReason(e);
     });
   }
+  function lblTest() {
+    // 입력창의 크기로 한 장 뽑아 기표지에 대 본다(저장 전에도 쓸 수 있게 임시로 크기를 적용)
+    var prev = { lblW: cfg().lblW, lblH: cfg().lblH, paper: cfg().paper };
+    var w = Number($('#kfLblW').value) || 100, h = Number($('#kfLblH').value) || 45;
+    setCfg({ lblW: w, lblH: h, paper: 'lbl' });
+    if (!st) { fresh(); }
+    var keepEntries = st.entries;
+    st.entries = [];
+    preparePrint({ entry: { zip: '12345', name: '시험용', phone: '010-0000-0000', addr1: '전북특별자치도 정읍시 충정로 234-1', addr2: '시험동 101호', check: false },
+      note: '가로 ' + w + 'mm × 세로 ' + h + 'mm · 테두리가 라벨 가장자리와 맞는지 확인하세요' });
+    setTimeout(function () {
+      try { window.print(); } catch (e) { }
+      cleanupPrint(); st.entries = keepEntries;
+      setCfg({ lblW: w, lblH: h, paper: prev.paper });
+    }, 60);
+  }
   function staffPanel() {
     var c = cfg(), a = c.ai || {};
     var m = modal('<h3 style="margin:0 0 6px">직원 설정</h3>' +
@@ -915,7 +1055,11 @@
       '<p class="k-note">시·군을 빼고 말씀하시는 주소에 이 지역을 붙여 찾습니다. 확인 화면에서 어르신이 한 번 더 봅니다.</p>' +
       '<label class="k-field"><b>자리 비움 후 자동 지우기(초)</b><input id="kfIdle" type="number" min="30" value="' + esc(c.idle || 120) + '"></label>' +
       '<label class="k-field"><b>기관 이름(메모 머리에 찍힘)</b><input id="kfOrg" value="' + esc(c.org || '') + '" placeholder="예) 정읍우체국"></label>' +
-      '<label class="k-field"><b>종이로 뽑기 용지</b><select id="kfPaper" style="width:100%;font-size:16px;padding:8px"><option value="a4">A4 일반 프린터</option><option value="80">감열 영수증 80mm</option><option value="58">감열 영수증 58mm</option></select></label>' +
+      '<label class="k-field"><b>종이로 뽑기 용지</b><select id="kfPaper" style="width:100%;font-size:16px;padding:8px"><option value="a4">A4 일반 프린터</option><option value="80">감열 영수증 80mm</option><option value="58">감열 영수증 58mm</option><option value="lbl">주소 스티커(라벨 프린터)</option></select></label>' +
+      '<div id="kfLbl" style="display:none"><label class="k-field"><b>스티커 크기(가로×세로 mm) · 기표지 주소란에 맞춰 재 보세요</b>' +
+      '<select id="kfLblP" style="width:100%;font-size:16px;padding:8px"><option value="">직접 입력</option>' + LBL_PRESETS.map(function (p, i) { return '<option value="' + i + '">' + esc(p[2]) + '</option>'; }).join('') + '</select></label>' +
+      '<div style="display:flex;gap:8px;align-items:center"><input id="kfLblW" type="number" min="30" max="210" step="0.5" style="width:90px;font-size:16px;padding:8px"> × <input id="kfLblH" type="number" min="20" max="300" step="0.5" style="width:90px;font-size:16px;padding:8px"> mm</div>' +
+      '<p class="k-note">라벨 프린터를 「기본 프린터」로 두고, 프린터 속성의 용지 크기를 같은 크기로 맞춰 두세요. 아래 「스티커 시험 인쇄」로 실제 기표지에 대 보고 크기를 고치면 됩니다. 감열(리본 없는) 접착 라벨 롤이면 됩니다.</p></div>' +
       '<label class="k-chk"><input type="checkbox" id="kfAuto"> 다 마치면 메모를 바로 뽑기</label>' +
       '<p class="k-note">감열 프린터를 「기본 프린터」로 두고 크롬을 <b>--kiosk --kiosk-printing</b> 옵션으로 실행하면 인쇄 확인 창 없이 바로 뽑힙니다. 영수증 용지는 붙지 않으니 창구 전달용 메모로 씁니다.</p>' +
       '<label class="k-field"><b>AI 주소 정리 연결(선택) · 주소</b><input id="kfUrl" value="' + esc(a.url || '') + '" placeholder="예) http://127.0.0.1:11434/v1/chat/completions"></label>' +
@@ -926,13 +1070,20 @@
       [['저장', function () {
         var u = clean($('#kfUrl').value);
         if (u && !isLocalUrl(u)) { $('#kfMsg').textContent = '이 PC의 모델 주소만 저장됩니다. http://127.0.0.1:포트/… 또는 http://localhost:포트/… 로 적어 주세요.'; return; }
-        setCfg({ org: clean($('#kfOrg').value), region: clean($('#kfRegion').value), idle: Math.max(30, Number($('#kfIdle').value) || 120), paper: $('#kfPaper').value, autoPrint: $('#kfAuto').checked, ai: { url: clean($('#kfUrl').value), model: clean($('#kfModel').value), key: $('#kfKey').value } });
+        setCfg({ org: clean($('#kfOrg').value), region: clean($('#kfRegion').value), idle: Math.max(30, Number($('#kfIdle').value) || 120), paper: $('#kfPaper').value, lblW: Number($('#kfLblW').value) || 100, lblH: Number($('#kfLblH').value) || 45, autoPrint: $('#kfAuto').checked, ai: { url: clean($('#kfUrl').value), model: clean($('#kfModel').value), key: $('#kfKey').value } });
         closeModal(); toast('저장했어요.');
       }, 'pri'],
       ['AI 연결 시험', aiTest, 'sub'],
+      ['스티커 시험 인쇄', lblTest, 'sub'],
       ['닫기', closeModal, 'sub']]);
     $('#kfPaper').value = paper();
     $('#kfAuto').checked = !!c.autoPrint;
+    var lz = lblSize();
+    $('#kfLblW').value = lz[0]; $('#kfLblH').value = lz[1];
+    function lblShow() { $('#kfLbl').style.display = $('#kfPaper').value === 'lbl' ? 'block' : 'none'; }
+    lblShow();
+    $('#kfPaper').onchange = lblShow;
+    $('#kfLblP').onchange = function () { var p = LBL_PRESETS[Number(this.value)]; if (p) { $('#kfLblW').value = p[0]; $('#kfLblH').value = p[1]; } };
     return m;
   }
 
@@ -951,6 +1102,8 @@
   }
   function wipe(silent) {
     clearTimeout(warnT);
+    stopCam();
+    try { if (window.__cam) { __cam.dispose(); } } catch (e) { }
     fresh();
     try { if (window.speechSynthesis) { speechSynthesis.cancel(); } } catch (e) { }
     if (main) { main.innerHTML = ''; }

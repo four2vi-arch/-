@@ -1,4 +1,4 @@
-// 물어물어(우편번호 자동검색기) v1.5 출품본 구동 시험 — 헤드리스 크로미움
+// 물어물어(우편번호 자동검색기) v1.6 출품본 구동 시험 — 헤드리스 크로미움
 // 사용: node run.js <출품본.html 절대경로> [AI포트]
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const fs = require('fs'); const path = require('path');

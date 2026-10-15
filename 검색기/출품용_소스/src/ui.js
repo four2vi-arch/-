@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.5 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.6 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function () {
   "use strict";
 
@@ -3393,6 +3393,7 @@
     qs("#findHint").textContent = a ? a.i + 1 + "행에 넣을 우편번호를 고르세요. 목록에서 누르면 그 줄에 바로 들어갑니다." : "도로명·건물번호나 동·리 이름을 넣으면 해당 구간의 우편번호를 보여 줍니다. 예) 정읍시 충정로 146";
     qs("#findList").innerHTML = "";
     qs("#findBest").innerHTML = "";
+    qs("#btnFindCam").hidden = !(window.__cam && __cam.supported());
     if (findDlgEl.showModal) {
       findDlgEl.showModal();
     } else {
@@ -3419,6 +3420,80 @@
       return "<button type=\"button\" class=\"frow\" data-zip=\"" + escHtml(f.zip) + "\"><b>" + escHtml(f.zip) + "</b><span class=\"a\">" + escHtml(f.addr) + "</span><span class=\"r\">" + escHtml(f.range) + "</span><span class=\"o\">" + escHtml(deliveryOffice(f.zip)) + "</span></button>";
     }).join("") : "<p class=\"hint\">DB에서 같은 이름의 구간을 찾지 못했습니다.</p>";
   }
+  // ---- 사진으로 읽기(웹캠): 휴대폰 문자 화면 → 이름·전화·주소 후보. 후보를 누르면 주소 찾기 창에서 바로 찾는다.
+  function openCamDialog() {
+    var dlg = qs("#camDlg");
+    qs("#camRes").innerHTML = "";
+    qs("#camMsg").textContent = "카메라를 켜는 중…";
+    qs("#btnCamShot").disabled = true;
+    if (dlg.showModal) {
+      dlg.showModal();
+    } else {
+      dlg.setAttribute("open", "");
+    }
+    if (!window.__cam || !__cam.supported()) {
+      qs("#camMsg").textContent = "이 브라우저에서는 사진으로 읽기를 쓸 수 없습니다.";
+      return;
+    }
+    __cam.start(qs("#camVid")).then(function () {
+      qs("#camMsg").textContent = "휴대폰 화면이 크게 보이면 「사진 찍기」를 누르세요.";
+      qs("#btnCamShot").disabled = false;
+      __cam.load().catch(function () {});
+    }, function (e) {
+      qs("#camMsg").textContent = e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? "카메라 사용이 허용되지 않았습니다. 주소창 왼쪽 자물쇠에서 카메라를 허용해 주세요." : "카메라를 켤 수 없습니다. 웹캠 연결을 확인해 주세요.";
+    });
+  }
+  function camShot() {
+    if (!window.__cam || __cam.busy()) {
+      return;
+    }
+    var cv = __cam.grab(qs("#camVid"));
+    qs("#btnCamShot").disabled = true;
+    qs("#camMsg").textContent = "글자를 읽는 중…";
+    qs("#camRes").innerHTML = "";
+    __cam.read(cv).then(function (lines) {
+      cv.width = cv.height = 0;
+      var r = __cam.extract(lines, __cam.lookupFn(regionOpts()));
+      addLog("사진으로 읽기", r.cands.length, "주소 후보 " + r.cands.length + "개");
+      var h = "";
+      if (r.name || r.phone) {
+        h += "<p class=\"hint\">함께 읽은 내용: " + (r.name ? "받는 분 <b>" + escHtml(r.name) + "</b>" : "") + (r.name && r.phone ? " · " : "") + (r.phone ? "전화 <b>" + escHtml(r.phone) + "</b>" : "") + " (틀릴 수 있으니 확인하세요)</p>";
+      }
+      if (r.cands.length) {
+        h += "<div class=\"flist\">" + r.cands.map(function (c, i) {
+          return "<button type=\"button\" class=\"frow\" data-cam=\"" + i + "\"><b>" + escHtml(c.zip) + "</b><span class=\"a\">" + escHtml([c.addr1, c.addr2].filter(Boolean).join(" ")) + "</span><span class=\"r\">" + escHtml(c.grade + (c.conf ? "·" + c.conf : "")) + "</span></button>";
+        }).join("") + "</div><p class=\"hint\">누르면 주소 찾기 창에서 이 주소로 찾습니다. 읽은 글자가 틀렸을 수 있으니 주소를 눈으로 확인하세요.</p>";
+        S.camCands = r.cands;
+      } else {
+        h += "<p class=\"hint\">주소를 읽지 못했습니다. 화면을 밝게 하고 더 가까이 대서 다시 찍어 보세요." + (r.guess ? " 읽은 글자: " + escHtml(r.guess) : "") + "</p>";
+        S.camCands = [];
+        S.camGuess = r.guess || "";
+      }
+      qs("#camRes").innerHTML = h;
+      qs("#camMsg").textContent = "";
+      qs("#btnCamShot").disabled = false;
+      qs("#btnCamShot").textContent = "다시 찍기";
+      // 카메라는 켜 둔 채(다시 찍기)이므로 읽는 동안 얼려 둔 화면은 따로 없다
+    }, function () {
+      cv.width = cv.height = 0;
+      qs("#camMsg").textContent = "사진을 읽지 못했습니다. 다시 찍어 주세요.";
+      qs("#btnCamShot").disabled = false;
+    });
+  }
+  function camPick(i) {
+    var c = (S.camCands || [])[i];
+    if (!c) {
+      return;
+    }
+    var dlg = qs("#camDlg");
+    if (dlg.close) {
+      dlg.close();
+    } else {
+      dlg.removeAttribute("open");
+    }
+    qs("#findQ").value = clean([c.addr1, c.addr2].filter(Boolean).join(" "));
+    runFind();
+  }
   function pickFindResult(a) {
     var b = S.searchFor;
     if (!b) {
@@ -3442,7 +3517,7 @@
     renderTable(true);
     setMsg(qs("#dlMsg"), b.i + 1 + "행 우편번호를 " + a + "(으)로 바꿨습니다.", "ok");
   }
-  var LABEL_SIZES = [["1x6", "6매 (1열×6행)", 1, 6], ["2x6", "12매 (2열×6행)", 2, 6], ["2x7", "14매 (2열×7행)", 2, 7], ["2x8", "16매 (2열×8행)", 2, 8], ["2x9", "18매 (2열×9행)", 2, 9], ["3x6", "18매 (3열×6행)", 3, 6], ["3x7", "21매 (3열×7행)", 3, 7], ["3x8", "24매 (3열×8행)", 3, 8], ["3x9", "27매 (3열×9행)", 3, 9]];
+  var LABEL_SIZES = [["1x6", "6매 (1열×6행)", 1, 6], ["2x6", "12매 (2열×6행)", 2, 6], ["2x7", "14매 (2열×7행)", 2, 7], ["2x8", "16매 (2열×8행)", 2, 8], ["2x9", "18매 (2열×9행)", 2, 9], ["3x6", "18매 (3열×6행)", 3, 6], ["3x7", "21매 (3열×7행)", 3, 7], ["3x8", "24매 (3열×8행)", 3, 8], ["3x9", "27매 (3열×9행)", 3, 9], ["roll", "롤 스티커(감열 라벨 프린터) · 한 장씩", 1, 1]];
   function openLabelDialog() {
     var labelDlgEl = qs("#labelDlg");
     var a = settings.get().label || {};
@@ -3456,6 +3531,8 @@
     qs("#lbSize").value = a.size || "11";
     qs("#lbTel").checked = !!a.tel;
     qs("#lbSender").checked = !!a.sender;
+    qs("#lbW").value = a.rollW || 100;
+    qs("#lbH").value = a.rollH || 45;
     if (labelDlgEl.showModal) {
       labelDlgEl.showModal();
     } else {
@@ -3477,6 +3554,10 @@
     var c = b[2];
     var d = b[3];
     var f = c * d;
+    var roll = a === "roll";
+    var rw = Math.min(Math.max(Number(qs("#lbW").value) || 100, 30), 210);
+    var rh = Math.min(Math.max(Number(qs("#lbH").value) || 45, 20), 300);
+    qs("#lbRollBox").hidden = !roll;
     var g = clean(qs("#lbTitle").value);
     var h = Number(qs("#lbSize").value) || 11;
     var p = qs("#lbTel").checked;
@@ -3487,7 +3568,9 @@
       title: g,
       size: h,
       tel: p,
-      sender: q
+      sender: q,
+      rollW: rw,
+      rollH: rh
     };
     var t = {
       label: s
@@ -3500,10 +3583,10 @@
     var v = labelTargetRows();
     var w = "";
     var x = u;
-    var y = 198 / c;
-    var z = 277 / d;
+    var y = roll ? rw : 198 / c;
+    var z = roll ? rh : 277 / d;
     for (var i = 0; i < v.length; i += f) {
-      w += "<div class=\"sheet\" style=\"--cols:" + c + ";--lw:" + y.toFixed(2) + "mm;--lh:" + z.toFixed(2) + "mm;--fs:" + h + "pt\">";
+      w += "<div class=\"sheet" + (roll ? " roll" : "") + "\" style=\"--cols:" + c + ";--lw:" + y.toFixed(2) + "mm;--lh:" + z.toFixed(2) + "mm;--fs:" + h + "pt\">";
       for (var j = i; j < Math.min(i + f, v.length); j++) {
         var a1 = v[j];
         x.seq = j + 1;
@@ -3523,7 +3606,26 @@
       w += "</div>";
     }
     qs("#labelArea").innerHTML = w || "<p class=\"hint\" style=\"padding:20px\">인쇄할 줄이 없습니다.</p>";
-    qs("#lbInfo").textContent = fmtNum(v.length) + "건 · A4 " + Math.ceil(v.length / f) + "장";
+    qs("#labelArea").classList.toggle("rollmode", roll);
+    // 인쇄 용지 크기: 롤 스티커는 라벨 한 장 크기, 시트는 A4
+    var pg = document.getElementById("lbPageCss");
+    if (!pg) {
+      pg = document.createElement("style");
+      pg.id = "lbPageCss";
+      document.head.appendChild(pg);
+    }
+    pg.textContent = roll ? "@page{size:" + rw + "mm " + rh + "mm;margin:0}" : "@page{size:A4;margin:0}";
+    if (roll) {
+      // 글자가 칸을 넘치면 조금씩 줄여 맞춘다
+      Array.prototype.forEach.call(qs("#labelArea").querySelectorAll(".sheet.roll"), function (sh) {
+        var lb = sh.firstChild, fs = h;
+        for (var n = 0; n < 60 && fs > 5 && lb && (lb.scrollHeight > sh.clientHeight + 1 || lb.scrollWidth > sh.clientWidth + 1); n++) {
+          fs -= 0.5;
+          sh.style.setProperty("--fs", fs + "pt");
+        }
+      });
+    }
+    qs("#lbInfo").textContent = roll ? fmtNum(v.length) + "건 · 롤 스티커 " + fmtNum(v.length) + "장 (" + rw + "×" + rh + "mm)" : fmtNum(v.length) + "건 · A4 " + Math.ceil(v.length / f) + "장";
     var btnLabelPeekEl = qs("#btnLabelPeek");
     if (btnLabelPeekEl) {
       btnLabelPeekEl.hidden = !privacyMask.on;
@@ -3969,6 +4071,12 @@
       }
     });
     qs("#btnFindGo").onclick = runFind;
+    qs("#camDlg").addEventListener("click", function (b) {
+      var c = b.target.closest ? b.target.closest("[data-cam]") : null;
+      if (c) {
+        camPick(Number(c.dataset.cam));
+      }
+    });
     qs("#findDlg").addEventListener("click", function (b) {
       var c = b.target.closest ? b.target.closest("[data-zip]") : null;
       if (c) {
@@ -3976,16 +4084,52 @@
       }
     });
     qs("#btnLabel").onclick = openLabelDialog;
-    ["#lbKind", "#lbTitle", "#lbSize", "#lbTel", "#lbSender"].forEach(function (b) {
+    ["#lbKind", "#lbTitle", "#lbSize", "#lbTel", "#lbSender", "#lbW", "#lbH"].forEach(function (b) {
       var c = qs(b);
       c.onchange = renderLabels;
       if (c.tagName === "INPUT" && c.type === "text") {
         c.oninput = renderLabels;
       }
     });
+    qs("#lbRollP").onchange = function () {
+      var v = this.value.split(",");
+      if (v.length === 2) {
+        qs("#lbW").value = v[0];
+        qs("#lbH").value = v[1];
+        renderLabels();
+      }
+    };
+    qs("#lbW").oninput = qs("#lbH").oninput = renderLabels;
+    qs("#btnFindCam").onclick = openCamDialog;
+    qs("#btnCamShot").onclick = camShot;
+    qs("#camDlg").addEventListener("close", function () {
+      if (window.__cam) {
+        __cam.stop();
+        __cam.dispose();
+      }
+    });
     qs("#btnLabelPrint").onclick = function () {
       addLog("라벨 인쇄", labelTargetRows().length, qs("#lbKind").value);
-      window.print();
+      // 모달 창(최상위 계층)은 여러 쪽으로 나뉘지 않고 첫 쪽만 인쇄되므로, 인쇄하는 동안만 일반 창으로 바꾼다
+      var d = qs("#labelDlg"), wasModal = false;
+      try {
+        wasModal = d.matches(":modal");
+      } catch (e) { }
+      if (wasModal) {
+        d.close();
+        d.show();
+      }
+      var restore = function () {
+        window.removeEventListener("afterprint", restore);
+        if (wasModal && d.open) {
+          d.close();
+          d.showModal();
+        }
+      };
+      window.addEventListener("afterprint", restore);
+      setTimeout(function () {
+        window.print();
+      }, 60);
     };
     qs("#btnLabelPeek").onclick = function () {
       S.labelPeek = !S.labelPeek;
