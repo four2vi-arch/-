@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.4 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.5 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function () {
   "use strict";
 
@@ -1056,6 +1056,19 @@
     if (h1 >= 0 && x.addr.indexOf(h1) < 0) {
       x.addr2 = h1;
     }
+    // 제목 줄이 없는 주소록(2026-10-15): 주소 열 바로 오른쪽 열이 「101-1004호 (시기동,○○아파트)」「803호 (신동)」「3층」 꼴이면 상세주소로 본다
+    if (x.addr2 < 0 && x.addr.length === 1 && x.addr[0] + 1 < d && !(f[x.addr[0] + 1] && clean(f[x.addr[0] + 1]))) {
+      var dc = x.addr[0] + 1;
+      var dv = g.map(function (b2) {
+        return clean(b2[dc]);
+      }).filter(Boolean);
+      var dk = dv.filter(function (b2) {
+        return /\d+\s*(호|층|동)(?![가-힣])|^\(.*\)$|\([^)]*(동|읍|면|리|가)[,)\s]|아파트|빌라|맨션|타운|오피스텔|빌딩|상가|지하/.test(b2) && !/^\d{5}$/.test(b2) && !/^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(b2) && !/(로|길)\s*\d|[시군구]\s+\S+[읍면동로길]/.test(b2);   // 기본 주소(도로명+번호, 시군구+읍면동) 꼴은 상세가 아니다
+      }).length;
+      if (dv.length >= 3 && dk >= dv.length * 0.5) {
+        x.addr2 = dc;
+      }
+    }
     function p1(re, ex) {
       for (var k = 0; k < f.length; k++) {
         var h = headerKey(f[k]);
@@ -1603,6 +1616,7 @@
       if (g < a.length) {
         setTimeout(p, 0);
       } else {
+        inferFromNeighbors(f, c, d);
         S.rows = f;
         S.elapsed = performance.now() - h;
         setBusy(false);
@@ -1611,6 +1625,61 @@
       }
     }
     setTimeout(p, 30);
+  }
+  // 못 찾은 행을 앞뒤 행의 지역으로 다시 찾는다(2026-10-15). 주소록은 보통 한 지역이 몰려 있으므로,
+  // 시·군·구가 빠졌거나 틀린 행(「송산1길 40-15」「정음시 …」)을 바로 위·아래에서 찾은 행의 시·군·구로 좁혀 본다.
+  // 위·아래가 같으면 그 지역, 다르면 파일 전체에서 60% 이상인 지역. 결과는 「유사」로 두고 근거를 남긴다.
+  function inferFromNeighbors(rows, opts, policy) {
+    var gOf = function (v) {
+      return v && v.r && v.r.grade !== "실패" && v.r.canon && v.r.canon.g !== undefined ? v.r.canon.g : -1;
+    };
+    var cnt = {};
+    var ok = 0;
+    rows.forEach(function (v) {
+      var g = gOf(v);
+      if (g >= 0) {
+        cnt[g] = (cnt[g] || 0) + 1;
+        ok++;
+      }
+    });
+    var dom = -1;
+    Object.keys(cnt).forEach(function (k) {
+      if (dom < 0 || cnt[k] > cnt[dom]) {
+        dom = +k;
+      }
+    });
+    if (dom >= 0 && cnt[dom] < ok * 0.6) {
+      dom = -1;
+    }
+    rows.forEach(function (v, idx) {
+      if (!v.r || v.r.grade !== "실패" || v.self || !(v.addr || v.detail)) {
+        return;
+      }
+      var up = -1;
+      var dn = -1;
+      for (var k = idx - 1; k >= 0 && up < 0; k--) {
+        up = gOf(rows[k]);
+      }
+      for (var k2 = idx + 1; k2 < rows.length && dn < 0; k2++) {
+        dn = gOf(rows[k2]);
+      }
+      var hint = up >= 0 && up === dn ? up : dom >= 0 ? dom : up >= 0 && dn < 0 ? up : dn >= 0 && up < 0 ? dn : -1;
+      if (hint < 0 || opts && opts.defaultSggs && opts.defaultSggs.length === 1 && opts.defaultSggs[0] === hint) {
+        return;
+      }
+      var r = lookupWithDetail(v.addr, v.detail, {
+        defaultSggs: [hint]
+      });
+      if (r.grade === "실패") {
+        return;
+      }
+      var label = S.engine.sggLabel(hint).split(" ").slice(1).join(" ") || S.engine.sggLabel(hint);
+      r.grade = "유사";
+      r.conf = r.conf === "하" ? "하" : "중";
+      r.note = "앞뒤 행 지역(" + label + ")으로 추정 · " + String(r.note || "").replace(/^기본 지역 적용 · /, "");
+      v.r = r;
+      applyZipPolicy(v, policy);
+    });
   }
   function gradeBadge(a) {
     if (a.edited) {
@@ -1841,7 +1910,7 @@
   }
   var EPOST_HEADERS = ["발송인명\n(띄어쓰기 포함 \n16자 이내)", "우편번호\n(예시:06267)", "발송인주소1 - 동/읍/면/로 까지\n① 예시1 : 서울특별시 영등포구 영중로83\n② 예시2 : 경기도 가평군 가평읍\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "발송인주소2(나머지주소-필수입력)\n① 예시1 : 한국우편사업진흥원\n② 예시2 : 개곡리 123-4번지\n③ 예시3 : 나머지 주소가 없을 때 임의문자 한 글자라도 추가 ( 점 (.)표시)\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "발송인 일반전화\n(예시:02-1234-4567)\n\n* 발송인 일반전화 또는 \n휴대전화 중 1개만 입력", "발송인 휴대전화\n(예시:010-1234-4567)\n\n* 발송인 일반전화 또는 \n휴대전화 중 1개만 입력", "수취인명\n(띄어쓰기 포함\n 15자 이내)", "우편번호\n(예시:06267)", "수취인주소1 - 동/읍/면/로 까지\n① 예시1 : 서울특별시 영등포구 영중로83\n② 예시2 : 경기도 가평군 가평읍\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "수취인주소2(나머지주소-필수입력)\n① 예시1 : 한국우편사업진흥원\n② 예시2 : 개곡리 123-4번지\n③ 예시3 : 나머지 주소가 없을 때 임의문자 한 글자라도 추가 ( 점 (.)표시)\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "받는분 일반전화\n(예시:02-1234-4567)\n\n* 받는분 일반전화 또는 휴대전화 중 1개만 입력", "받는분 휴대전화\n(예시:010-1234-4567)\n\n* 받는분 일반전화 또는 휴대전화 중 1개만 입력"];
   var EPOST_SOURCES = ["senderName", "senderZip", "senderAddr1", "senderAddr2", "senderTelOnly", "senderMobile", "name", "zip", "addr1", "addr2", "telOnly", "mobile1"];
-  var CUSTOM_SOURCES = [["name", "받는 분"], ["zip", "우편번호"], ["addrFull", "주소(전체)"], ["addr1", "주소1(기본)"], ["addr2", "주소2(상세)"], ["phone", "전화(휴대전화 우선)"], ["tel", "일반전화"], ["mobile", "휴대전화"], ["item", "상품명"], ["memo", "배송 메시지"], ["seq", "일련번호"], ["const", "고정값(오른쪽 칸)"], ["blank", "빈칸"], ["grade", "검색결과"], ["note", "근거"], ["office", "배달 우체국"], ["senderName", "보내는 분 이름"], ["senderZip", "보내는 분 우편번호"], ["senderAddr1", "보내는 분 주소1"], ["senderAddr2", "보내는 분 주소2"], ["senderAddrFull", "보내는 분 주소(전체)"], ["senderPhone", "보내는 분 전화"]];
+  var CUSTOM_SOURCES = [["name", "받는 분"], ["zip", "우편번호"], ["addrFull", "주소(전체)"], ["addrStd", "주소(표준 표기 · 시·도 생략)"], ["addr1", "주소1(기본)"], ["addr2", "주소2(상세)"], ["phone", "전화(휴대전화 우선)"], ["tel", "일반전화"], ["mobile", "휴대전화"], ["item", "상품명"], ["memo", "배송 메시지"], ["seq", "일련번호"], ["const", "고정값(오른쪽 칸)"], ["blank", "빈칸"], ["grade", "검색결과"], ["note", "근거"], ["office", "배달 우체국"], ["senderName", "보내는 분 이름"], ["senderZip", "보내는 분 우편번호"], ["senderAddr1", "보내는 분 주소1"], ["senderAddr2", "보내는 분 주소2"], ["senderAddrFull", "보내는 분 주소(전체)"], ["senderPhone", "보내는 분 전화"]];
   var PRESETS = {
     orig: {
       name: "원본 + 우편번호",
@@ -1897,6 +1966,28 @@
         src: "phone",
         def: ""
       }]
+    },
+    reg: {
+      name: "양식1 · 등기용",
+      desc: "순번·이름·주소(표준 표기)·비고 · 위 2줄 비움 · 열을 끌어 옮기고 더해서 저장할 수 있습니다",
+      formats: ["xlsx", "xls", "csv"],
+      sheet: "Sheet1",
+      custom: true,
+      base: true,
+      top: 2,
+      tag: "등기용",
+      cols: [{h: "순번", src: "seq", def: ""}, {h: "이름", src: "name", def: ""}, {h: "주소", src: "addrStd", def: ""}, {h: "비고", src: "memo", def: ""}]
+    },
+    parcel: {
+      name: "양식2 · 소포용",
+      desc: "양식1에 일반전화·핸드폰번호 열을 더한 것 · 열을 끌어 옮기고 더해서 저장할 수 있습니다",
+      formats: ["xlsx", "xls", "csv"],
+      sheet: "Sheet1",
+      custom: true,
+      base: true,
+      top: 2,
+      tag: "소포용",
+      cols: [{h: "순번", src: "seq", def: ""}, {h: "이름", src: "name", def: ""}, {h: "주소", src: "addrStd", def: ""}, {h: "일반전화", src: "tel", def: ""}, {h: "핸드폰번호", src: "mobile", def: ""}, {h: "비고", src: "memo", def: ""}]
     },
     custom: {
       name: "사용자 지정 양식",
@@ -2031,6 +2122,33 @@
     f.src = "fixed";
     return f;
   }
+  // 표준 표기(등기 접수용): 「정읍시 시기4길 42, 101-1004호(시기동,영무예다음)」. 시·도는 뒤에 시·군·구가 있을 때만 뗀다(세종은 둔다).
+  // 도로명은 건물번호 뒤 「, 상세」, 참고항목만 있으면 쉼표 없이 「(동)」, 지번은 「동 번지」로 붙인다.
+  function standardAddress(a1, a2, kind) {
+    var base = clean(a1);
+    var det = clean(a2);
+    var sd = S.engine && S.engine.db ? S.engine.db.sido : [];
+    var short = ["서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"];
+    var t = base.split(" ");
+    if (t.length > 1 && (sd.indexOf(t[0]) >= 0 || short.indexOf(t[0]) >= 0 || /(특별시|광역시|특별자치시|특별자치도|도)$/.test(t[0])) && /[시군구]$/.test(t[1])) {
+      base = t.slice(1).join(" ");
+    }
+    det = det.replace(/\s+\(/g, "(").replace(/^,\s*/, "");
+    if (!det) {
+      return base.replace(/\s+\(/g, "(");
+    }
+    if (/^\(/.test(det)) {
+      return base + det;
+    }
+    if (kind === "jibun" || /(로|길)$/.test(base)) {   // 지번(동 다음 번지)·건물번호 없는 도로명: 번지·번호는 띄어 붙이고 그 뒤 상세에 쉼표
+      var mnum = det.match(/^((?:산\s*)?\d+(?:-\d+)?)(?:\s+|,\s*|(?=\())(.*)$/);
+      if (mnum) {
+        return base + " " + mnum[1] + (mnum[2] ? (/^\(/.test(mnum[2]) ? mnum[2] : ", " + mnum[2]) : "");
+      }
+      return base + " " + det;
+    }
+    return base + ", " + det;
+  }
   function fieldValue(a, b, c, d) {
     var f = S.aoa[a.i] || [];
     var cur = d.cur && d.cur.row === a ? d.cur : null;
@@ -2065,6 +2183,8 @@
         return rec.addr2;
       case "addrFull":
         return [rec.addr1, rec.addr2].filter(Boolean).join(" ");
+      case "addrStd":
+        return standardAddress(rec.addr1, rec.addr2, a.r && a.status !== "실패" ? a.r.kind : "");
       case "phone":
         return p || h;
       case "tel":
@@ -2497,7 +2617,7 @@
   }
   function currentPreset() {
     var a = PRESETS[S.preset];
-    if (S.preset === "custom") {
+    if (a.custom) {
       a = Object.assign({}, a, {
         cols: customColumns()
       });
@@ -2629,7 +2749,7 @@
     if (!g.rows.length) {
       return setMsg(dlMsgEl, "내려받을 행이 없습니다." + (W.empty ? " 주소가 빈 행 " + fmtNum(W.empty) + "건(" + rowListText(W.emptyRows, W.empty) + ")은 뺐습니다." : "") + (W.skipped ? " 우편번호 없는 " + fmtNum(W.skipped) + "건은 뺐습니다." : ""), "warn");
     }
-    var q = S.preset === "epost" ? "_우체국쇼핑" : S.preset === "biz" ? "_계약소포" : "_" + (clean(qs("#cName") && qs("#cName").value) || "양식");
+    var q = S.preset === "epost" ? "_우체국쇼핑" : S.preset === "biz" ? "_계약소포" : "_" + (clean(qs("#cName") && qs("#cName").value) || c.tag || "양식");
     var r = !c.custom || qs("#cHead").checked;
     var s = c.split || 0;
     var byItem = !!c.sender && S.cols.item >= 0 && optChecked("optSplitItem", true);
@@ -2684,7 +2804,11 @@
     });
     files.forEach(function (f, k) {
       setTimeout(function () {
-        writeWorkbook((r ? [g.head] : []).concat(f.rows), c.sheet, a, f.name);
+        var top = [];
+        for (var tb = 0; tb < (c.custom ? +(PRESETS[S.preset].top || 0) : 0); tb++) {
+          top.push([]);
+        }
+        writeWorkbook(top.concat(r ? [g.head] : []).concat(f.rows), c.sheet, a, f.name);
       }, k * 450);
     });
     addLog("내려받기", g.rows.length, c.name + " · " + files[0].name + "." + a + (files.length > 1 ? " 외 " + (files.length - 1) + "개" : ""));
@@ -2815,7 +2939,22 @@
       g.className = "preset" + (S.preset === d ? " on" : "");
       g.innerHTML = "<b>" + escHtml(f.name) + "</b><span>" + escHtml(f.desc) + "</span>";
       g.onclick = function () {
+        if (S.preset === d) {
+          return;
+        }
+        S.colsByPreset = S.colsByPreset || {};
+        if (PRESETS[S.preset] && PRESETS[S.preset].custom) {
+          S.colsByPreset[S.preset] = {cols: S.customCols, name: S.customName};
+        }
         S.preset = d;
+        if (PRESETS[d].custom) {
+          var keep = S.colsByPreset[d];
+          S.customCols = keep ? keep.cols : (PRESETS[d].cols || []).map(function (x) {
+            return {h: x.h, src: x.src, def: x.def || ""};
+          });
+          S.customName = keep ? keep.name : PRESETS[d].base ? PRESETS[d].name.replace(/\s*·\s*/, "(") + ")" : "";
+        }
+        settings.set({preset: d});
         renderPresets();
       };
       presetsEl.appendChild(g);
@@ -2936,7 +3075,7 @@
     var b = Object.keys(a);
     return "<div class=\"tools\"><button type=\"button\" class=\"btn sm\" id=\"cImport\">양식 파일에서 불러오기</button><input type=\"file\" id=\"cFile\" accept=\".xlsx,.xls,.csv,.cell\" hidden><button type=\"button\" class=\"btn sm ghost\" id=\"cAdd\">+ 열 추가</button>" + (b.length ? "<select id=\"cLoad\" class=\"mini\" style=\"width:auto\"><option value=\"\">저장한 양식 불러오기…</option>" + b.map(function (c) {
       return "<option>" + escHtml(c) + "</option>";
-    }).join("") + "</select>" : "") + "<span class=\"grow\"></span><input type=\"text\" id=\"cName\" class=\"mini\" style=\"width:160px\" placeholder=\"양식 이름\" value=\"" + escHtml(S.customName || "") + "\"><button type=\"button\" class=\"btn sm ghost\" id=\"cSave\">이 구성 저장</button>" + (b.length ? "<button type=\"button\" class=\"btn sm ghost\" id=\"cDel\">삭제</button>" : "") + "</div><label class=\"chk\" style=\"margin:10px 0\"><input type=\"checkbox\" id=\"cHead\" checked> 첫 줄에 제목 줄 넣기</label><div class=\"clist\" id=\"cList\"></div><p class=\"hint\" style=\"margin:10px 0 0\">포스트넷 창구접수·간편사전접수처럼 열 순서가 정해진 양식은, 그 양식 파일을 「양식 파일에서 불러오기」로 넣으면 제목 줄을 읽어 열을 자동으로 맞춥니다. 맞춤 결과는 꼭 한 번 확인하세요.</p>";
+    }).join("") + "</select>" : "") + "<span class=\"grow\"></span><input type=\"text\" id=\"cName\" class=\"mini\" style=\"width:160px\" placeholder=\"양식 이름\" value=\"" + escHtml(S.customName || "") + "\"><button type=\"button\" class=\"btn sm ghost\" id=\"cSave\">이 구성 저장</button>" + (b.length ? "<button type=\"button\" class=\"btn sm ghost\" id=\"cDel\">삭제</button>" : "") + "</div><div class=\"row-inline\" style=\"display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:10px 0\"><label class=\"chk\" style=\"margin:0\"><input type=\"checkbox\" id=\"cHead\" checked> 제목 줄 넣기</label><label class=\"chk\" style=\"margin:0\">제목 줄 위 빈 줄 <input type=\"number\" id=\"cTop\" class=\"mini\" min=\"0\" max=\"10\" style=\"width:60px\" value=\"" + (+(PRESETS[S.preset].top || 0)) + "\"></label><small style=\"color:var(--ink2)\">열 왼쪽 ⠿를 끌어 순서를 바꿉니다(키보드: ⠿에서 ↑·↓)</small></div><div class=\"clist\" id=\"cList\"></div><p class=\"hint\" style=\"margin:10px 0 0\">포스트넷 창구접수·간편사전접수처럼 열 순서가 정해진 양식은, 그 양식 파일을 「양식 파일에서 불러오기」로 넣으면 제목 줄을 읽어 열을 자동으로 맞춥니다. 맞춤 결과는 꼭 한 번 확인하세요.</p>";
   }
   function renderCustomCols() {
     var cListEl = qs("#cList");
@@ -2944,10 +3083,19 @@
       return;
     }
     cListEl.innerHTML = "";
+    function moveCol(from, to) {
+      if (from === to || from < 0 || to < 0 || from >= S.customCols.length || to > S.customCols.length) {
+        return;
+      }
+      var it = S.customCols.splice(from, 1)[0];
+      S.customCols.splice(to > from ? to - 1 : to, 0, it);
+      renderCustomCols();
+    }
     (S.customCols || []).forEach(function (a, idx) {
       var b = document.createElement("div");
       b.className = "crow";
-      b.innerHTML = "<span class=\"idx\">" + colLetter(idx) + "</span><input type=\"text\" class=\"mini ch\" value=\"" + escHtml(a.h) + "\" placeholder=\"제목\" aria-label=\"" + colLetter(idx) + "열 제목\"><select class=\"mini cs\" aria-label=\"" + colLetter(idx) + "열 내용\">" + sourceOptionsHtml(a.src) + "</select><input type=\"text\" class=\"mini cd\" value=\"" + escHtml(a.def || "") + "\" placeholder=\"기본값\" aria-label=\"" + colLetter(idx) + "열 기본값\"><span><button type=\"button\" class=\"btn sm ghost mini cu\" title=\"위로\">↑</button><button type=\"button\" class=\"btn sm ghost mini cx\" title=\"지우기\">×</button></span>";
+      b.dataset.idx = idx;
+      b.innerHTML = "<button type=\"button\" class=\"idx grip\" title=\"끌어서 순서 바꾸기 (키보드 ↑·↓)\" aria-label=\"" + colLetter(idx) + "열 옮기기\"><span class=\"dots\">⠿</span>" + colLetter(idx) + "</button><input type=\"text\" class=\"mini ch\" value=\"" + escHtml(a.h) + "\" placeholder=\"제목\" aria-label=\"" + colLetter(idx) + "열 제목\"><select class=\"mini cs\" aria-label=\"" + colLetter(idx) + "열 내용\">" + sourceOptionsHtml(a.src) + "</select><input type=\"text\" class=\"mini cd\" value=\"" + escHtml(a.def || "") + "\" placeholder=\"기본값\" aria-label=\"" + colLetter(idx) + "열 기본값\"><span><button type=\"button\" class=\"btn sm ghost mini cx\" title=\"이 열 지우기\">×</button></span>";
       qs(".ch", b).oninput = function () {
         a.h = this.value;
       };
@@ -2961,17 +3109,68 @@
       qs(".cd", b).oninput = function () {
         a.def = this.value;
       };
-      qs(".cu", b).onclick = function () {
-        if (idx > 0) {
-          var c = S.customCols[idx - 1];
-          S.customCols[idx - 1] = a;
-          S.customCols[idx] = c;
-          renderCustomCols();
-        }
-      };
       qs(".cx", b).onclick = function () {
         S.customCols.splice(idx, 1);
         renderCustomCols();
+      };
+      var grip = qs(".grip", b);
+      // 끌기는 손잡이(⠿)에서만 시작한다(입력칸 글자 고르기와 겹치지 않게)
+      grip.onmousedown = function () {
+        b.draggable = true;
+      };
+      grip.ontouchstart = grip.onmousedown;
+      b.ondragstart = function (e) {
+        b.classList.add("dragging");
+        try {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", String(idx));
+        } catch (err) {}
+        S.dragCol = idx;
+      };
+      b.ondragend = function () {
+        b.draggable = false;
+        b.classList.remove("dragging");
+        qsa(".crow", cListEl).forEach(function (r) {
+          r.classList.remove("dropBefore", "dropAfter");
+        });
+        S.dragCol = null;
+      };
+      b.ondragover = function (e) {
+        if (S.dragCol === null || S.dragCol === undefined) {
+          return;
+        }
+        e.preventDefault();
+        var rc = b.getBoundingClientRect();
+        var after = e.clientY > rc.top + rc.height / 2;
+        b.classList.toggle("dropAfter", after);
+        b.classList.toggle("dropBefore", !after);
+      };
+      b.ondragleave = function () {
+        b.classList.remove("dropBefore", "dropAfter");
+      };
+      b.ondrop = function (e) {
+        e.preventDefault();
+        var from = S.dragCol;
+        var after = b.classList.contains("dropAfter");
+        b.classList.remove("dropBefore", "dropAfter");
+        S.dragCol = null;
+        if (from === null || from === undefined) {
+          return;
+        }
+        moveCol(from, after ? idx + 1 : idx);
+      };
+      grip.onkeydown = function (e) {
+        if (e.key === "ArrowUp" && idx > 0) {
+          e.preventDefault();
+          moveCol(idx, idx - 1);
+          var g1 = qsa(".crow .grip", cListEl)[idx - 1];
+          if (g1) g1.focus();
+        } else if (e.key === "ArrowDown" && idx < S.customCols.length - 1) {
+          e.preventDefault();
+          moveCol(idx, idx + 2);
+          var g2 = qsa(".crow .grip", cListEl)[idx + 1];
+          if (g2) g2.focus();
+        }
       };
       cListEl.appendChild(b);
     });
@@ -3060,10 +3259,18 @@
     return "blank";
   }
   function bindCustomEditor() {
-    if (!S.customCols) {
-      S.customCols = [];
+    if (!S.customCols || !S.customCols.length && PRESETS[S.preset].base) {
+      S.customCols = (PRESETS[S.preset].cols || []).map(function (x) {
+        return {h: x.h, src: x.src, def: x.def || ""};
+      });
     }
     renderCustomCols();
+    var cTopEl = qs("#cTop");
+    if (cTopEl) {
+      cTopEl.oninput = function () {
+        PRESETS[S.preset].top = Math.max(0, Math.min(10, parseInt(this.value, 10) || 0));
+      };
+    }
     qs("#cAdd").onclick = function () {
       S.customCols.push({
         h: "",
@@ -3129,7 +3336,8 @@
       var b = settings.get().customs || {};
       b[a] = {
         cols: customColumns(),
-        sheet: PRESETS.custom.sheet
+        sheet: PRESETS[S.preset].sheet || "Sheet1",
+        top: +(PRESETS[S.preset].top || 0)
       };
       var c = {
         customs: b
@@ -3155,7 +3363,8 @@
           return c;
         });
         S.customName = this.value;
-        PRESETS.custom.sheet = a.sheet || "Sheet1";
+        PRESETS[S.preset].sheet = a.sheet || "Sheet1";
+        PRESETS[S.preset].top = +(a.top || 0);
         renderPresets();
       };
     }
@@ -3561,6 +3770,13 @@
   }
   function init() {
     var a = settings.get();
+    S.preset = a.preset && PRESETS[a.preset] ? a.preset : "reg";   // 처음엔 양식1(등기용), 그 뒤로는 마지막에 쓴 양식
+    if (PRESETS[S.preset].custom) {
+      S.customCols = (PRESETS[S.preset].cols || []).map(function (x) {
+        return {h: x.h, src: x.src, def: x.def || ""};
+      });
+      S.customName = PRESETS[S.preset].base ? PRESETS[S.preset].name.replace(/\s*·\s*/, "(") + ")" : "";
+    }
     if (a.region) {
       qs("#optRegion").value = a.region;
     }

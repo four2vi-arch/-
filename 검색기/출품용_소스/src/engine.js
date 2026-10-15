@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.4 (출품본) · 주소 판정 엔진 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.5 (출품본) · 주소 판정 엔진 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function (a, b) {
   if (typeof module === "object" && module.exports) {
     module.exports = b();
@@ -2220,6 +2220,165 @@
     this._strict = true;
     return this._pass(b, null).best;
   };
+  // ---- 시·군·구 이름 오타 보정(2026-10-15): 「정음시」「이산시」「왕산구」처럼 자모 한 개가 틀린 시·군·구 이름을 바로잡는다.
+  // 후보는 같은 글자 수의 시·군·구 이름 가운데 자모 거리 1인 것. 같은 주소의 다른 지역 말(시·도, 앞뒤 시·군·구)과
+  // 기본 지역(opts.defaultSggs, 화면에서는 앞뒤 행의 지역)으로 좁히고, 그래도 여럿이면 실제로 찾아지는 것만 남긴다.
+  function hangulJamo(s) {
+    var o = [];
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i) - 0xAC00;
+      if (c >= 0 && c < 11172) {
+        o.push(1000 + Math.floor(c / 588), 2000 + Math.floor(c % 588 / 28));
+        if (c % 28) {
+          o.push(3000 + c % 28);
+        }
+      } else {
+        o.push(s.charCodeAt(i));
+      }
+    }
+    return o;
+  }
+  function editDistance(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) {
+      return max + 1;
+    }
+    var prev = [];
+    for (var j = 0; j <= b.length; j++) {
+      prev[j] = j;
+    }
+    for (var i = 1; i <= a.length; i++) {
+      var cur = [i];
+      var low = i;
+      for (var k = 1; k <= b.length; k++) {
+        cur[k] = Math.min(prev[k] + 1, cur[k - 1] + 1, prev[k - 1] + (a[i - 1] === b[k - 1] ? 0 : 1));
+        if (cur[k] < low) {
+          low = cur[k];
+        }
+      }
+      if (low > max) {
+        return max + 1;
+      }
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+  ZipEngine.prototype._sggTypoCandidates = function (tok) {
+    if (!this._typoCache) {
+      this._typoCache = new Map();
+      this._sggKeysByLen = new Map();
+      var self = this;
+      this.sggNames.forEach(function (v, k) {
+        if (!/^[가-힣]{1,4}[시군구]$/.test(k)) {
+          return;
+        }
+        var arr = self._sggKeysByLen.get(k.length);
+        if (!arr) {
+          self._sggKeysByLen.set(k.length, arr = []);
+        }
+        arr.push([k, hangulJamo(k)]);
+      });
+    }
+    if (this._typoCache.has(tok)) {
+      return this._typoCache.get(tok);
+    }
+    var tj = hangulJamo(tok);
+    var out = [];
+    (this._sggKeysByLen.get(tok.length) || []).forEach(function (e) {
+      if (editDistance(tj, e[1], 1) <= 1) {
+        out.push(e[0]);
+      }
+    });
+    this._typoCache.set(tok, out);
+    return out;
+  };
+  ZipEngine.prototype._fixRegionTypo = function (d, b) {
+    var toks = d.replace(/\s+/g, " ").trim().split(" ");
+    var self = this;
+    for (var i = 0; i < Math.min(3, toks.length - 1); i++) {
+      var t = toks[i];
+      // 끝 글자가 시·군·구이거나 그와 자모 하나 차이(고창근·익산사)인 2~5글자 낱말만. 도로명·읍면동 꼴은 건드리지 않는다
+      if (!/^[가-힣]{2,5}$/.test(t) || /(로|길|동|읍|면|리|가)$/.test(t) || this.sggNames.has(t) || this.sidoAlias.has(t) || this.sidoAlias.has(t.slice(0, -1))) {
+        continue;
+      }
+      var lastJ = hangulJamo(t.slice(-1));
+      if (!["시", "군", "구"].some(function (z) {
+        return editDistance(lastJ, hangulJamo(z), 1) <= 1;
+      })) {
+        continue;
+      }
+      var cands = this._sggTypoCandidates(t);
+      if (!cands.length) {
+        continue;
+      }
+      // 같은 주소의 다른 지역 말(시·도·시군구)로 좁힌다
+      var ctx = null;
+      for (var j = 0; j < Math.min(3, toks.length); j++) {
+        if (j === i) {
+          continue;
+        }
+        var w = toks[j];
+        var sd = this.sidoAlias.get(w);
+        if (sd === undefined && /시$/.test(w)) {
+          sd = this.sidoAlias.get(w.slice(0, -1));
+        }
+        if (sd !== undefined) {
+          ctx = (ctx || []).concat(this.sggOfSido[sd]);
+        } else if (this.sggNames.has(w)) {
+          ctx = (ctx || []).concat(this.sggNames.get(w));
+        }
+      }
+      var pick = cands;
+      if (ctx) {
+        var c2 = cands.filter(function (k) {
+          return self.sggNames.get(k).some(function (g) {
+            return ctx.indexOf(g) >= 0;
+          });
+        });
+        if (c2.length) {
+          pick = c2;
+        }
+      }
+      var viaDefault = false;
+      if (pick.length > 1 && b && b.defaultSggs && b.defaultSggs.length) {
+        var c3 = pick.filter(function (k) {
+          return self.sggNames.get(k).some(function (g) {
+            return b.defaultSggs.indexOf(g) >= 0;
+          });
+        });
+        if (c3.length) {
+          pick = c3;
+          viaDefault = true;
+        }
+      }
+      var best = null;
+      for (var m = 0; m < pick.length; m++) {
+        var nt = toks.slice();
+        nt[i] = pick[m];
+        var r;
+        try {
+          r = this._lookup(nt.join(" "), b);
+        } catch (err) {
+          this._strict = true;
+          r = null;
+        }
+        if (r && r.grade !== "실패" && (!best || r.score > best.r.score)) {
+          best = {
+            r: r,
+            to: pick[m],
+            n: 0
+          };
+        }
+        if (r && r.grade !== "실패") {
+          best.n++;
+        }
+      }
+      if (best) {
+        adjustGrade(best.r, best.n > 1 ? "중" : "상", "시군구 오타 보정(" + t + "→" + best.to + (viaDefault ? ", 기본·앞뒤 지역 기준" : "") + ")");
+        return best.r;
+      }
+    }
+    return null;
+  };
   ZipEngine.prototype.lookup = function (a, b) {
     var c;
     var d = toStr(a);
@@ -2229,6 +2388,21 @@
       this._strict = true;
       c = makeResult("실패", "", 0, "주소를 분석하지 못함", {});
       c.addr1 = d.slice(0, 200);
+    }
+    // 시·군·구 이름이 오타면(정음시) 바로잡아 다시 찾는다. 오타를 「시군구 보정」으로 엉뚱한 시·군·구(군산시)로 넓혀 찾은 결과보다 앞선다.
+    if (c.grade === "실패" || /시군구 보정/.test(c.note || "")) {
+      var fx = null;
+      try {
+        fx = this._fixRegionTypo(d, b);
+      } catch (err) {
+        fx = null;
+      }
+      if (fx && (c.grade === "실패" || fx.score >= c.score - 1e-9 || /시군구 보정/.test(c.note || ""))) {
+        if (!fx.zipFound) {
+          fx.zipFound = c.zipFound;
+        }
+        return fx;
+      }
     }
     if (c.grade === "실패" && c.note === "시·도와 시·군·구를 알 수 없음") {
       var f = d.replace(/\s+/g, " ").trim().slice(0, 400).split(" ");

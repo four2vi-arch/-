@@ -1,4 +1,4 @@
-// 물어물어(우편번호 자동검색기) v1.4 출품본 구동 시험 — 헤드리스 크로미움
+// 물어물어(우편번호 자동검색기) v1.5 출품본 구동 시험 — 헤드리스 크로미움
 // 사용: node run.js <출품본.html 절대경로> [AI포트]
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const fs = require('fs'); const path = require('path');
@@ -72,6 +72,7 @@ function parseCsv(p) { const t = fs.readFileSync(p, 'utf8').replace(/^﻿/, '');
   // 3) 발송명단 1,000건 → 정답 대조, 원본+우편번호 내려받기, 사용자 지정 양식
   await loadFile(path.resolve('발송명단.csv'));
   await runAndSummarize('발송명단1000');
+  await page.evaluate(() => { const b = Array.from(document.querySelectorAll('#presets .preset')).find(x => /원본 \+ 우편번호/.test(x.textContent)); b && b.click(); });   // v1.5부터 처음 양식은 양식1(등기용)
   const orig = await download('#btnDownload', '원본우편번호'); log('원본+우편번호 파일', path.basename(orig));
   // 사용자 지정 양식: 프리셋 버튼 중 「사용자」가 든 것
   await page.evaluate(() => { const b = Array.from(document.querySelectorAll('#presets .preset')).find(x => /사용자 지정/.test(x.textContent)); b && b.click(); });
