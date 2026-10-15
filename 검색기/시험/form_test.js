@@ -34,7 +34,7 @@ let pass = 0, fail = 0; const ok = (n, c, x) => { (c ? pass++ : fail++); console
   const on = await page.$eval('#presets .preset.on b', b => b.textContent);
   ok('처음 양식은 「양식1 · 등기용」', on === '양식1 · 등기용', on);
   const cols1 = await page.$$eval('#cList .crow .ch', xs => xs.map(x => x.value));
-  ok('양식1 열: 순번·이름·주소·비고', cols1.join(',') === '순번,이름,주소,비고', cols1.join(','));
+  ok('양식1 열: 순번·이름·우편번호·주소·비고', cols1.join(',') === '순번,이름,우편번호,주소,비고', cols1.join(','));
   async function download(name) {
     const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.click('#btnDownload')]);
     const p = path.join(OUT, name + '__' + dl.suggestedFilename()); await dl.saveAs(p); return p;
@@ -44,33 +44,34 @@ let pass = 0, fail = 0; const ok = (n, c, x) => { (c ? pass++ : fail++); console
   await page.click('#presets .preset:nth-child(' + (await page.$$eval('#presets .preset b', bs => bs.findIndex(b => b.textContent === '양식2 · 소포용') + 1)) + ')');
   await page.waitForTimeout(300);
   const cols2 = await page.$$eval('#cList .crow .ch', xs => xs.map(x => x.value));
-  ok('양식2 열: 순번·이름·주소·일반전화·핸드폰번호·비고', cols2.join(',') === '순번,이름,주소,일반전화,핸드폰번호,비고', cols2.join(','));
+  ok('양식2 열: 순번·이름·우편번호·주소·일반전화·핸드폰번호·비고', cols2.join(',') === '순번,이름,우편번호,주소,일반전화,핸드폰번호,비고', cols2.join(','));
   // 끌어 옮기기: 「핸드폰번호」(5번째)를 「이름」(2번째) 위로
   const rows = await page.$$('#cList .crow');
-  const src = await rows[4].$('.grip'); const dst = rows[1];
+  const src = await rows[5].$('.grip'); const dst = rows[1];
   const sb = await src.boundingBox(); const db = await dst.boundingBox();
   await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2); await page.mouse.down();
   await page.mouse.move(db.x + 40, db.y + 4, { steps: 12 }); await page.mouse.up(); await page.waitForTimeout(400);
   let cols3 = await page.$$eval('#cList .crow .ch', xs => xs.map(x => x.value));
   if (cols3.join(',') === cols2.join(',')) {   // 헤드리스에서 마우스 끌기가 안 될 때는 끌기 사건을 직접 보낸다
-    await page.evaluate(() => { const rs = document.querySelectorAll('#cList .crow'); const from = rs[4], to = rs[1]; from.querySelector('.grip').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    await page.evaluate(() => { const rs = document.querySelectorAll('#cList .crow'); const from = rs[5], to = rs[1]; from.querySelector('.grip').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
       const dt = new DataTransfer(); from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt })); const r = to.getBoundingClientRect();
       to.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: r.top + 2 })); to.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: r.top + 2 })); from.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt })); });
     await page.waitForTimeout(300); cols3 = await page.$$eval('#cList .crow .ch', xs => xs.map(x => x.value));
   }
-  ok('끌어 옮기기(핸드폰번호 → 이름 위)', cols3.join(',') === '순번,핸드폰번호,이름,주소,일반전화,비고', cols3.join(','));
+  ok('끌어 옮기기(핸드폰번호 → 이름 위)', cols3.join(',') === '순번,핸드폰번호,이름,우편번호,주소,일반전화,비고', cols3.join(','));
   // 키보드: 손잡이에서 ↓
   await page.focus('#cList .crow:nth-child(2) .grip'); await page.keyboard.press('ArrowDown'); await page.waitForTimeout(200);
   const cols4 = await page.$$eval('#cList .crow .ch', xs => xs.map(x => x.value));
-  ok('키보드 ↓로 한 칸 내리기', cols4.join(',') === '순번,이름,핸드폰번호,주소,일반전화,비고', cols4.join(','));
+  ok('키보드 ↓로 한 칸 내리기', cols4.join(',') === '순번,이름,핸드폰번호,우편번호,주소,일반전화,비고', cols4.join(','));
   await page.screenshot({ path: path.join(OUT, '양식편집.png') });
   // 원래 순서로 돌리고 내려받기
-  await page.focus('#cList .crow:nth-child(3) .grip'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown');
+  await page.focus('#cList .crow:nth-child(3) .grip'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown');
   await page.waitForTimeout(200);
+  ok('원래 순서로 복귀', (await page.$$eval('#cList .crow .ch', xs => xs.map(x => x.value))).join(',') === '순번,이름,우편번호,주소,일반전화,핸드폰번호,비고');
   const f2 = await download('양식2'); ok('양식2 내려받기', fs.existsSync(f2), path.basename(f2));
   // 양식1로 돌아가도 양식1 열은 그대로, 양식2 편집은 기억
   await page.click('#presets .preset:nth-child(' + (await page.$$eval('#presets .preset b', bs => bs.findIndex(b => b.textContent === '양식1 · 등기용') + 1)) + ')'); await page.waitForTimeout(200);
-  ok('양식1로 돌아가면 양식1 열', (await page.$$eval('#cList .crow .ch', xs => xs.map(x => x.value))).join(',') === '순번,이름,주소,비고');
+  ok('양식1로 돌아가면 양식1 열', (await page.$$eval('#cList .crow .ch', xs => xs.map(x => x.value))).join(',') === '순번,이름,우편번호,주소,비고');
   ok('콘솔 오류 없음', errs.length === 0, errs.slice(0, 2).join(' | '));
   fs.writeFileSync(path.join(OUT, 'files.json'), JSON.stringify({ f1, f2 }));
   console.log(`\n통과 ${pass} · 실패 ${fail}`); await browser.close(); process.exit(fail ? 1 : 0);

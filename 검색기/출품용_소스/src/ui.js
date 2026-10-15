@@ -1969,25 +1969,25 @@
     },
     reg: {
       name: "양식1 · 등기용",
-      desc: "순번·이름·주소(표준 표기)·비고 · 위 2줄 비움 · 열을 끌어 옮기고 더해서 저장할 수 있습니다",
+      desc: "순번·이름·우편번호·주소(표준 표기)·비고 · 위 2줄 비움 · 열을 끌어 옮기고 더해서 저장할 수 있습니다",
       formats: ["xlsx", "xls", "csv"],
       sheet: "Sheet1",
       custom: true,
       base: true,
       top: 2,
       tag: "등기용",
-      cols: [{h: "순번", src: "seq", def: ""}, {h: "이름", src: "name", def: ""}, {h: "주소", src: "addrStd", def: ""}, {h: "비고", src: "memo", def: ""}]
+      cols: [{h: "순번", src: "seq", def: ""}, {h: "이름", src: "name", def: ""}, {h: "우편번호", src: "zip", def: ""}, {h: "주소", src: "addrStd", def: ""}, {h: "비고", src: "memo", def: ""}]
     },
     parcel: {
       name: "양식2 · 소포용",
-      desc: "양식1에 일반전화·핸드폰번호 열을 더한 것 · 열을 끌어 옮기고 더해서 저장할 수 있습니다",
+      desc: "양식1(우편번호 포함)에 일반전화·핸드폰번호 열을 더한 것 · 열을 끌어 옮기고 더해서 저장할 수 있습니다",
       formats: ["xlsx", "xls", "csv"],
       sheet: "Sheet1",
       custom: true,
       base: true,
       top: 2,
       tag: "소포용",
-      cols: [{h: "순번", src: "seq", def: ""}, {h: "이름", src: "name", def: ""}, {h: "주소", src: "addrStd", def: ""}, {h: "일반전화", src: "tel", def: ""}, {h: "핸드폰번호", src: "mobile", def: ""}, {h: "비고", src: "memo", def: ""}]
+      cols: [{h: "순번", src: "seq", def: ""}, {h: "이름", src: "name", def: ""}, {h: "우편번호", src: "zip", def: ""}, {h: "주소", src: "addrStd", def: ""}, {h: "일반전화", src: "tel", def: ""}, {h: "핸드폰번호", src: "mobile", def: ""}, {h: "비고", src: "memo", def: ""}]
     },
     custom: {
       name: "사용자 지정 양식",
