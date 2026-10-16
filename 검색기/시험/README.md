@@ -20,3 +20,4 @@
 | `cam_extra_test.js` | 직원 「주소 찾기」 사진 읽기, 카메라 거부(NotAllowedError)·장치 없음 처리 |
 | `label_test.js` | 롤 스티커 크기·장수·넘침을 인쇄 모양 PDF로 확인(직원 라벨 창 100×45, 어르신 스티커 80×50, A4 여러 쪽). `pdfinfo`·`pdftoppm` 필요 |
 | `ble_test.js` | v1.7 블루투스(BLE) 직접 인쇄: 가짜 `navigator.bluetooth` 프린터가 받은 바이트로 TSPL 비트맵을 PNG로 되살려 크기·장수·회전·색 반전·ESC/POS·전송 크기 축소·설정 창·직원 라벨 창을 확인. `node ble_test.js <출품본.html> <주소록.xlsx> <결과 폴더>` |
+| `usb_test.js` | v1.8 USB(OTG·WebUSB) 직접 인쇄: 가짜 `navigator.usb` 프린터(제조사 인터페이스+프린터 인터페이스)로 인터페이스 선택·선택 창 1회·재연결·취소·보호 클래스 거부·stall 복구·케이블 빠짐·설정 창·직원 롤 스티커·USB 없음 대체 인쇄 확인. `node usb_test.js <출품본.html> <주소록.xlsx> <결과 폴더>` |

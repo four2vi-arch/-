@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.7 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.8 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 /* 민원실에서 어르신이 직접 쓰는 대화형 주소 입력.
    - 말(인터넷 PC)·글자로 받은 주소를 정리해 엔진에 묻고, 빠진 부분만 되묻는다.
    - 우편번호는 언제나 엔진(우편번호 고시 DB)이 확정한다. AI는 주소 조각을 뽑는 보조 역할만 한다.
@@ -965,14 +965,14 @@
     var box = $('#kPrint'); box.innerHTML = ''; box.className = '';
     var ps = $('#kPageCss'); if (ps) { ps.textContent = ''; }
   }
-  // 태블릿: 인쇄 창 없이 블루투스(BLE) 라벨프린터로 스티커를 바로 보낸다
-  function bleOn() { return paper() === 'lbl' && window.__ble && __ble.supported() && __ble.get().via === 'ble'; }
+  // 태블릿: 인쇄 창 없이 블루투스(BLE)·USB(OTG) 라벨프린터로 스티커를 바로 보낸다
+  function bleOn() { return paper() === 'lbl' && window.__ble && __ble.direct(); }
   function bleSlip() {
     var sz = lblSize(), sd = st.sender || {};
     var from = sd.name ? '보내는 분 ' + sd.name + (sd.phone ? ' ' + sd.phone : '') + (sd.addr1 ? ' · ' + sd.addr1 + ' ' + (sd.addr2 || '') : '') : '';
     var list = st.entries.map(function (x) { return { zip: x.zip, name: x.name, phone: x.phone, addr1: x.addr1, addr2: x.addr2, check: x.check, from: from, no: st.no }; });
     toast('스티커를 프린터로 보내고 있어요…');
-    log('어르신 입력 스티커 인쇄(블루투스)', list.length, '접수번호 ' + st.no);
+    log('어르신 입력 스티커 인쇄(직접)', list.length, '접수번호 ' + st.no);
     __ble.print(list, sz[0], sz[1]).then(function (n) { toast('스티커 ' + n + '장을 보냈어요. 프린터에서 받아 가세요.'); }, function (e) {
       modal('<div class="k-bubble">스티커를 뽑지 못했어요.<small>' + esc(e.message) + '<br>직원에게 말씀해 주세요.</small></div>', [['다시 해 볼게요', function () { closeModal(); bleSlip(); }, 'pri'], ['닫기', closeModal, 'sub']]);
     });
@@ -1098,11 +1098,11 @@
       }, 'pri'],
       ['AI 연결 시험', aiTest, 'sub'],
       ['스티커 시험 인쇄', lblTest, 'sub'],
-      ['블루투스 프린터 설정', function () {
+      ['프린터 연결 설정(블루투스·USB)', function () {
         if (!window.__ble) { return; }
         var keepVals = { w: $('#kfLblW').value, h: $('#kfLblH').value };
         __ble.openSettings({ size: function () { return [Number(keepVals.w) || lblSize()[0], Number(keepVals.h) || lblSize()[1]]; }, onClose: function (c) {
-          if (c.via === 'ble') { setCfg({ paper: 'lbl' }); $('#kfPaper').value = 'lbl'; $('#kfPaper').onchange(); toast('블루투스 인쇄를 쓰도록 용지를 「주소 스티커」로 바꿨어요. 저장을 눌러 주세요.'); }
+          if (c.via === 'ble' || c.via === 'usb') { setCfg({ paper: 'lbl' }); $('#kfPaper').value = 'lbl'; $('#kfPaper').onchange(); toast('바로 인쇄를 쓰도록 용지를 「주소 스티커」로 바꿨어요. 저장을 눌러 주세요.'); }
         } });
       }, 'sub'],
       ['닫기', closeModal, 'sub']]);

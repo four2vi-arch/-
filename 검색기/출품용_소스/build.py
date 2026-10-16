@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """우편번호 자동검색기 — 소스에서 단일 HTML 만들기.
 
-python build.py  ->  dist/우편번호_자동검색기_v1.7_출품본.html
+python build.py  ->  dist/우편번호_자동검색기_v1.8_출품본.html
 1) template.html 자리표시자에 data·vendor·src 파일을 그대로 끼워 넣고
 2) 핵심 코드 9개(라이브러리 2 + DB 빌더·엔진·화면·글자 읽기 라이브러리·사진 읽기·블루투스 인쇄·어르신 화면)를 줄바꿈으로 이어 SHA-256 지문을 계산해
    무결성 검증기(EXPECTED)와 「파일 정보」에 적고
@@ -39,7 +39,7 @@ for m in re.finditer(r"<script([^>]*)>", html):
     body = html[m.end():html.index("</script>", m.end())]
     hashes.append("'sha256-%s'" % base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode())
 html = html.replace("@@CSP@@", " ".join(hashes), 1)
-out = ROOT / "dist" / "우편번호_자동검색기_v1.7_출품본.html"
+out = ROOT / "dist" / "우편번호_자동검색기_v1.8_출품본.html"
 out.parent.mkdir(exist_ok=True)
 out.write_bytes(html.replace("\r\n", "\n").encode("utf-8"))  # 줄바꿈을 LF로 고정(윈도에서도 같은 SHA-256)
 print("핵심 지문:", expected)

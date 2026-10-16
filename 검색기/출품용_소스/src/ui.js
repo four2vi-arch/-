@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.7 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.8 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function () {
   "use strict";
 
@@ -4126,7 +4126,7 @@
       var rw = Number(qs("#lbW").value) || 100;
       var rh = Number(qs("#lbH").value) || 45;
       qs("#lbInfo").textContent = "프린터로 보내는 중…";
-      addLog("라벨 인쇄(블루투스)", list.length, rw + "×" + rh);
+      addLog("라벨 인쇄(직접)", list.length, rw + "×" + rh);
       __ble.print(list, rw, rh).then(function (n) {
         qs("#lbInfo").textContent = n + "장을 프린터로 보냈습니다.";
       }, function (e) {

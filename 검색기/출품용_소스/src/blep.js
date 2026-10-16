@@ -1,7 +1,8 @@
-/*! 물어물어(우편번호 자동검색기) v1.7 (출품본) · 블루투스(BLE) 라벨프린터 직접 인쇄 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.8 (출품본) · 블루투스(BLE)·USB(OTG) 라벨프린터 직접 인쇄 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 /* 태블릿(안드로이드 크롬)에서 컴퓨터 없이 무선 라벨프린터로 바로 뽑기 위한 모듈.
    - 브라우저의 인쇄 창을 거치지 않고, 스티커 한 장을 그림(캔버스)으로 그려 흑백 점으로 바꾼 뒤 TSPL 또는 ESC/POS 명령으로 BLE(저전력 블루투스)에 보낸다.
    - Web Bluetooth 는 BLE 만 된다(클래식 블루투스·SPP 전용 프린터는 못 쓴다). 프린터 쪽 규격은 기종마다 달라 실기 시험이 필요하며, 설정 창에서 명령·해상도·색 반전·회전·전송 크기를 고칠 수 있게 했다.
+   - v1.8: 선으로 잇는 방식(WebUSB)을 더했다. 태블릿에 OTG 어댑터로 USB 라벨프린터를 꽂으면 컴퓨터·블루투스 없이 같은 TSPL/ESC·POS 명령을 USB 대량 전송(bulk OUT)으로 보낸다.
    - 주소·이름은 이 기기 안에서 그림으로만 만들어 프린터로 보낸다(인터넷으로 나가지 않는다). */
 (function () {
   'use strict';
@@ -11,11 +12,12 @@
   var SERVICES = [0x18f0, 0xff00, 0xffe0, 0xffe5, 0xfff0, 0xfee7, 0xae30, 0xff12,
     '49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', 'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f'];
   var dev = null, ch = null, busy = false, lastErr = '';
+  var udev = null, uep = 0, uifc = -1, uhook = false;   // USB(WebUSB): 장치, 내보내기 끝점 번호, 인터페이스 번호
 
   function $(id) { return document.getElementById(id); }
   function clean(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  var DEF = { via: 'dialog', proto: 'tspl', dpi: 203, gap: 2, chunk: 100, delay: 10, invert: false, rotate: 0, after: 'ff', uuids: '', name: '' };
+  var DEF = { via: 'dialog', proto: 'tspl', dpi: 203, gap: 2, chunk: 100, delay: 10, invert: false, rotate: 0, after: 'ff', uuids: '', name: '', usbId: '' };
   function get() {
     var o = {};
     try { o = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { o = {}; }
@@ -29,8 +31,13 @@
     try { localStorage.setItem(KEY, JSON.stringify(c)); } catch (e) { }
     return c;
   }
-  function supported() { return !!(navigator.bluetooth && navigator.bluetooth.requestDevice && window.isSecureContext !== false); }
-  function connected() { return !!(dev && dev.gatt && dev.gatt.connected && ch); }
+  function viaUsb() { return get().via === 'usb'; }
+  function btOk() { return !!(navigator.bluetooth && navigator.bluetooth.requestDevice && window.isSecureContext !== false); }
+  function usbOk() { return !!(navigator.usb && navigator.usb.requestDevice && window.isSecureContext !== false); }
+  // 지금 고른 방식(블루투스 또는 USB)을 이 브라우저가 쓸 수 있는지
+  function supported() { return viaUsb() ? usbOk() : btOk(); }
+  function connected() { return viaUsb() ? !!(udev && udev.opened && uep) : !!(dev && dev.gatt && dev.gatt.connected && ch); }
+  function deviceName() { return viaUsb() ? (udev && (udev.productName || 'USB 프린터')) || '' : (dev && dev.name) || ''; }
 
   // ------------------------------------------------------------------ 연결
   function userUuids() {
@@ -70,6 +77,7 @@
   // 사용자가 누른 단추 안에서 불러야 한다(선택 창이 뜬다)
   function connect() {
     lastErr = '';
+    if (viaUsb()) { return usbConnect(); }
     if (!supported()) { return Promise.reject(new Error('이 브라우저에서는 블루투스 인쇄를 쓸 수 없어요(안드로이드 크롬이 필요해요).')); }
     if (connected()) { return Promise.resolve(dev); }
     // 같은 기기가 이미 허용돼 있으면 선택 창 없이 다시 붙는다
@@ -92,15 +100,91 @@
     });
   }
   function disconnect() {
+    if (udev) { try { udev.close(); } catch (e) { } udev = null; uep = 0; }
     try { if (dev && dev.gatt && dev.gatt.connected) { dev.gatt.disconnect(); } } catch (e) { }
     ch = null;
   }
   function errText(e) {
     var n = e && e.name, m = String(e && e.message || e || '');
     if (n === 'NotFoundError' || /cancel|chooser/i.test(m)) { return '프린터를 고르지 않았어요. 다시 눌러 프린터를 골라 주세요.'; }
-    if (n === 'SecurityError' || n === 'NotAllowedError') { return '블루투스 사용이 허용되지 않았어요. 크롬 설정에서 허용해 주세요.'; }
+    if (viaUsb() && (n === 'SecurityError' || /protected class/i.test(m))) { return 'USB 프린터를 열 수 없어요. 이 장치는 크롬에서 막혀 있어요(컴퓨터에서는 프린터 드라이버가 잡고 있을 수 있어요). 태블릿에서 다시 해 보세요.'; }
+    if (n === 'SecurityError' || n === 'NotAllowedError') { return (viaUsb() ? 'USB' : '블루투스') + ' 사용이 허용되지 않았어요. 크롬 설정에서 허용해 주세요.'; }
+    if (/claimInterface|Unable to claim|Access denied|protected/i.test(m)) { return 'USB 프린터를 쓸 수 없어요(다른 앱이나 시스템이 쓰는 중이거나 허용되지 않은 장치). 케이블을 뽑았다 다시 꽂고 해 보세요.'; }
+    if (viaUsb() && /disconnected|no device|not open|closed/i.test(m)) { return '프린터와 연결이 끊겼어요. USB 선(OTG 어댑터)과 프린터 전원을 확인하고 다시 연결해 주세요.'; }
     if (/disconnected|GATT/i.test(m)) { return '프린터와 연결이 끊겼어요. 프린터 전원과 거리를 확인하고 다시 연결해 주세요.'; }
-    return m || '블루투스 연결에 실패했어요.';
+    return m || (viaUsb() ? 'USB 연결에 실패했어요.' : '블루투스 연결에 실패했어요.');
+  }
+
+  // ------------------------------------------------------------------ USB(WebUSB) 연결
+  // 안드로이드 크롬은 프린터 종류(클래스 7)와 제조사 전용(255) 인터페이스를 WebUSB 로 열 수 있다. 윈도우·맥은 운영체제 드라이버가 먼저 잡고 있어 열리지 않는 경우가 많다.
+  function usbHook() {
+    if (uhook || !navigator.usb || !navigator.usb.addEventListener) { return; }
+    uhook = true;
+    navigator.usb.addEventListener('disconnect', function (ev) { if (ev && ev.device === udev) { udev = null; uep = 0; } });
+  }
+  function usbAttach(d) {
+    usbHook();
+    udev = d; uep = 0; uifc = -1;
+    return Promise.resolve(d.opened ? null : d.open()).then(function () {
+      return d.configuration ? null : d.selectConfiguration(1);
+    }).then(function () {
+      var best = null;
+      ((d.configuration && d.configuration.interfaces) || []).forEach(function (itf) {
+        (itf.alternates || []).forEach(function (alt) {
+          (alt.endpoints || []).forEach(function (ep) {
+            if (ep.direction === 'out' && ep.type === 'bulk') {
+              var sc = alt.interfaceClass === 7 ? 3 : (alt.interfaceClass === 255 ? 2 : 1);
+              if (!best || sc > best.sc) { best = { sc: sc, itf: itf.interfaceNumber, alt: alt.alternateSetting, ep: ep.endpointNumber }; }
+            }
+          });
+        });
+      });
+      if (!best) { throw new Error('이 USB 장치에서 글자를 보낼 곳(내보내기 끝점)을 찾지 못했어요. 프린터가 맞는지 확인해 주세요.'); }
+      return Promise.resolve(d.claimInterface(best.itf)).then(function () {
+        return best.alt ? d.selectAlternateInterface(best.itf, best.alt) : null;
+      }).then(function () {
+        uep = best.ep; uifc = best.itf;
+        set({ name: d.productName || '', usbId: d.vendorId + ':' + d.productId });
+        return { name: d.productName || 'USB 프린터' };
+      });
+    });
+  }
+  function usbConnect() {
+    if (!usbOk()) { return Promise.reject(new Error('이 브라우저에서는 USB 인쇄를 쓸 수 없어요(안드로이드 크롬이 필요해요).')); }
+    if (connected()) { return Promise.resolve({ name: deviceName() }); }
+    var saved = get().usbId, again = Promise.resolve(null);
+    if (udev) {
+      again = usbAttach(udev).catch(function () { return null; });
+    } else if (saved && navigator.usb.getDevices) {
+      // 한 번 허용한 프린터는 선택 창 없이 다시 붙는다
+      again = navigator.usb.getDevices().then(function (ds) {
+        var d = ds.filter(function (x) { return x.vendorId + ':' + x.productId === saved; })[0];
+        return d ? usbAttach(d).catch(function () { return null; }) : null;
+      }, function () { return null; });
+    }
+    return again.then(function (r) {
+      if (r) { return r; }
+      return navigator.usb.requestDevice({ filters: [] }).then(usbAttach);
+    }).catch(function (e) {
+      lastErr = errText(e);
+      throw new Error(lastErr);
+    });
+  }
+  function usbWrite(bytes) {
+    var pos = 0, SIZE = 16384, healed = false;
+    function one() {
+      if (pos >= bytes.length) { return Promise.resolve(); }
+      if (!connected()) { return Promise.reject(new Error('프린터와 연결이 끊겼어요. 케이블을 확인하고 다시 연결해 주세요.')); }
+      var part = bytes.subarray(pos, pos + SIZE);
+      return udev.transferOut(uep, part).then(function (r) {
+        if (r && r.status && r.status !== 'ok') {
+          if (r.status === 'stall' && !healed) { healed = true; return udev.clearHalt('out', uep).then(one); }
+          throw new Error('프린터가 글자를 받지 않았어요(' + r.status + '). 프린터 전원과 종이를 확인해 주세요.');
+        }
+        pos += (r && r.bytesWritten) || part.length;
+      }).then(function () { return pos >= bytes.length ? null : one(); });
+    }
+    return one();
   }
 
   // ------------------------------------------------------------------ 스티커 그리기(캔버스)
@@ -237,6 +321,7 @@
   // ------------------------------------------------------------------ 보내기
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function writeAll(bytes) {
+    if (viaUsb()) { return usbWrite(bytes); }
     var s = get(), size = Math.max(20, Math.min(512, Number(s.chunk) || 100)), delay = Math.max(0, Number(s.delay) || 0), pos = 0, tries = 0;
     function one() {
       if (pos >= bytes.length) { return Promise.resolve(); }
@@ -292,8 +377,8 @@
     var s = get(), old = $('bleSet'); if (old) { old.remove(); }
     var m = document.createElement('div'); m.id = 'bleSet';
     function sel(id, label, cur, list) { return '<label>' + label + '<select id="' + id + '">' + list.map(function (x) { return '<option value="' + x[0] + '"' + (String(x[0]) === String(cur) ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>'; }
-    m.innerHTML = '<div class="b-card" role="dialog" aria-label="블루투스 프린터 설정"><h3>블루투스 프린터 설정</h3>' +
-      sel('bsVia', '인쇄 방식', s.via, [['dialog', '기기 인쇄 창(컴퓨터 등 · 크롬 인쇄 창)'], ['ble', '블루투스(BLE)로 바로 인쇄(태블릿)']]) +
+    m.innerHTML = '<div class="b-card" role="dialog" aria-label="프린터 연결 설정"><h3>프린터 연결 설정</h3>' +
+      sel('bsVia', '인쇄 방식', s.via, [['dialog', '기기 인쇄 창(컴퓨터 등 · 크롬 인쇄 창)'], ['usb', 'USB 선(OTG)으로 바로 인쇄(태블릿)'], ['ble', '블루투스(BLE)로 바로 인쇄(태블릿)']]) +
       '<div class="b-two">' + sel('bsProto', '프린터 명령', s.proto, [['tspl', 'TSPL (라벨 프린터 대부분)'], ['escpos', 'ESC/POS (영수증·일부 라벨)']]) +
       sel('bsDpi', '해상도', s.dpi, [[203, '203dpi (대부분)'], [300, '300dpi']]) + '</div>' +
       '<div class="b-two">' + sel('bsRot', '회전', s.rotate, [[0, '0도'], [90, '90도'], [180, '180도'], [270, '270도']]) +
@@ -303,9 +388,9 @@
       sel('bsAfter', '인쇄 뒤 이송(ESC/POS)', s.after, [['ff', '용지 이송(FF)'], ['lf', '줄 이송 3줄'], ['none', '없음']]) +
       '<label class="b-chk"><input id="bsInv" type="checkbox"' + (s.invert ? ' checked' : '') + '> 색 반전(검은 바탕으로 나오면 켜세요)</label>' +
       '<label>추가 서비스 번호(선택) <small>프린터를 못 찾으면 제조사 자료의 번호를 넣으세요(쉼표로 여러 개)</small><input id="bsUuid" type="text" value="' + esc(s.uuids) + '" placeholder="예) ffe0, 49535343-fe7d-4ae5-8fa9-9fafd205e455"></label>' +
-      '<div class="b-msg" id="bsMsg">' + (connected() ? '연결됨: ' + esc(dev.name || '프린터') : '연결되지 않았어요.') + '</div>' +
+      '<div class="b-msg" id="bsMsg">' + (connected() ? '연결됨: ' + esc(deviceName() || '프린터') : '연결되지 않았어요.') + '</div>' +
       '<div class="b-row"><button class="pri" id="bsConn">프린터 연결</button><button id="bsTest">시험 인쇄</button><button id="bsSave">저장하고 닫기</button></div>' +
-      '<p class="b-note">태블릿(안드로이드 크롬)에서 BLE(저전력 블루투스) 라벨프린터를 쓸 때의 설정입니다. 프린터가 클래식 블루투스(SPP)만 지원하면 연결되지 않습니다. 안드로이드 11 이하는 「위치」 기능을 켜야 프린터가 검색될 수 있습니다. 시험 인쇄의 테두리가 라벨 가장자리와 맞는지 확인하고, 거꾸로·검은 바탕이면 회전·색 반전을 바꾸세요.</p></div>';
+      '<p class="b-note"><b>USB</b>: 태블릿 충전 단자에 OTG 어댑터를 끼우고 프린터 USB 선을 연결한 뒤 「프린터 연결」을 누르세요. 처음에는 안드로이드가 허용 여부를 묻습니다(허용). 컴퓨터(윈도우)에서는 프린터 드라이버가 먼저 잡고 있어 열리지 않을 수 있습니다. 「한 번에 보내는 크기」·「보내는 간격」은 블루투스에서만 씁니다.<br><b>블루투스</b>: 태블릿(안드로이드 크롬)에서 BLE(저전력 블루투스) 라벨프린터를 쓸 때의 설정입니다. 프린터가 클래식 블루투스(SPP)만 지원하면 연결되지 않습니다. 안드로이드 11 이하는 「위치」 기능을 켜야 프린터가 검색될 수 있습니다. 시험 인쇄의 테두리가 라벨 가장자리와 맞는지 확인하고, 거꾸로·검은 바탕이면 회전·색 반전을 바꾸세요.</p></div>';
     document.body.appendChild(m);
     function read() {
       return set({ via: $('bsVia').value, proto: $('bsProto').value, dpi: Number($('bsDpi').value), rotate: Number($('bsRot').value), gap: Number($('bsGap').value) || 0,
@@ -313,8 +398,8 @@
     }
     function msg(t) { $('bsMsg').textContent = t; }
     $('bsConn').onclick = function () {
-      read(); msg('프린터를 찾는 중… 선택 창에서 프린터를 골라 주세요.');
-      connect().then(function (d) { msg('연결됨: ' + (d.name || '프린터')); }, function (e) { msg('연결 실패: ' + e.message); });
+      read(); msg(viaUsb() ? 'USB 프린터를 찾는 중… 선택 창에서 프린터를 골라 주세요.' : '프린터를 찾는 중… 선택 창에서 프린터를 골라 주세요.');
+      connect().then(function (d) { msg('연결됨: ' + ((d && d.name) || '프린터')); }, function (e) { msg('연결 실패: ' + e.message); });
     };
     $('bsTest').onclick = function () {
       read();
@@ -326,5 +411,5 @@
   }
 
   window.__ble = { supported: supported, connected: connected, connect: connect, disconnect: disconnect, print: print, get: get, set: set, openSettings: openSettings,
-    render: render, encode: encode, encodeTspl: encodeTspl, encodeEscpos: encodeEscpos, toBits: toBits, deviceName: function () { return dev && dev.name || ''; }, lastError: function () { return lastErr; } };
+    render: render, encode: encode, encodeTspl: encodeTspl, encodeEscpos: encodeEscpos, toBits: toBits, deviceName: deviceName, via: function () { return get().via; }, direct: function () { var v = get().via; return (v === 'ble' || v === 'usb') && supported(); }, lastError: function () { return lastErr; } };
 })();
