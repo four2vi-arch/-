@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.6 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.7 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 /* 민원실에서 어르신이 직접 쓰는 대화형 주소 입력.
    - 말(인터넷 PC)·글자로 받은 주소를 정리해 엔진에 묻고, 빠진 부분만 되묻는다.
    - 우편번호는 언제나 엔진(우편번호 고시 DB)이 확정한다. AI는 주소 조각을 뽑는 보조 역할만 한다.
@@ -703,15 +703,23 @@
   function camOk() { return !!(window.__cam && __cam.supported()); }
   function camScreen() {
     var b = [btn('사진 찍기', 'pri', null, 'kShot'), btn('글자로 적을게요', 'sub', back)];
+    var switchBtn = '<div class="k-row" style="margin-top:8px"><button type="button" class="k-btn sub sm" id="kFlip" hidden>앞·뒤 카메라 바꾸기</button></div>';
     frame('휴대폰 문자 화면을 카메라에 보여 주세요', '받은 주소가 보이게 화면을 켜고, 글자가 크게 보이도록 선 안에 가득 차게 대 주세요. 화면은 밝게!',
-      '<div class="k-cam" id="kCamBox"><video id="kVid" playsinline muted></video><div class="k-guide"><span>이 선 안에 휴대폰 화면</span></div></div>' + row(b));
+      '<div class="k-cam" id="kCamBox"><video id="kVid" playsinline muted></video><div class="k-guide"><span>이 선 안에 휴대폰 화면</span></div></div>' + switchBtn + row(b));
     bindRow(b);
     var vid = $('#kVid', main), shot = $('#kShot', main), box = $('#kCamBox', main);
     shot.disabled = true;
-    __cam.start(vid).then(function () {
-      shot.disabled = false;
-      try { __cam.load(); } catch (e) { }   // 찍기 전에 글자 읽기 엔진을 미리 깨워 둔다
-    }, function (e) {
+    var flip = $('#kFlip', main);
+    function startCam() {
+      shot.disabled = true;
+      return __cam.start(vid).then(function () {
+        shot.disabled = false;
+        try { __cam.load(); } catch (e) { }   // 찍기 전에 글자 읽기 엔진을 미리 깨워 둔다
+        __cam.cameraCount().then(function (n) { if (flip) { flip.hidden = n < 2; } });
+      });
+    }
+    if (flip) { flip.onclick = function () { __cam.toggleFacing(); startCam().then(null, function () { toast('카메라를 바꾸지 못했어요.'); }); }; }
+    startCam().then(null, function (e) {
       var denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
       box.innerHTML = '<div class="k-bubble" style="margin:0;border-color:#eee">' + (denied ? '카메라 사용이 허용되지 않았어요.' : '카메라를 켤 수 없어요.') +
         '<small>직원에게 말씀해 주시거나, 글자로 적어 주세요.</small></div>';
@@ -731,7 +739,9 @@
         screen(camResult, [res]);
       };
       tm = setTimeout(function () { fin(null, true); }, 90000);
-      __cam.read(cv, function (p) { if (bar) { bar.style.width = Math.max(12, Math.round(p * 100)) + '%'; } }).then(function (lines) {
+      // 첫 읽기에서 정확한 주소와 이름·전화가 나오면 두 번째 읽기는 건너뛴다
+      var good = function (all) { var r = __cam.extract(all, __cam.lookupFn(regionOpts()), { max: 1 }); return r.cands.length && r.cands[0].grade === '정확' && (r.name || r.phone); };
+      __cam.read(cv, function (p) { if (bar) { bar.style.width = Math.max(12, Math.round(p * 100)) + '%'; } }, good).then(function (lines) {
         fin(__cam.extract(lines, __cam.lookupFn(regionOpts())));
       }, function () { fin(null, true); });
     };
@@ -955,7 +965,20 @@
     var box = $('#kPrint'); box.innerHTML = ''; box.className = '';
     var ps = $('#kPageCss'); if (ps) { ps.textContent = ''; }
   }
+  // 태블릿: 인쇄 창 없이 블루투스(BLE) 라벨프린터로 스티커를 바로 보낸다
+  function bleOn() { return paper() === 'lbl' && window.__ble && __ble.supported() && __ble.get().via === 'ble'; }
+  function bleSlip() {
+    var sz = lblSize(), sd = st.sender || {};
+    var from = sd.name ? '보내는 분 ' + sd.name + (sd.phone ? ' ' + sd.phone : '') + (sd.addr1 ? ' · ' + sd.addr1 + ' ' + (sd.addr2 || '') : '') : '';
+    var list = st.entries.map(function (x) { return { zip: x.zip, name: x.name, phone: x.phone, addr1: x.addr1, addr2: x.addr2, check: x.check, from: from, no: st.no }; });
+    toast('스티커를 프린터로 보내고 있어요…');
+    log('어르신 입력 스티커 인쇄(블루투스)', list.length, '접수번호 ' + st.no);
+    __ble.print(list, sz[0], sz[1]).then(function (n) { toast('스티커 ' + n + '장을 보냈어요. 프린터에서 받아 가세요.'); }, function (e) {
+      modal('<div class="k-bubble">스티커를 뽑지 못했어요.<small>' + esc(e.message) + '<br>직원에게 말씀해 주세요.</small></div>', [['다시 해 볼게요', function () { closeModal(); bleSlip(); }, 'pri'], ['닫기', closeModal, 'sub']]);
+    });
+  }
   function printSlip() {
+    if (bleOn()) { return bleSlip(); }
     preparePrint();
     log(paper() === 'lbl' ? '어르신 입력 스티커 인쇄' : '어르신 입력 인쇄', st.entries.length, '접수번호 ' + st.no);
     setTimeout(function () {
@@ -1075,6 +1098,13 @@
       }, 'pri'],
       ['AI 연결 시험', aiTest, 'sub'],
       ['스티커 시험 인쇄', lblTest, 'sub'],
+      ['블루투스 프린터 설정', function () {
+        if (!window.__ble) { return; }
+        var keepVals = { w: $('#kfLblW').value, h: $('#kfLblH').value };
+        __ble.openSettings({ size: function () { return [Number(keepVals.w) || lblSize()[0], Number(keepVals.h) || lblSize()[1]]; }, onClose: function (c) {
+          if (c.via === 'ble') { setCfg({ paper: 'lbl' }); $('#kfPaper').value = 'lbl'; $('#kfPaper').onchange(); toast('블루투스 인쇄를 쓰도록 용지를 「주소 스티커」로 바꿨어요. 저장을 눌러 주세요.'); }
+        } });
+      }, 'sub'],
       ['닫기', closeModal, 'sub']]);
     $('#kfPaper').value = paper();
     $('#kfAuto').checked = !!c.autoPrint;
@@ -1249,7 +1279,7 @@
     }
   }
   fresh();
-  window.__kiosk = { open: openKiosk, close: closeKiosk, normalize: normalize, state: function () { return st; }, preparePrint: preparePrint, cleanupPrint: cleanupPrint,
+  window.__kiosk = { finish: function () { screen(finish); }, print: printSlip, open: openKiosk, close: closeKiosk, normalize: normalize, state: function () { return st; }, preparePrint: preparePrint, cleanupPrint: cleanupPrint,
     memoPayload: memoPayload, parseMemo: parseMemo, toQwerty: toQwerty, openRecv: openRecv, loadSample: loadSample, qrSvg: qrSvg };
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', boot); } else { boot(); }
 })();

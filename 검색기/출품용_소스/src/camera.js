@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.6 (출품본) · 사진으로 읽기(웹캠 → 글자 판독 → 주소 후보) | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.7 (출품본) · 사진으로 읽기(웹캠 → 글자 판독 → 주소 후보) | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 /* 휴대폰 문자 화면을 웹캠으로 찍으면 글자로 읽어, 이름·전화·주소 후보를 뽑는다.
    - 글자 읽기(Tesseract.js 5.1.1 · 한국어 학습자료 tessdata_best, 모두 Apache-2.0)는 이 파일 안에 들어 있어 인터넷 없이 이 PC 안에서만 돈다.
    - 사진은 저장·전송하지 않는다. 읽은 직후 화면 메모리에서 지운다(connect-src 가 이 PC·우체국 주소로 막혀 있어 밖으로 나갈 길도 없다).
@@ -64,10 +64,26 @@
   }
 
   // ------------------------------------------------------------------ 웹캠
+  // 태블릿은 뒷 카메라(environment)가 휴대폰 화면을 찍기 좋다. 한 대뿐인 웹캠은 이 값을 무시한다.
+  var facing = 'environment';
+  try { facing = localStorage.getItem('zipfinder.cam.facing') === 'user' ? 'user' : 'environment'; } catch (e) { }
+  function toggleFacing() {
+    facing = facing === 'user' ? 'environment' : 'user';
+    try { localStorage.setItem('zipfinder.cam.facing', facing); } catch (e) { }
+    return facing;
+  }
+  function cameraCount() {
+    if (!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices)) { return Promise.resolve(1); }
+    return navigator.mediaDevices.enumerateDevices().then(function (ds) { return ds.filter(function (d) { return d.kind === 'videoinput'; }).length; }, function () { return 1; });
+  }
   function start(video) {
     if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { return Promise.reject(new Error('nocam')); }
     stop();
-    return navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }).then(function (s) {
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }).then(null, function (e) {
+      // 해상도·방향 조건 때문에 안 되면 조건 없이 한 번 더
+      if (e && (e.name === 'OverconstrainedError' || e.name === 'NotReadableError' || e.name === 'TypeError')) { return navigator.mediaDevices.getUserMedia({ video: true, audio: false }); }
+      throw e;
+    }).then(function (s) {
       stream = s;
       video.srcObject = s;
       video.muted = true; video.setAttribute('playsinline', '');
@@ -123,20 +139,23 @@
     return out;
   }
   // 사진에서 글자 줄을 읽는다. 두 번(원본·명암 보정) 읽어 줄을 합친다.
-  function read(canvas, onProg) {
+  // accept(지금까지 읽은 줄들) 가 true 를 돌려주면 두 번째 읽기를 건너뛴다(느린 태블릿에서 시간을 반으로)
+  function read(canvas, onProg, accept) {
     if (ocr.busy) { return Promise.reject(new Error('busy')); }
     ocr.busy = true;
-    var vs = variants(canvas), all = [], done = 0;
+    var vs = variants(canvas), all = [], done = 0, stopEarly = false;
     return load().then(function (w) {
       var chain = Promise.resolve();
       vs.forEach(function (v) {
         chain = chain.then(function () {
+          if (stopEarly) { return null; }
           return w.setParameters({ tessedit_pageseg_mode: v.psm, preserve_interword_spaces: '1' }).then(function () {
             return w.recognize(v.c);
           }).then(function (r) {
             var lines = String(r.data.text || '').split(/\n+/).map(clean).filter(Boolean);
             all.push(lines); done++;
             if (onProg) { onProg(done / vs.length); }
+            if (accept) { try { stopEarly = !!accept(all); } catch (e) { stopEarly = false; } }
           });
         });
       });
@@ -291,6 +310,7 @@
   }
 
   window.__cam = {
+    toggleFacing: toggleFacing, cameraCount: cameraCount, facing: function () { return facing; },
     supported: supported, start: start, stop: stop, grab: grab, read: read, load: load, dispose: dispose,
     extract: extract, lookupFn: lookupFn, findPhones: findPhones, findName: findName, tidyAddr: tidyAddr,
     busy: function () { return ocr.busy; }, active: function () { return !!stream; }

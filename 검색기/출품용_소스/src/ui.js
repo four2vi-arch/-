@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.6 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.7 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function () {
   "use strict";
 
@@ -3451,7 +3451,11 @@
     qs("#btnCamShot").disabled = true;
     qs("#camMsg").textContent = "글자를 읽는 중…";
     qs("#camRes").innerHTML = "";
-    __cam.read(cv).then(function (lines) {
+    var good = function (all) {
+      var q = __cam.extract(all, __cam.lookupFn(regionOpts()), { max: 1 });
+      return q.cands.length && q.cands[0].grade === "정확" && (q.name || q.phone);
+    };
+    __cam.read(cv, null, good).then(function (lines) {
       cv.width = cv.height = 0;
       var r = __cam.extract(lines, __cam.lookupFn(regionOpts()));
       addLog("사진으로 읽기", r.cands.length, "주소 후보 " + r.cands.length + "개");
@@ -3582,6 +3586,7 @@
     };
     var v = labelTargetRows();
     var w = "";
+    S.labelEntries = [];
     var x = u;
     var y = roll ? rw : 198 / c;
     var z = roll ? rh : 277 / d;
@@ -3595,6 +3600,16 @@
         var d1 = a1.status !== "실패" && a1.r.addr1;
         var f1 = d1 ? [a1.r.addr1, a1.r.addr2].filter(Boolean).join(" ") : [a1.addr, a1.detail].filter(Boolean).join(" ");
         var g1 = privacyMask.on && !S.labelPeek;
+        var hh1 = a1.s && (a1.s.name || a1.s.addr) ? [a1.s.zip, a1.s.r && a1.s.status !== "실패" ? a1.s.r.addr1 : a1.s.addr, a1.s.r && a1.s.status !== "실패" ? a1.s.r.addr2 : a1.s.detail, a1.s.name].filter(Boolean).join(" ") : "";
+        S.labelEntries.push({
+          zip: a1.zip || "",
+          name: b1,
+          title: g,
+          phone: p ? c1 : "",
+          addr1: f1,
+          addr2: "",
+          from: q && hh1 ? hh1 + " 보냄" : ""
+        });
         var h1 = a1.s && (a1.s.name || a1.s.addr) ? {
           name: a1.s.name || "",
           zip: a1.s.zip || "",
@@ -3607,6 +3622,9 @@
     }
     qs("#labelArea").innerHTML = w || "<p class=\"hint\" style=\"padding:20px\">인쇄할 줄이 없습니다.</p>";
     qs("#labelArea").classList.toggle("rollmode", roll);
+    var bleOk = !!(window.__ble && __ble.supported());
+    qs("#btnLabelBle").hidden = !(roll && bleOk);
+    qs("#btnLabelBleSet").hidden = !(roll && window.__ble);
     // 인쇄 용지 크기: 롤 스티커는 라벨 한 장 크기, 시트는 A4
     var pg = document.getElementById("lbPageCss");
     if (!pg) {
@@ -4091,6 +4109,30 @@
         c.oninput = renderLabels;
       }
     });
+    qs("#btnLabelBleSet").onclick = function () {
+      __ble.openSettings({
+        size: function () {
+          return [Number(qs("#lbW").value) || 100, Number(qs("#lbH").value) || 45];
+        },
+        onClose: renderLabels
+      });
+    };
+    qs("#btnLabelBle").onclick = function () {
+      var list = S.labelEntries || [];
+      if (!list.length) {
+        qs("#lbInfo").textContent = "인쇄할 줄이 없습니다.";
+        return;
+      }
+      var rw = Number(qs("#lbW").value) || 100;
+      var rh = Number(qs("#lbH").value) || 45;
+      qs("#lbInfo").textContent = "프린터로 보내는 중…";
+      addLog("라벨 인쇄(블루투스)", list.length, rw + "×" + rh);
+      __ble.print(list, rw, rh).then(function (n) {
+        qs("#lbInfo").textContent = n + "장을 프린터로 보냈습니다.";
+      }, function (e) {
+        qs("#lbInfo").textContent = "실패: " + e.message + (e.done ? " (" + e.done + "장은 보냄)" : "");
+      });
+    };
     qs("#lbRollP").onchange = function () {
       var v = this.value.split(",");
       if (v.length === 2) {

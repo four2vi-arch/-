@@ -19,3 +19,4 @@
 | `cam_test.js` | 사진으로 읽기 전 과정: 시험 사진을 그린 캔버스 영상을 가짜 웹캠으로 쓰고, 어르신 화면에서 찍기→후보→확인→이름·전화 미리 채움까지(`FULL=1`이면 보내는 분·마침·스티커 인쇄까지). `node cam_test.js <출품본.html> <사진 폴더(cam0.png…·truth.json)> <결과 폴더> [번호]` — 사진은 가상 문자 화면만 쓸 것 |
 | `cam_extra_test.js` | 직원 「주소 찾기」 사진 읽기, 카메라 거부(NotAllowedError)·장치 없음 처리 |
 | `label_test.js` | 롤 스티커 크기·장수·넘침을 인쇄 모양 PDF로 확인(직원 라벨 창 100×45, 어르신 스티커 80×50, A4 여러 쪽). `pdfinfo`·`pdftoppm` 필요 |
+| `ble_test.js` | v1.7 블루투스(BLE) 직접 인쇄: 가짜 `navigator.bluetooth` 프린터가 받은 바이트로 TSPL 비트맵을 PNG로 되살려 크기·장수·회전·색 반전·ESC/POS·전송 크기 축소·설정 창·직원 라벨 창을 확인. `node ble_test.js <출품본.html> <주소록.xlsx> <결과 폴더>` |

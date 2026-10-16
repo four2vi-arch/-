@@ -12,10 +12,12 @@ async function open(browser, mode) {
   page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   const dataUrl = 'data:image/png;base64,' + fs.readFileSync(path.join(DIR, truth[1].file)).toString('base64');
   await page.addInitScript(([u, mode]) => {
-    if (mode === 'ok') {
+    if (mode === 'ok' || mode === 'two') {
       const cv = document.createElement('canvas'); cv.width = 1280; cv.height = 720; const g = cv.getContext('2d'); const im = new Image(); im.src = u;
       im.onload = () => { const tick = () => { g.drawImage(im, 0, 0, 1280, 720); }; tick(); setInterval(tick, 100); };
-      navigator.mediaDevices.getUserMedia = async () => cv.captureStream(10);
+      window.__gum = [];
+      navigator.mediaDevices.getUserMedia = async (c) => { window.__gum.push(JSON.parse(JSON.stringify(c))); return cv.captureStream(10); };
+      navigator.mediaDevices.enumerateDevices = async () => (mode === 'two' ? [{ kind: 'videoinput' }, { kind: 'videoinput' }] : [{ kind: 'videoinput' }]);
     } else if (mode === 'denied') {
       navigator.mediaDevices.getUserMedia = async () => { const e = new Error('denied'); e.name = 'NotAllowedError'; throw e; };
     } else if (mode === 'nocam') {
@@ -59,6 +61,27 @@ async function open(browser, mode) {
   await page.waitForSelector('#kIn'); ok('「글자로 적을게요」로 입력 화면 복귀', true);
   ok('거부 시 오류 없음', page.errs.length === 0, page.errs.slice(0, 2).join('|'));
   await page.context().close();
+  // 2-1. 태블릿: 뒷 카메라를 먼저 요청하고, 카메라가 둘이면 바꾸기 단추가 보임
+  for (const mode of ['ok', 'two']) {
+    page = await open(browser, mode);
+    await page.click('#btnKiosk'); await page.waitForSelector('#kiosk:not([hidden])');
+    await page.evaluate(() => Array.from(document.querySelectorAll('#kiosk .k-btn')).find(b => b.textContent.startsWith('시작하기')).click());
+    await page.waitForSelector('#kCam'); await page.click('#kCam');
+    await page.waitForFunction(() => document.querySelector('#kShot') && !document.querySelector('#kShot').disabled, null, { timeout: 15000 });
+    await page.waitForTimeout(300);
+    const g0 = await page.evaluate(() => window.__gum[0]);
+    ok('뒷 카메라(environment)를 먼저 요청 [' + mode + ']', g0.video.facingMode && g0.video.facingMode.ideal === 'environment', JSON.stringify(g0.video.facingMode));
+    const vis = await page.isVisible('#kFlip');
+    ok(mode === 'two' ? '카메라가 둘이면 바꾸기 단추 보임' : '카메라가 하나면 바꾸기 단추 숨김', mode === 'two' ? vis : !vis);
+    if (mode === 'two') {
+      await page.click('#kFlip'); await page.waitForTimeout(600);
+      const g1 = await page.evaluate(() => window.__gum[window.__gum.length - 1]);
+      ok('바꾸면 앞 카메라(user) 요청', g1.video.facingMode.ideal === 'user', JSON.stringify(g1.video.facingMode));
+      ok('고른 카메라를 기억', (await page.evaluate(() => localStorage.getItem('zipfinder.cam.facing'))) === 'user');
+    }
+    ok('오류 없음 [' + mode + ']', page.errs.length === 0, page.errs.slice(0, 2).join('|'));
+    await page.context().close();
+  }
   // 3. 카메라 장치 자체가 없음: 단추를 숨김
   page = await open(browser, 'nocam');
   ok('카메라 없으면 supported=false', (await page.evaluate(() => __cam.supported())) === false);
