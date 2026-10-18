@@ -3,9 +3,9 @@
 """돌다리 · 스캔 문서 글자 읽기(OCR, 2026-10-14).
 
 글자가 없는 PDF(스캔)와 그림 파일을 글자로 바꾼다. 외부 서비스 없이 이 PC 안에서만 돈다. 엔진은 세 가지 가운데 있는 것을 쓴다.
-  1) windows  — 윈도 10·11에 든 OCR(Windows.Media.Ocr). 설치할 모델이 없고 한국어 언어 팩이 있으면 바로 된다. pip: winocr (또는 winrt-Windows.Media.Ocr 묶음)
-  2) rapidocr — onnxruntime 기반(RapidOCR). pip: rapidocr-onnxruntime. 한국어는 인식 모델(korean_PP-OCRv3_rec_infer.onnx)을 도구/ocr_models/에 두어야 한다.
-  3) tesseract — tesseract.exe + kor 언어 자료가 설치돼 있을 때(pytesseract 없이 바로 부른다).
+  1) windows  · 윈도 10·11에 든 OCR(Windows.Media.Ocr). 설치할 모델이 없고 한국어 언어 팩이 있으면 바로 된다. pip: winocr (또는 winrt-Windows.Media.Ocr 묶음)
+  2) rapidocr · onnxruntime 기반(RapidOCR). pip: rapidocr-onnxruntime. 한국어는 인식 모델(korean_PP-OCRv3_rec_infer.onnx)을 도구/ocr_models/에 두어야 한다.
+  3) tesseract · tesseract.exe + kor 언어 자료가 설치돼 있을 때(pytesseract 없이 바로 부른다).
 PDF 쪽 그림화는 pypdfium2(pip, 외부 프로그램 없음). 전처리: 회색조 → 대비 보정 → 작은 글자면 확대 → 기울기 보정(±3°) → 이진화.
 결과는 파일 지문·엔진·설정으로 캐시(작업/ocr_cache/*.json)해 두 번째부터는 바로 쓴다.
 """

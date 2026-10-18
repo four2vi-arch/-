@@ -255,7 +255,7 @@ def extract_xlsx(path):
         finally:
             wb.close()  # 윈도에서는 닫지 않으면 임시 폴더를 지울 수 없다
         return units
-    except Exception as e:   # 실제 폴더에서 60개: 「list index out of range」「Value must be a sequence」「_NamedCellStyle」— openpyxl이 한컴·옛 엑셀이 만든 서식을 못 읽음. 글자만 XML에서 직접 읽는다
+    except Exception as e:   # 실제 폴더에서 60개: 「list index out of range」「Value must be a sequence」「_NamedCellStyle」· openpyxl이 한컴·옛 엑셀이 만든 서식을 못 읽음. 글자만 XML에서 직접 읽는다
         try:
             return _xlsx_raw(path)
         except Exception:
@@ -562,7 +562,7 @@ def extract_file(path, rel, results, failures, depth=0):
         return
     try:
         if os.path.getsize(path) > MAX_BYTES:
-            failures.append({'file': rel, 'reason': '너무 커서 건너뜀(200MB 넘음) — 직접 열어 볼 것'}); return
+            failures.append({'file': rel, 'reason': '너무 커서 건너뜀(200MB 넘음) · 직접 열어 볼 것'}); return
     except OSError:
         pass
     try:
@@ -579,7 +579,7 @@ def extract_file(path, rel, results, failures, depth=0):
         results.append({'file': clean_text(rel), 'kind': ext[1:], 'chars': sum(len(u['text']) for u in units), 'mtime': mtime,
                         'mchars': sum(len(u['loc']) + len(u['text']) + 3 for u in units) + max(0, len(units) - 1), 'units': units})
     except ImportError as e:   # 부품(pypdf·olefile·openpyxl)이 없을 때: 파일이 손상된 것으로 보이지 않게
-        failures.append({'file': clean_text(rel), 'reason': '읽는 데 필요한 부품(%s)이 설치되지 않음 — 휴대용 묶음을 쓰거나 「python -m pip install -r requirements.txt」' % (getattr(e, 'name', '') or str(e)[:40])})
+        failures.append({'file': clean_text(rel), 'reason': '읽는 데 필요한 부품(%s)이 설치되지 않음 · 휴대용 묶음을 쓰거나 「python -m pip install -r requirements.txt」' % (getattr(e, 'name', '') or str(e)[:40])})
     except ValueError as e:
         failures.append({'file': clean_text(rel), 'reason': clean_text(str(e)[:160])})
     except Exception as e:

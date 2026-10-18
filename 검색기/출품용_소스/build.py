@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""우편번호 자동검색기 — 소스에서 단일 HTML 만들기.
+"""우편번호 자동검색기 · 소스에서 단일 HTML 만들기.
 
 python build.py  ->  dist/우편번호_자동검색기_v1.9_출품본.html
 1) template.html 자리표시자에 data·vendor·src 파일을 그대로 끼워 넣고

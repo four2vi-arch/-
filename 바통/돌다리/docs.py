@@ -408,7 +408,7 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
         else:
             d['kind3'] = '기간 밖'
         d['to_model'] = d['kind3'] == '현안' if model_scope == 'issues' else d['kind3'] in ('현안', '반복', '문서')
-    # 현황 자료: 표·대장이거나 이름에 현황·대장·명단·실적·일정 — 같은 제목 꼴은 최신판 하나만
+    # 현황 자료: 표·대장이거나 이름에 현황·대장·명단·실적·일정 · 같은 제목 꼴은 최신판 하나만
     latest = {}
     for d in docs:
         is_status = (d['cls'] == '표·대장' or (STATUS_NAME.search(d['title']) and d['cls'] in ('보고서·계획', '기타', '메모') and ' ▸ ' not in d['file'])) and not d.get('parent') and not d.get('dup')

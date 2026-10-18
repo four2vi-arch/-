@@ -333,7 +333,7 @@ def onnara_sections(session):
 
 
 def to_onnara_txt(session):
-    out = [doc_title_line(session) + ' — 온나라 붙여넣기용', head_block(session)[0], '']
+    out = [doc_title_line(session) + ' · 온나라 붙여넣기용', head_block(session)[0], '']
     for name, body in onnara_sections(session):
         out += ['=' * 8 + ' ' + name + ' ' + '=' * 8, body, '']
     return '\n'.join(out) + '\n'

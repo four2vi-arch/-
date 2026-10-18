@@ -3,7 +3,7 @@
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const KINDS = ['현안', '반복', '문서', '연혁', '현황'];
 const STATUS = {'진행': '진행 중', '미결': '미결(회신·결정 대기)', '완료': '끝남'};
-const AS = [['acct', '계정·비밀번호 보관처 (비밀번호 자체는 적지 마세요 — 어디에 보관돼 있는지만)', '예) 우편영업 시스템 계정은 서무 담당이 관리, 비밀번호는 봉인 봉투'], ['goods', '열쇠·물품·비품', '예) 매대 열쇠 2개(서랍), 전시용 태블릿 1대'], ['budget', '예산·미지급·정산', '예) 홍보 예산 잔액, 업체 미지급 1건(12월 정산)'], ['etc', '그 밖의 당부', '예) 국장 보고는 매주 월요일 오전']];
+const AS = [['acct', '계정·비밀번호 보관처 (비밀번호 자체는 적지 마세요 · 어디에 보관돼 있는지만)', '예) 우편영업 시스템 계정은 서무 담당이 관리, 비밀번호는 봉인 봉투'], ['goods', '열쇠·물품·비품', '예) 매대 열쇠 2개(서랍), 전시용 태블릿 1대'], ['budget', '예산·미지급·정산', '예) 홍보 예산 잔액, 업체 미지급 1건(12월 정산)'], ['etc', '그 밖의 당부', '예) 국장 보고는 매주 월요일 오전']];
 const SECS = [['s1a', '1-가. 담당 업무'], ['s1b', '1-나. 업무계획·반복 업무'], ['s1c', '1-다. 현안사항'], ['s1d', '1-라. 미결사항'], ['s2', '2. 관련 문서 현황'], ['s3', '3. 물품·예산'], ['s4', '4. 참고(연락처·매뉴얼)']];
 const ONNARA = {s1a: '가. 담당 업무', s1b: '나. 주요 업무계획 및 진행사항', s1c: '다. 현안사항 및 문제점', s1d: '라. 주요 미결사항', s2: '2. 관련 문서 현황', s3: '3. 주요 물품 및 예산 등', s4: '4. 그 밖의 참고사항'};
 let ST = null, ITEMS = [], AREAS = [], OV = {}, ASSETS = {};
@@ -68,7 +68,7 @@ function completeness(a) {
   return {desc, sug, noNext, done: desc && sug === 0 && noNext === 0, seen: k.length ? Math.round(100 * k.filter(i => i.seen).length / k.length) : 0};
 }
 function overall() {
-  const used = usedAreas(); if (!used.length) return {pct: 0, label: '완성도 —'};
+  const used = usedAreas(); if (!used.length) return {pct: 0, label: '완성도 ·'};
   if (mode === 'take') { const k = kept(); const n = k.filter(i => i.seen).length; return {pct: k.length ? Math.round(100 * n / k.length) : 0, label: `확인 ${n}/${k.length}`}; }
   const n = used.filter(a => completeness(a).done).length;
   return {pct: Math.round(100 * n / used.length), label: `완성도 ${n}/${used.length} 업무`};
@@ -265,7 +265,7 @@ function renderPrep(m) {
   }
   h += '</div>';
   if (ITEMS.length) { const nS = ITEMS.filter(isSug).length; h += `<div class="good">초안이 있습니다. 왼쪽 「1-가. 담당 업무」부터 차례로 채우세요. <button class="btn sm" id="goS1">서식으로</button>${nS && mode === 'give' ? ` <button class="ghost sm" id="btnAllIn">제안 ${nS}건 전부 넣기(나중에 「빼기」로 정리)</button>` : ''}</div>`; }
-  h += `<details><summary>처음 쓰는 분 — 다섯 단계</summary><div class="s" style="margin-top:6px">① 폴더를 읽고 「초안 만들기」(규칙만이면 몇 초). ② 1-가에서 인계자·인수자·입회자와 업무별 한 줄 설명. ③ 1-다 현안에서 넣기·버리기, 미결은 상태를 「미결」로. ④ 3절 물품·예산을 직접 적기. ⑤ 「인계·인수서 내려받기」 → docx는 서식에 맞추고 _온나라.txt는 칸마다 붙여 넣기. 넣기 전 제안도 「확인 전」으로 함께 실립니다.</div></details>`;
+  h += `<details><summary>처음 쓰는 분 · 다섯 단계</summary><div class="s" style="margin-top:6px">① 폴더를 읽고 「초안 만들기」(규칙만이면 몇 초). ② 1-가에서 인계자·인수자·입회자와 업무별 한 줄 설명. ③ 1-다 현안에서 넣기·버리기, 미결은 상태를 「미결」로. ④ 3절 물품·예산을 직접 적기. ⑤ 「인계·인수서 내려받기」 → docx는 서식에 맞추고 _온나라.txt는 칸마다 붙여 넣기. 넣기 전 제안도 「확인 전」으로 함께 실립니다.</div></details>`;
   m.innerHTML = h; bindPrep();
 }
 function bindPrep() {
@@ -400,7 +400,7 @@ function renderS4(m) {
   for (const a of usedAreas()) { const r = people.filter(p => p.a === a); if (!r.length) continue; h += `<h4 style="margin:10px 0 4px">${esc(a)}</h4><div class="people">` + r.map(p => `<div class="person"><b>${esc(p.c.name)}</b><span></span><span class="ph">${esc(p.c.phone)}</span><span></span><span class="why">${esc(p.c.line)} · ${esc(p.it.title)}${isSug(p.it) ? ' [확인 전]' : ''}</span></div>`).join('') + '</div>'; }
   if (!people.length) h += '<div class="s">문서에서 찾은 연락처가 없습니다.</div>';
   h += '</div>';
-  h += `<div class="sec"><h3>누적 업무 매뉴얼</h3>${info.manual ? `<div class="good">${esc(info.manual)} — 문서번호 ${info.manual_refs}개 반영. 매뉴얼에 아직 없는 공문 ${info.n_unreflected || 0}건은 「2. 관련 문서 현황」에 ★로 표시했습니다. 후임자가 해당 절에 반영하면 됩니다.</div>` : '<div class="s">폴더에서 누적 매뉴얼을 찾지 못했습니다(이름에 「매뉴얼」이 든 docx·hwpx 파일).</div>'}</div>`;
+  h += `<div class="sec"><h3>누적 업무 매뉴얼</h3>${info.manual ? `<div class="good">${esc(info.manual)} · 문서번호 ${info.manual_refs}개 반영. 매뉴얼에 아직 없는 공문 ${info.n_unreflected || 0}건은 「2. 관련 문서 현황」에 ★로 표시했습니다. 후임자가 해당 절에 반영하면 됩니다.</div>` : '<div class="s">폴더에서 누적 매뉴얼을 찾지 못했습니다(이름에 「매뉴얼」이 든 docx·hwpx 파일).</div>'}</div>`;
   const fails = (ST.failures || []).filter(x => !x.skip), skips = (ST.failures || []).filter(x => x.skip);
   const by = {}; fails.forEach(x => { const k = String(x.reason).replace(/\(.*$/, '').trim(); by[k] = (by[k] || 0) + 1; });
   h += `<div class="sec"><h3>확인하지 못한 자료 <span class="chip">붙임으로 실림</span></h3><div class="pills"><span class="pill">못 읽은 문서 <b>${fails.length}</b></span><span class="pill">읽지 않는 형식 <b>${skips.length}</b></span></div><table><tr><th>이유</th><th class="num">파일</th></tr>${Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join('')}</table><details><summary>파일별 보기(${fails.length})</summary><table>${fails.map(x => `<tr><td>${esc(x.file)}</td><td class="s">${esc(x.reason)}</td></tr>`).join('')}</table></details></div>`;

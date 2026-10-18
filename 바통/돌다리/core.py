@@ -288,7 +288,7 @@ def rule_items(fobj):
                 add('진행 중 현안', line_body, '', raw, u['loc'])
     cap_used = TABLE_CONTACT_CAP if is_table else DOC_ROW_CONTACT_CAP
     if n_contacts > cap_used:
-        items.append({'type': '협의할 사람', 'text': '(이 %s에 연락처가 %d건 더 있음 — 명단은 파일에서 직접 볼 것)' % ('표' if is_table else '문서의 표', n_contacts - cap_used), 'when': '', 'quote': '', 'loc': '', 'src': '규칙', 'nomerge': True})
+        items.append({'type': '협의할 사람', 'text': '(이 %s에 연락처가 %d건 더 있음 · 명단은 파일에서 직접 볼 것)' % ('표' if is_table else '문서의 표', n_contacts - cap_used), 'when': '', 'quote': '', 'loc': '', 'src': '규칙', 'nomerge': True})
     return items
 
 
