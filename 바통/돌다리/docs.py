@@ -38,19 +38,38 @@ DUMMY_PHONE = re.compile(r'^0*-0*-0*$|123-?4567|1234-?5678|0000-?0000|^0\d{1,2}-
 STATUS_NAME = re.compile(r'(현황|대장|명단|목록|일정표?|리스트|실적표?)\s*(\(.*\)|_?\d{4}(년)?)?\s*$')                                  # 현황 자료: 제목이 현황·대장·명단·목록으로 끝나는 것(최신판 하나만)
 HR_NAME = re.compile(r'인사|임용|경력|신상|요약카드|근무평정|발령')
 # v3.7(10.18) 인계자 모의 심사: 개인 문서·계정 정보가 인수인계서에 그대로 실리던 것
-PRIVATE_NAME = re.compile(r'멘토|면담|상담|고충|교육\s*과제|실습\s*일지|건강|병가|가족|개인\s*사정|인사\s*기록|평정표|자기\s*소개|일기')
-SECRET_LINE = re.compile(r'비밀\s*번호|비번|패스\s*워드|password|passwd|(?<![A-Za-z])PW(?![A-Za-z])|암호\s*[:：=]', re.I)
+PRIVATE_NAME = re.compile(r'멘토|수습\S*\s*면담|면담\s*(?:기록|일지|내용)|개인\s*(?:상담|면담|사정)|교육\s*과제|실습\s*일지|병가|인사\s*기록|평정표|자기\s*소개|일기(?=$|[\s_.(\-])')
+PRIVATE_NOT = re.compile(r'민원|고객|금융|다문화|가족친화|검진|서비스|창구|지침|계획|운영')   # 2차 검토(10.18): 「고충민원 처리」「상담창구 운영」은 업무 문서
+PRIVATE_DIR = re.compile(r'(?:^|/)(?:개인|사적|수습\s*교육|멘토링)[^/]*/')
+SECRET_KEY = r'(?:비밀\s*번호|비번|패스\s*워드|password|passwd|(?<![A-Za-z])PW(?![A-Za-z])|암호(?!화))'
+SECRET_VAL = re.compile('(' + SECRET_KEY + r'[^A-Za-z0-9\n]{0,15}?)(?!20\d{2}\s*[.\-/년]|0\d{1,2}-\d{3,4}-\d)([A-Za-z0-9!@#$%^&*_+=.~\-]{4,})(?![년월일])', re.I)   # 열쇠 말 뒤 15자 안의 값(「비밀번호는 매월 바뀜(현재 Gaon#77)」)
+SECRET_ID = re.compile(r'((?:아이디|(?<![A-Za-z])ID(?![A-Za-z])|계정)(?:\s*정보)?\S{0,3}\s*[:：=]?\s*)([A-Za-z][A-Za-z0-9_.@\-]{2,})(\s*/\s*[^\s,)]+)?', re.I)
 DATE_FOLDER = re.compile(r'^(\d{2,4}([.\-_ ]\d{1,2}){0,2}\s*(월|년|년도)?|\d{1,2}\s*월|다운로드|downloads?|바탕\s*화면|desktop|새\s*폴더|new folder|임시|temp|tmp|백업|backup|문서|documents?)$', re.I)
 YY_DATE = re.compile(r"[’'‘`]\s?(\d{2})\.\s?(\d{1,2})\.\s?(\d{1,2})")
 VERSION_TAIL = re.compile(r'(?:[\s_\-]*(?:v\d+|ver\.?\s*\d+|\d차|수정본?|최종\S*|진짜\S*|복사본|사본|copy|\(\d+\)))+$', re.I)   # 끝 숫자만(「현황_09」)은 월별로 다른 문서라 꼬리로 보지 않는다
-MIGYEOL = re.compile(r'결론\s*못|아직\s*안\s*[옴왔와]|회신\s*(?:부탁|바랍|요청|대기|없|기다)|답변\s*(?:대기|없)|미결|검토\s*중|협의\s*중|결정\s*(?:못|안\s*됨|해야)|기다리|못\s*받')
+MIGYEOL = re.compile(r'결론\s*못|아직\s*안\s*[옴왔와]|회신\s*(?:부탁|요청|대기|없|기다|아직)|답변\s*(?:대기|없)|미결|검토\s*중|협의\s*중|결정\s*(?:못|안\s*됨|해야)|기다리|못\s*받')
 TODO_LINE = re.compile(r'후임|지시|할\s*것|해야|하기로|필요|요망|바람|까지')
+ROSTER_NAME = re.compile(r'연락망|주소록|비상\s*연락|직원\s*명부|직원\s*명단|생일|경조')
+NOT_RECUR = re.compile(r'평균|작년|지난해|전년|붙임\s*(?:참조|참고|확인)|참고\s*(?:만|바람)|일회성|한시|완료|끝남|종료됨')
+NOT_PENDING = re.compile(r'없음|없다|없습니다|완료|받음|받았|종결|해결|끝남|끝났')   # 「미결 사항 없음」「회신 받음」은 미결이 아니다
 
 
 def mask_secret(s):
     """비밀번호·아이디 값을 가린다(줄 자체는 남겨야 할 때)."""
-    s = re.sub(r'((?:비밀\s*번호|비번|패스\s*워드|password|passwd|PW|암호)\s*[:：=]?\s*)(\S+)', r'\1●●●', str(s), flags=re.I)
-    return re.sub(r'((?:아이디|ID|계정)\s*[:：=]?\s*)([A-Za-z0-9_.@\-]{3,})', r'\1●●●', s, flags=re.I)
+    s = SECRET_VAL.sub(lambda m: m.group(1) + '●●●', str(s or ''))
+    return SECRET_ID.sub(lambda m: m.group(1) + '●●●' + (' / ●●●' if m.group(3) else ''), s)
+
+
+def has_secret(s):
+    return mask_secret(s) != str(s or '')
+
+
+class _SecretLine:   # 옛 이름(SECRET_LINE.search)을 쓰는 곳: 값이 든 줄만 비밀 줄
+    def search(self, s):
+        return has_secret(s)
+
+
+SECRET_LINE = _SecretLine()
 
 
 def all_dates(text):
@@ -353,23 +372,37 @@ def reflected(doc, nos, line_grams):
     return ''
 
 
+def newest_doc_date(files):
+    real = datetime.date.today().isoformat(); latest = ''
+    for f in files:
+        d, src = doc_date(f, text_of(f)[:3000])
+        if d and src not in ('수정일', '연도만', '') and d <= real and d > latest:
+            latest = d
+    return latest
+
+
 def base_date(files, handover=''):
     """기간을 세는 기준일. 인계 일자를 적었으면 그날, 아니면 오늘. 다만 폴더의 가장 최근 문서가 석 달보다 오래됐으면(지난 폴더 사본)
     그 문서 날짜를 기준으로 한다(「최근 12개월」이 비어 버리지 않게). 반환: (date, 이유)"""
     real = datetime.date.today()
     try:
         if handover:
-            return datetime.date.fromisoformat(str(handover)[:10]), '인계 일자'
+            m = FULLDATE.search(str(handover)) or re.search(r'(20\d{2})\D{1,3}(\d{1,2})\D{1,3}(\d{1,2})', str(handover))
+            if m and iso(*m.groups()[:3]):
+                return datetime.date.fromisoformat(iso(*m.groups()[:3])), '인계 일자'
     except Exception:
         pass
-    latest = ''
-    for f in files:
-        d, src = doc_date(f, text_of(f)[:3000])
-        if d and src not in ('수정일', '연도만', '') and d <= real.isoformat() and d > latest:
-            latest = d
+    latest = newest_doc_date(files)
     if latest and latest < (real - datetime.timedelta(days=90)).isoformat():
         return datetime.date.fromisoformat(latest) + datetime.timedelta(days=1), '폴더의 가장 최근 문서(%s)' % latest
     return real, '오늘'
+
+
+def is_private(path, title, name):
+    t = title + ' ' + os.path.splitext(name)[0]
+    if PRIVATE_NOT.search(t):
+        return False
+    return bool(PRIVATE_NAME.search(t) or PRIVATE_DIR.search(str(path).replace('\\', '/')))
 
 
 def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_months=36):
@@ -377,6 +410,7 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
     today = today or datetime.date.today()
     area_months = {a['name']: a.get('months') or months for a in areas}
     docs = []
+    grams_of = {}
     for f in files:
         text = text_of(f)
         name = base_name(f)
@@ -387,10 +421,11 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
              'area': area_of(title, text, areas, f['file']), 'due': due_dates(text, date, date_src) if cls in CLS_ISSUE | {'붙임'} else [],
              'contacts': contacts_of(text) if (cls != '표·대장' and not HR_NAME.search(title)) else [],   # 인사·임용·경력 자료의 번호는 개인정보 → 연락처로 쓰지 않는다
              'issue_words': bool(ISSUE.search(text[:6000])) if cls in CLS_ISSUE else False, 'chars': f.get('chars', 0), 'recur': None, 'attachments': [],
-             'sha': f.get('sha', ''), 'mtime': f.get('mtime', ''), 'private': bool(PRIVATE_NAME.search(title + ' ' + name)), 'secret': bool(SECRET_LINE.search(text[:20000]))}
+             'sha': f.get('sha', ''), 'mtime': f.get('mtime', ''), 'private': is_private(f['file'], title, name), 'secret': has_secret(text[:20000])}
         if d['private']:   # 개인 문서(멘토 면담·교육과제 등): 현안·연락처·발췌를 만들지 않는다
             d['issue_words'] = False; d['contacts'] = []; d['due'] = []
         docs.append(d)
+        grams_of[f['file']] = text[:4000]
     # 같은 파일 사본(지문이 같음)·같은 보고서의 수정본(_v1·_최종·(1))은 가장 최근 하나만 항목으로(나머지는 붙임에 「이전 판·사본」)
     by_sha = collections.defaultdict(list)
     for d in docs:
@@ -402,21 +437,27 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
             for d in g[1:]:
                 d['dup'] = 'copy'; d['dup_of'] = g[0]['file']
     by_ver = collections.defaultdict(list)
+    plain = collections.defaultdict(list)   # 꼬리 없는 원본 이름(한 번만 세어 둔다: 파일이 많을 때 제곱으로 느려지던 것)
     for d in docs:
         if d.get('dup'):
             continue
-        stem = VERSION_TAIL.sub('', os.path.splitext(base_name(d))[0]).strip(' _-')
-        if len(stem) >= 4 and stem != os.path.splitext(base_name(d))[0]:
-            by_ver[(d['cls'], core.norm(stem))].append(d)
-    for k, g in list(by_ver.items()):   # 꼬리 없는 원본 이름도 같은 묶음에
-        for d in docs:
-            if not d.get('dup') and d['cls'] == k[0] and d not in g and core.norm(os.path.splitext(base_name(d))[0]) == k[1]:
-                g.append(d)
+        full = os.path.splitext(base_name(d))[0]
+        stem = VERSION_TAIL.sub('', full).strip(' _-')
+        k = (os.path.dirname(d['file']), d['cls'], core.norm(stem))
+        if len(stem) >= 4 and stem != full:
+            by_ver[k].append(d)
+        else:
+            plain[(os.path.dirname(d['file']), d['cls'], core.norm(full))].append(d)
+    for k, g in by_ver.items():
+        g.extend(plain.get(k, []))
     for g in by_ver.values():
         if len(g) > 1:
-            g.sort(key=lambda d: (d.get('mtime') or '', '최종' in base_name(d), d['date'] or ''), reverse=True)
+            g.sort(key=lambda d: (d['date'] or '', '최종' in base_name(d), d.get('mtime') or ''), reverse=True)
+            g0 = core.grams(grams_of.get(g[0]['file'], ''))
             for d in g[1:]:
-                d['dup'] = 'version'; d['dup_of'] = g[0]['file']
+                gd = core.grams(grams_of.get(d['file'], ''))
+                if g0 and gd and len(g0 & gd) / max(1, min(len(g0), len(gd))) >= 0.6:   # 내용도 비슷할 때만 이전 판(「새 문서(3)」처럼 이름만 같은 다른 문서는 따로)
+                    d['dup'] = 'version'; d['dup_of'] = g[0]['file']
     # 붙임은 같은 날짜 머리의 공문에 붙인다(파일 이름 「YYYYMMDD_NN」 꼴일 때)
     by_prefix = collections.defaultdict(list)
     for d in docs:
@@ -556,7 +597,7 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
     to_model = [d for d in cand if d['to_model']] if model != 'none' else []
     total_calls = len(to_model)
     done_calls, consecutive_fail, stopped = 0, 0, False
-    old = {p['file']: p for p in (prev_items or []) if p.get('file')}
+    old = {p['file']: p for p in (prev_items or []) if p.get('file') and not p.get('rkey') and p.get('src') != '직접 입력'}
 
     def report(d, **kw):
         if progress:
@@ -579,13 +620,13 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                 cand_l = []
                 for l in text_of(f0).split('\n'):
                     l = re.sub(r'\s+', ' ', l).strip()
-                    if 8 <= len(l) <= 160 and HOT_LINE.search(l) and not SECRET_LINE.search(l) and core.norm(l) != core.norm(d['title']) and l not in cand_l:
+                    if 8 <= len(l) <= 160 and HOT_LINE.search(l) and core.norm(l) != core.norm(d['title']) and l not in cand_l:
                         cand_l.append(l)
                 pri = lambda l: (0 if re.search(r'후임|지시|해야|결정|미결', l) else 1)
                 qs = sorted(cand_l, key=pri)[:3]   # 후임자·지시·해야·미결 줄을 먼저, 3줄까지
                 it['quote'] = ' / '.join(mask_secret(l if len(l) <= 110 else l[:108] + '…') for l in sorted(qs, key=cand_l.index))
                 if d['kind3'] == '현안':
-                    mig = [l for l in cand_l if MIGYEOL.search(l)]
+                    mig = [l for l in cand_l if MIGYEOL.search(l) and not NOT_PENDING.search(l)]
                     if mig:   # 「결론 못 냄」「회신 부탁」「아직 안 옴」: 미결로 제안(전임자가 확인), 기다리는 것을 다음 칸에
                         it['status'] = '미결'; it['next'] = mask_secret(mig[0][:110]); it['status_by'] = '규칙'
                     td = [l for l in cand_l if TODO_LINE.search(l) and (re.search(r'후임|지시|해야|할\s*것', l) or DUE_PATS[2].search(l) or DUE_PATS[1].search(l))]
@@ -637,9 +678,15 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
             stopped = True
         p = old.get(d['file'])
         if p:   # 이전 초안에서 사람이 정한 것은 그대로(다시 만들어도 잃지 않는다)
-            for k in ('keep', 'decided', 'status', 'next', 'note', 'seen', 'question', 'bulk'):   # 상태·다음은 사람이 정했을 때만(규칙이 고른 「미결」을 빈 값으로 덮지 않게)
-                if k in p and (p.get('decided') or k in ('note', 'seen', 'question')):
+            for k in ('keep', 'decided', 'status', 'next', 'note', 'seen', 'question', 'answer', 'bulk'):   # 상태·다음은 사람이 정했을 때만(규칙이 고른 「미결」을 빈 값으로 덮지 않게)
+                if k in p and (p.get('decided') or k in ('note', 'seen', 'question', 'answer')):
                     it[k] = p[k]
+            if p.get('decided'):
+                for k in ('status_by', 'todo_src'):
+                    if k in p:
+                        it[k] = p[k]
+                    else:
+                        it.pop(k, None)
             if p.get('area_by') == '사람':
                 it['area'] = p.get('area', it['area']); it['area_by'] = '사람'
             if p.get('title_by') == '사람':
@@ -657,7 +704,10 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
     for d in docs:
         for c in d.get('contacts') or []:
             phone_files[c['phone']] += 1
-    for f in files:
+    by_doc_kind = {d['file']: d.get('kind3') for d in docs}
+    order = sorted(files, key=lambda f: (by_doc_kind.get(f['file']) == '기간 밖', ''.join(chr(0x10FFFF - ord(ch)) for ch in ((by_doc.get(f['file']) or {}).get('date') or ''))))   # 기간 안 → 최근 문서 먼저
+    base_year = today.year
+    for f in order:   # 기간 안 문서부터(상한 40개를 옛 매뉴얼 줄이 다 먹던 것), 파일마다 10개까지
         d = by_doc.get(f['file'])
         if not d or d.get('private') or d.get('dup') or d.get('parent'):
             continue
@@ -665,39 +715,52 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
             ritems = core.rule_items(f)
         except Exception:
             continue
+        n_file = 0
+        roster = bool(ROSTER_NAME.search(d['title'] + ' ' + base_name(d)))
         for r in ritems:
             if r['type'] == '협의할 사람' and ' · ' in r['text'] and not r.get('nomerge'):
                 parts = r['text'].split(' · ')
+                if roster:
+                    continue   # 직원 비상연락망·주소록: 동료의 휴대전화·집 주소라 인수인계서 연락처로 쓰지 않는다
                 if len(parts) >= 2 and core.PHONE.fullmatch(parts[1].strip()) and not DUMMY_PHONE.search(parts[1]) and not HR_NAME.search(d['title']):
                     ph = parts[1].strip()
+                    if ph.startswith('010') and d['cls'] == '표·대장':
+                        continue   # 표 파일의 휴대전화는 개인 번호일 수 있다(업무 상대는 사무실 번호로)
+                    role = ' · '.join(x for x in parts[2:] if len(x) <= 20 and not re.search(r'\d', x))   # 나머지 칸(주소·생일 등)은 옮기지 않고 짧은 직위·부서만
                     if ph not in people and parts[0] and parts[0] not in ('담당자', '?'):
-                        people[ph] = {'name': parts[0], 'phone': ph, 'line': mask_secret(' · '.join(parts[2:]))[:70], 'file': d['file'], 'title': d['title'], 'area': d['area']}
+                        people[ph] = {'name': parts[0], 'phone': ph, 'line': mask_secret(role)[:40], 'file': d['file'], 'title': d['title'], 'area': d['area']}
                 continue
-            if r['type'] != '월별 할 일' or SECRET_LINE.search(r['text']) or n_rule >= 40:
+            if r['type'] != '월별 할 일' or n_rule >= 40 or n_file >= 10:
                 continue
+            txt = r['text']
+            if re.match(r'^\s*(까지|부터|에)\b', txt) or NOT_RECUR.search(txt):
+                continue   # 「작년에는 매월 평균 120건」「붙임 확인」「(일회성)」「완료」: 할 일이 아님
             when = r.get('when') or ''
-            ev = core.DUE_EVERY.search(r['text'])
+            ev = core.DUE_EVERY.search(txt)
             annual = d['cls'] in ('인수인계서', '매뉴얼') or (d['cls'] == '표·대장' and re.search(r'일정|계획|달력|캘린더', d['title']))
             mo = re.search(r'(\d{1,2})월', when)
+            yrs = [int(y) for y in re.findall(r'(20\d{2})\s*[.년]', txt)]
             if ev and when in ('매월', '익월', '매주', '매년', '매분기'):
+                if d.get('kind3') == '기간 밖' and d['cls'] not in ('인수인계서', '매뉴얼'):
+                    continue   # 옛 공문의 「매주 금요일까지」(한시 운영)는 지금 할 일이 아닐 수 있다
                 cyc = {'익월': '매월', '매분기': '분기'}.get(when, when)
                 recur = {'cycle': cyc}; label = re.sub(r'\s*까지$', '', ev.group(0)).strip()
-            elif annual and mo:
+            elif annual and mo and not any(y < base_year for y in yrs):
                 recur = {'cycle': '매년', 'month': int(mo.group(1)), 'years': []}; label = '%s월' % mo.group(1)
             else:
                 continue
-            key = core.norm(r['text'])[:30]
+            key = re.sub(r'(합니다|해야함|할것|하기|함|임|바람|요망|입니다|한다)$', '', core.norm(re.sub(r'[^\w가-힣]', '', mask_secret(txt))))[:30]
             if key in seen_r:
                 continue
-            seen_r.add(key); n_rule += 1; n += 1
+            seen_r.add(key); n_rule += 1; n_file += 1; n += 1
             it = {'id': n, 'file': d['file'], 'kind': d['kind'], 'cls': d['cls'], 'date': d['date'], 'date_src': d.get('date_src', ''), 'docno': '', 'title': r['text'][:80], 'area': d['area'],
                   'due': [], 'due_next': '', 'contacts': [], 'recur': recur, 'attachments': [], 'kind3': '반복', 'reflected': '', 'hist': False, 'is_status': False,
                   'summary': '', 'todo': r['text'][:110], 'todo_src': '원문', 'owner': '', 'model_status': '', 'src': '규칙(반복 문장)', 'keep': True, 'decided': False, 'status': '진행',
                   'next': '', 'note': '', 'seen': False, 'quote': mask_secret(r['quote'][:110]), 'when': label, 'rkey': 'R:' + key}
             p = old_r.get(it['rkey'])
             if p:
-                for k in ('keep', 'decided', 'note', 'seen', 'question', 'bulk'):
-                    if k in p and (p.get('decided') or k in ('note', 'seen', 'question')):
+                for k in ('keep', 'decided', 'note', 'seen', 'question', 'answer', 'bulk'):
+                    if k in p and (p.get('decided') or k in ('note', 'seen', 'question', 'answer')):
                         it[k] = p[k]
                 for k in ('title', 'todo', 'area', 'when'):
                     if p.get(k + '_by') == '사람':
@@ -714,6 +777,14 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
         if p.get('src') == '직접 입력':
             n += 1
             items.append(dict(p, id=n))
+    for it in items:   # 비밀번호·아이디 값은 어느 칸에도 남기지 않는다(제목·할 일·요지·다음·발췌·담당·연락처 줄·기한 줄)
+        for k in ('title', 'todo', 'summary', 'next', 'quote', 'owner', 'note', 'question', 'answer'):
+            if it.get(k):
+                it[k] = mask_secret(it[k])
+        for c in it.get('contacts') or []:
+            c['line'] = mask_secret(c.get('line', ''))
+        for x in it.get('due') or []:
+            x['line'] = mask_secret(x.get('line', ''))
     if ck is not None:
         try:
             ck.close()
@@ -726,8 +797,8 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
             'n_hist': sum(1 for i in items if i['kind3'] == '연혁'), 'n_status': sum(1 for i in items if i['kind3'] == '현황'),
             'people': people_list, 'own_phones': sorted(own), 'secret_files': [d['file'] for d in docs if d.get('secret')][:50], 'private_files': [d['file'] for d in docs if d.get('private')][:50],
             'base_date': today.isoformat() if today else '', 'base_why': base_why, 'asset_hints': asset_hints(files, docs),
-            'docs_old': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'cls': d['cls']} for d in docs if d['kind3'] == '기간 밖'][:5000],
-            'docs_other': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'why': '업무 매뉴얼' if d['kind3'] == '매뉴얼' else {'copy': '같은 파일 사본', 'version': '이전 판(수정본, 최신: %s)' % base_name({'file': d.get('dup_of', '')})}.get(d.get('dup'), '같은 문서의 다른 형식(중복본)')} for d in docs if d['kind3'] in ('매뉴얼', '중복')][:2000]}
+            'docs_old': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'cls': d['cls']} for d in docs if d['kind3'] == '기간 밖' and not d.get('private')][:5000],
+            'docs_other': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'why': '업무 매뉴얼' if d['kind3'] == '매뉴얼' else {'copy': '같은 파일 사본', 'version': '이전 판(수정본, 최신: %s)' % base_name({'file': d.get('dup_of', '')})}.get(d.get('dup'), '같은 문서의 다른 형식(중복본)')} for d in docs if d['kind3'] in ('매뉴얼', '중복') and not d.get('private')][:2000]}
     return items, calls, errors, info
 
 
@@ -745,7 +816,7 @@ def asset_hints(files, docs):
             continue
         for l in text_of(f).split('\n'):
             l = re.sub(r'\s+', ' ', l).strip()
-            if not (10 <= len(l) <= 140) or SECRET_LINE.search(l):
+            if not (10 <= len(l) <= 140):
                 continue
             for k, rx in ASSET_LINE.items():
                 if len(out[k]) < 6 and rx.search(l) and not any(l == x['line'] for x in out[k]):

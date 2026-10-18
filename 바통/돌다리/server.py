@@ -17,7 +17,7 @@ import ocr
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '3.7 (2026-10-18)'
+VERSION = '3.7.1 (2026-10-18)'
 MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '$RECYCLE.BIN', 'System Volume Information'}   # 돌다리 작업 폴더는 이름이 아니라 실제 경로(WORK)로 뺀다(업무 폴더 안 「작업」 폴더는 읽는다)
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4,6}(_\d+)?(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
@@ -187,6 +187,8 @@ def do_extract(folder, exclude=None):
     for x in failures + fps:
         x['file'] = x['file'].replace('\\', '/')
     with LOCK:
+        if STATE.get('folder') and STATE.get('folder') != folder:
+            STATE['areas_mode'] = ''   # 다른 폴더: 「키워드로 나누기」를 풀어 폴더 이름 나누기를 다시 본다
         STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mchars': f.get('mchars', f['chars']), 'mtime': f.get('mtime', ''), 'year': year_of(f), 'ocr': bool(f.get('ocr'))} for f in files], 'n_ocr': n_ocr,
                       'failures': failures, 'fingerprints': fps, 'items': [], 'dropped': [], 'errors': [], 'calls': [], 'exports': [], 'step': 2, 'progress': None,
                       'prev_items': STATE['items'] or STATE.get('prev_items') or []})   # 넣기·버리기·메모·직접 적은 항목은 다시 만들 때 파일 기준으로 이어 간다
@@ -225,6 +227,10 @@ def make_plan():
     files, (bd, why) = _base()
     p = docs.plan_summary(files, STATE.get('areas') or core.DEFAULT_AREAS, int(STATE.get('months') or 12), STATE.get('model_scope') or 'issues', avg_sec=STATE['avg_sec'], today=bd)
     p['base_why'] = why
+    if why == '인계 일자':   # 인계 일자가 폴더의 마지막 문서보다 1년 넘게 뒤면 「최근 12개월」이 비어 버린다
+        nd = docs.newest_doc_date(files)
+        if nd and (bd - datetime.date.fromisoformat(nd)).days > 365:
+            p['base_warn'] = '폴더의 가장 최근 문서가 %s라 인계 일자 기준 최근 %s개월 안에 든 문서가 적습니다. 인계 일자를 비우거나 기간(개월)을 늘리세요.' % (nd, STATE.get('months') or 12)
     return p
 
 
@@ -420,7 +426,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(404, {'error': '이 문서의 글자를 아직 읽지 않았습니다(폴더를 다시 읽으면 보입니다)'})
             lines = [l.strip() for u in units for l in u['text'].split('\n') if l.strip()]
             hot = [i for i, l in enumerate(lines) if docs.HOT_LINE.search(l)][:12]
-            return self._send(200, {'file': name, 'head': lines[:30], 'hot': [lines[i][:200] for i in hot], 'n_lines': len(lines)})
+            m = docs.mask_secret   # 화면에도 비밀번호·아이디 값은 가린다
+            return self._send(200, {'file': name, 'head': [m(l) for l in lines[:30]], 'hot': [m(lines[i][:200]) for i in hot], 'n_lines': len(lines)})
         if p.path in ('/api/onnara', '/api/report'):   # 온나라 붙여넣기용 절별 평문 / 인쇄용 서식 HTML(현재 상태로 바로 만든다)
             with LOCK:
                 session = {'items': STATE['items'], 'areas': STATE.get('areas') or core.DEFAULT_AREAS, 'overview': STATE.get('overview') or {}, 'assets': STATE.get('assets') or {},
@@ -442,7 +449,7 @@ class H(BaseHTTPRequestHandler):
                 for u in units:
                     for line in u['text'].split('\n'):
                         if q in line.lower():
-                            lines.append(line.strip()[:140])
+                            lines.append(docs.mask_secret(line.strip()[:140]))
                             if len(lines) >= 3:
                                 break
                     if len(lines) >= 3:
@@ -558,7 +565,7 @@ class H(BaseHTTPRequestHandler):
                     it = by_id.get(ch.get('id'))
                     if not it:
                         continue
-                    for k in ('keep', 'decided', 'status', 'next', 'note', 'seen', 'question'):
+                    for k in ('keep', 'decided', 'status', 'next', 'note', 'seen', 'question', 'answer'):
                         if k in ch:
                             it[k] = ch[k]
                     if 'keep' in ch or 'decided' in ch:

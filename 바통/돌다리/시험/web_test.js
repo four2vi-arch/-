@@ -67,7 +67,7 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     // 1-다 현안
     await nav('s1c'); const nSug = (await items()).filter(i => i.kind3 === '현안' && i.decided !== true).length;
     const inC = await page.$('#main [data-id] button[data-act="in"]'); await inC.click(); await sleep(700);
-    const outC = await page.$('#main [data-id] button[data-act="out"]'); await outC.click(); await sleep(700);
+    const outC = (await page.$('#main .sug button[data-act="out"], #main .sugrow button[data-act="out"]')) || (await page.$('#main [data-id] button[data-act="out"]')); await outC.click(); await sleep(700);   // 아직 고르지 않은 제안을 버린다(방금 넣은 것을 빼지 않게)
     ok('현안 넣기·버리기 저장', (await items()).filter(i => i.kind3 === '현안' && i.decided === true).length >= 2);
     await page.selectOption('#main select[data-k="status"]', '미결'); await sleep(300); await page.evaluate(() => { const row = document.querySelector('#main select[data-k="status"]').closest('[data-id]'); const el = row.querySelector('input[data-k="next"]'); el.value = '본부 회신 오면 보고'; el.dispatchEvent(new Event('change')); }); await sleep(700);
     ok('현안 상태 미결·다음 할 일 저장', (await items()).some(i => i.status === '미결' && i.next === '본부 회신 오면 보고'));

@@ -25,7 +25,7 @@ function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); l
 const areaOf = it => it.area || '기타';
 const isSug = it => it.decided !== true && it.src !== '직접 입력';   // 아직 넣기·버리기를 누르지 않은 제안
 const kept = () => ITEMS.filter(i => i.keep && !isSug(i));
-const usedAreas = () => { const conf = AREAS.concat(['기타']); const extra = [...new Set(ITEMS.map(areaOf))].filter(a => !conf.includes(a)).sort(); return conf.slice(0, -1).concat(extra, ['기타']).filter(a => ITEMS.some(i => areaOf(i) === a && (i.keep || isSug(i)))); };   // 버린 것만 남은 업무는 뺀다, 설정 밖 업무 이름도 보인다
+const usedAreas = () => { const conf = AREAS.concat(['기타']); const extra = [...new Set(ITEMS.map(areaOf))].filter(a => !conf.includes(a)).sort(); return conf.slice(0, -1).concat(extra, ['기타']).filter(a => (OV[a] || {}).gone || ITEMS.some(i => areaOf(i) === a && (i.keep || isSug(i)))); };   // 「이미 넘긴 업무」는 항목을 다 빼도 남긴다   // 버린 것만 남은 업무는 뺀다, 설정 밖 업무 이름도 보인다
 const issues = () => ITEMS.filter(i => i.kind3 === '현안');
 const recurs = () => ITEMS.filter(i => i.kind3 === '반복' || (i.kind3 === '현안' && i.recur));
 const fileName = f => String(f || '').split('/').pop();
@@ -149,6 +149,7 @@ function card(it, o) {
   if (!sug && it.keep && !ro) body += `<input class="memo" data-k="note" value="${esc(it.note || '')}" placeholder="메모(후임자에게 남길 말)">`;
   if (ro && it.note) body += `<div class="s">메모: ${esc(it.note)}</div>`;
   if (ro && it.keep) body += `<input class="memo" data-k="question" value="${esc(it.question || '')}" placeholder="전임자에게 물을 것(결과물 4절 「인수자 질문」에 실림)">`;
+  if (!ro && it.question) body += `<div class="s">인수자 질문: ${esc(it.question)}</div><input class="memo" data-k="answer" value="${esc(it.answer || '')}" placeholder="답(결과물 4절 「전임자 답」에 실림)">`;
   let act = '';
   if (ro) act = !it.keep && !sug ? '<span class="chip">전임자가 뺌</span>' : `${sug ? '<span class="chip">확인 전</span> ' : ''}<label><input type="checkbox" class="seen" ${it.seen ? 'checked' : ''}> 인수 확인</label>`;
   else if (sug) act = `<button class="y" data-act="in">넣기</button><button class="n" data-act="out">버리기</button><select class="mini" data-k="area" data-autoin="1" title="업무를 바꾸면 넣기로 처리">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>`;
@@ -267,7 +268,7 @@ function renderPrep(m) {
   else {
     const p = ST.plan || {};
     h += `<div class="row"><label>기간 <select id="months">${[6, 12, 18, 24, 36].map(n => `<option value="${n}" ${(+ST.months || 12) === n ? 'selected' : ''}>최근 ${n}개월</option>`).join('')}</select></label><span class="s">업무마다 다르게 두려면 아래 「업무 키워드」 줄 끝에 「| 24개월」처럼 적습니다. 해마다 오는 업무는 기간과 상관없이 지난 3년 파일 날짜로 찾습니다.</span></div>`;
-    h += `<div class="s">기간 기준일 <b>${esc(p.base_date || '')}</b>(${esc(p.base_why || '')}). 인계 일자를 1-가에 적으면 그날 기준으로 다시 셉니다.${p.n_dupver ? ` 같은 파일 사본·이전 판 ${p.n_dupver}건은 최신 하나만 올립니다.` : ''}${p.n_private ? ` 개인 문서로 보이는 ${p.n_private}건은 현안으로 올리지 않습니다.` : ''}${p.n_secret ? ` <b style="color:var(--fail)">비밀번호·계정 줄이 든 문서 ${p.n_secret}건</b>(발췌에서 가림).` : ''}</div>`;
+    h += `<div class="s">기간 기준일 <b>${esc(p.base_date || '')}</b>(${esc(p.base_why || '')}). 인계 일자를 1-가에 적으면 그날 기준으로 다시 셉니다.${p.base_warn ? ` <b style="color:var(--fail)">${esc(p.base_warn)}</b>` : ''}${p.n_dupver ? ` 같은 파일 사본·이전 판 ${p.n_dupver}건은 최신 하나만 올립니다.` : ''}${p.n_private ? ` 개인 문서로 보이는 ${p.n_private}건은 현안으로 올리지 않습니다.` : ''}${p.n_secret ? ` <b style="color:var(--fail)">비밀번호·계정 줄이 든 문서 ${p.n_secret}건</b>(발췌에서 가림).` : ''}</div>`;
     h += `<div class="pills"><span class="pill">기간 안 문서 <b>${p.n_items || 0}</b></span><span class="pill">현안 후보 <b>${p.n_issue || 0}</b></span><span class="pill">반복 업무 <b>${p.n_recur || 0}</b></span><span class="pill">연혁 <b>${p.n_hist || 0}</b></span><span class="pill">현황 자료 <b>${p.n_status || 0}</b></span><span class="pill">그 밖의 문서 <b>${p.n_doc || 0}</b></span><span class="pill">기간 밖 <b>${p.n_old || 0}</b></span><span class="pill">붙임 <b>${p.n_attach || 0}</b></span></div>`;
     h += `<div class="row"><div class="seg" id="engineSeg"><button data-e="rules" class="${engine === 'rules' ? 'on' : ''}">규칙만 · 몇 초</button><button data-e="model" class="${engine === 'model' ? 'on' : ''}">AI 모델도 사용 · 요지·할 일 받기</button></div>
       <span id="modelRow" ${engine === 'model' ? '' : 'hidden'}><select id="model"><option value="">모델 고르기</option>${ST.model ? `<option value="${esc(ST.model)}" selected>${esc(ST.model)}</option>` : ''}</select> <input type="text" id="url" value="${esc(ST.url || '')}" style="width:280px"> <button class="ghost sm" id="btnModels">목록 새로고침</button>
@@ -380,7 +381,7 @@ function renderS1b(m) {
 }
 // --- 1-다. 현안
 function renderS1c(m) {
-  const rows = issues().filter(i => isSug(i) || i.status !== '미결');
+  const rows = issues().filter(i => isSug(i) || i.status !== '미결' || i.status_by === '규칙');   // 규칙이 미결로 제안한 것은 넣은 뒤에도 여기 남긴다(누르자 사라져 놀라던 것). 사람이 미결로 고르면 1-라로
   let h = head('1-다. 현안사항 및 문제점', '기한이 남았거나 최근에 온 문서, 미결·보류 같은 말이 든 문서입니다. 넣기 → 상태·다음에 할 일 한 줄. 「미결」로 두면 1-라로 갑니다.', bulkBtns(rows) + viewSeg());
   for (const a of usedAreas()) { const r = rows.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건${r.filter(isSug).length ? ' · 확인 전 ' + r.filter(isSug).length : ''}</span>${areaOut(a, r)}</h3>` + (view === 'table' ? triTable(sortRows(r), {issue: true}) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
   if (!rows.length) h += '<div class="s">현안 후보가 없습니다. 아래에서 직접 적을 수 있습니다.</div>';
@@ -398,7 +399,7 @@ function renderS1d(m) {
 function renderS2(m) {
   const info = ST.info || {};
   const rows = ITEMS;
-  let h = head('2. 관련 문서 현황', `최근 ${ST.months || 12}개월 문서를 업무별로. 현안·반복으로 간 것도 함께 실립니다(여기서 버리면 1-다·1-나에서도 빠집니다). ${info.manual ? `누적 매뉴얼 「${esc(fileName(info.manual))}」(문서번호 ${info.manual_refs}개)에 없는 공문은 ★ 표시.` : '폴더에 누적 매뉴얼(이름에 「매뉴얼」)이 있으면 반영 여부를 대조합니다.'} 기간 밖 문서 ${info.n_old || 0}건은 폴더에 그대로 둡니다.`, bulkBtns(rows, '이 절의 제안'));
+  let h = head('2. 관련 문서 현황', `최근 ${ST.months || 12}개월 문서를 업무별로. 결과물 2절에는 「문서」 항목만 실리고, 현안·반복은 1-나·1-다에 실립니다(여기서 버리면 거기서도 빠집니다). ${info.manual ? `누적 매뉴얼 「${esc(fileName(info.manual))}」(문서번호 ${info.manual_refs}개)에 없는 공문은 ★ 표시.` : '폴더에 누적 매뉴얼(이름에 「매뉴얼」)이 있으면 반영 여부를 대조합니다.'} 기간 밖 문서 ${info.n_old || 0}건은 폴더에 그대로 둡니다.`, bulkBtns(rows, '이 절의 제안'));
   h = h.replace('</p>', '</p>' + (mode === 'take' ? '' : `<div class="row">${viewSeg().replace('class="r"', '')}</div>`));
   for (const a of usedAreas()) { const r = ITEMS.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건</span>${areaOut(a, r)}</h3>` + (view === 'table' ? triTable(sortRows(r)) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
   h += addRow('문서');

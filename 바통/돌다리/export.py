@@ -109,7 +109,10 @@ def area_order(session, rows):
 
 
 def area_list(session, items):
-    return area_order(session, items)
+    """업무 순서. 「이미 넘긴 업무」(항목을 다 뺐어도)는 1-가에 「인계 완료」로 남긴다."""
+    ov = session.get('overview') or {}
+    gone = [{'area': a} for a, v in ov.items() if isinstance(v, dict) and v.get('gone')]
+    return area_order(session, list(items) + gone)
 
 
 def undecided(it):
@@ -207,7 +210,7 @@ def chapters(session):
     out.append(('p', '같은 제목으로 해마다·매월 오는 문서(지난 3년 파일 날짜)와 본문의 「매월 ○일까지」「매주 ○요일」「익월」 줄, 옛 인수인계서·연간 일정표의 「○월 ○일까지」 줄에서 찾음.'))
     if recur:
         rows = []
-        for it in sorted(recur, key=lambda it: (0 if (it.get('recur') or {}).get('cycle') == '매월' else 1, month_of(it.get('date') or ''), it.get('date') or '')):
+        for it in sorted(recur, key=lambda it: (0 if (it.get('recur') or {}).get('cycle') == '매월' else 1, (it.get('recur') or {}).get('month') or month_of(it.get('date') or ''), it.get('date') or '')):
             r = it.get('recur') or {}
             ev = (' · %s년' % '·'.join(r['years'])) if r.get('years') and r.get('cycle') != '매월' else ((' · %d개월 %d회' % (len(r['months']), r['n'])) if r.get('months') else '')
             rows.append([cycle_label(it), it.get('area') or '기타', (it.get('todo') or it.get('summary') or (('원문: ' + it['quote']) if it.get('quote') else '')) + ((' / 메모: ' + it['note']) if it.get('note') else ''), '%s%s%s' % (it.get('title', '') if it.get('src') != '규칙(반복 문장)' else fname(it), ev, und(it))])
