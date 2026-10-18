@@ -6,13 +6,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="author" content="이희재">
 <meta name="creator" content="이희재">
-<meta name="generator" content="물어물어(우편번호 자동검색기) v1.8">
+<meta name="generator" content="물어물어(우편번호 자동검색기) v1.9">
 <meta name="version" content="1.4">
 <meta name="build-date" content="2026-10-09">
 <meta name="copyright" content="© 2026 이희재(정읍우체국). 기관 명의 출품. 2026 공공 AI 대전환 챌린지 규정에 따라 수상 시 행정안전부에 사용권 부여">
 <meta name="dcterms.creator" content="이희재">
 <meta name="dcterms.rightsHolder" content="이희재">
-<title>물어물어(우편번호 자동검색기) v1.8 (출품본)</title>
+<title>물어물어(우편번호 자동검색기) v1.9 (출품본)</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c8102e'/%3E%3Crect x='7' y='10' width='18' height='13' rx='2' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='m7.5 12 8.5 6 8.5-6' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -44,11 +44,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 .mark svg{width:26px;height:26px}
 h1{font-size:22px;letter-spacing:-.02em}
 .sub{color:var(--ink2);font-size:14.5px;margin-top:2px;text-wrap:pretty}
-.dbbox{display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none}
+.dbbox{display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:0 1 auto;min-width:0;max-width:100%}
 .dbline{font-size:14px;color:var(--ink2);display:flex;align-items:center;gap:7px}
 .dot{width:8px;height:8px;border-radius:50%;background:#c2c8d2}
 .dot.on{background:var(--ok)} .dot.err{background:var(--fail)} .dot.warn{background:#d9a400}
-.dbbtns{display:flex;gap:6px}
+.dbbtns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 
 main.wrap{padding-top:22px;padding-bottom:60px;display:flex;flex-direction:column;gap:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px 20px;box-shadow:var(--shadow)}
@@ -89,6 +89,8 @@ textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px
 select,input[type=text]{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--card);min-width:0;width:100%}
 .field.inline select{width:auto}
 .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px}
+.colmore>summary{cursor:pointer;color:var(--ink2);font-size:14px;margin-top:6px}
+@media print{dialog{max-height:none !important;overflow:visible !important;max-width:none !important}}
 .cols .field.req label::after{content:" 필수";color:var(--accent);font-weight:600;font-size:12.5px}
 .opt{margin-top:14px;border-top:1px solid var(--line2);padding-top:10px}
 .opt summary{cursor:pointer;color:var(--ink2);font-size:14.5px;font-weight:600;margin-bottom:10px}
@@ -148,7 +150,7 @@ thead th{position:sticky;top:0;background:var(--line2);font-weight:600;color:var
 .mini{padding:5px 8px;font-size:13.5px;border-radius:7px}
 .tools{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}
 
-dialog{border:1px solid var(--line);border-radius:14px;padding:0;max-width:720px;width:calc(100% - 32px);background:var(--card);color:var(--ink)}
+dialog{border:1px solid var(--line);border-radius:14px;padding:0;max-width:min(720px,94vw);width:calc(100% - 32px);max-height:92vh;overflow:auto;background:var(--card);color:var(--ink)}
 dialog::backdrop{background:rgba(10,15,25,.5)}
 .dlg-h{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
 .dlg-b{padding:16px 20px 22px;max-height:70vh;overflow:auto;font-size:15px}
@@ -164,6 +166,7 @@ dialog::backdrop{background:rgba(10,15,25,.5)}
 .prog{width:100%;height:6px;background:var(--line2);border-radius:99px;overflow:hidden}
 .prog div{height:100%;width:0;background:var(--accent);transition:width .1s}
 [hidden]{display:none !important}
+@media (max-width:900px){.dbbox{flex:1 1 100%;align-items:flex-start}.dbbtns{justify-content:flex-start}}
 @media (max-width:640px){.dbbox{align-items:flex-start}.tabs{margin-left:0}.crow{grid-template-columns:40px 1fr 1fr}}
 
 
@@ -294,7 +297,7 @@ dialog#logDlg{max-width:760px}
       <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7.5 8.5 6 8.5-6"/></svg></span>
       <div>
         <h1>물어물어</h1>
-        <p class="sub">우편번호 자동검색기 v1.8 · 주소록을 넣으면 우편번호를 찾아 채우고 등록용 양식으로 바꿉니다. 모든 처리는 이 PC 안에서만 이루어집니다.</p>
+        <p class="sub">우편번호 자동검색기 v1.9 · 주소록을 넣으면 우편번호를 찾아 채우고 등록용 양식으로 바꿉니다. 모든 처리는 이 PC 안에서만 이루어집니다.</p>
       </div>
     </div>
     <div class="dbbox">
@@ -405,7 +408,7 @@ dialog#logDlg{max-width:760px}
 <footer class="foot wrap">
   <div class="foot-in">
     <div class="foot-l">
-      <b>물어물어(우편번호 자동검색기)</b> <span class="ver">v1.8</span>
+      <b>물어물어(우편번호 자동검색기)</b> <span class="ver">v1.9</span>
       <span class="sep">·</span> 제작 <b>이희재</b>
       <span class="sep">·</span> <span class="dim">2026-10-09</span>
     </div>
@@ -422,7 +425,7 @@ dialog#logDlg{max-width:760px}
   <div class="dlg-b">
     <table class="help">
       <tr><th>이름</th><td>물어물어(우편번호 자동검색기)</td></tr>
-      <tr><th>버전</th><td>v1.8 <span class="dim">(태블릿 USB(OTG) 라벨프린터 직접 인쇄(WebUSB) / v1.7 태블릿 블루투스(BLE) 라벨프린터 직접 인쇄 · 뒷 카메라 우선·사진 읽기 시간 단축 / v1.6 휴대폰 문자 사진으로 읽기(웹캠·내장 글자 읽기) · 주소 스티커(롤 라벨) 인쇄 · 라벨 여러 쪽 인쇄 바로잡음 / v1.5 양식1 등기용·양식2 소포용 기본 양식(이름 다음에 우편번호) · 시·군·구 오타 보정과 앞뒤 행 지역 추정 · 열 끌어 옮기기 / v1.4 QR 접수 메모 · 예시 체험 · AI 연결 시험 · 오픈소스 고지 / v1.3 감열 인쇄 · v1.2 어르신 직접 입력 · v1.1 복수배송지 · v1.0 2026-09-19 · 2026-10-09 화면 이름·문구 정리)</span></td></tr>
+      <tr><th>버전</th><td>v1.9 <span class="dim">(심사위원 모의 검토 반영: 태블릿 화면 넘침·숫자 열 오인·동/호수 열·유사 주소 비고·어르신 화면 직원 단추·없는 번지·뒤로 가기 / v1.8 태블릿 USB(OTG) 라벨프린터 직접 인쇄(WebUSB) / v1.7 태블릿 블루투스(BLE) 라벨프린터 직접 인쇄 · 뒷 카메라 우선·사진 읽기 시간 단축 / v1.6 휴대폰 문자 사진으로 읽기(웹캠·내장 글자 읽기) · 주소 스티커(롤 라벨) 인쇄 · 라벨 여러 쪽 인쇄 바로잡음 / v1.5 양식1 등기용·양식2 소포용 기본 양식(이름 다음에 우편번호) · 시·군·구 오타 보정과 앞뒤 행 지역 추정 · 열 끌어 옮기기 / v1.4 QR 접수 메모 · 예시 체험 · AI 연결 시험 · 오픈소스 고지 / v1.3 감열 인쇄 · v1.2 어르신 직접 입력 · v1.1 복수배송지 · v1.0 2026-09-19 · 2026-10-09 화면 이름·문구 정리)</span></td></tr>
       <tr><th>제작</th><td>이희재</td></tr>
       <tr><th>만든 날</th><td>2026-10-09</td></tr>
       <tr><th>우편번호 DB</th><td><span id="aboutDb">-</span></td></tr><tr><th>자료 근거</th><td>우정사업본부 우편번호 고시(별표 5 범위자료·사서함, 국가법령정보센터 공개)와 인터넷우체국 범위주소·사서함 DB를 바탕으로 동작합니다. 실제 고객 정보는 들어 있지 않습니다.</td></tr><tr><th>오픈소스</th><td>xlsx-js-style 1.2.0(SheetJS CE 0.18.5 기반, Apache-2.0) · fflate(MIT) · qrcode-generator 1.4.4(MIT) · Tesseract.js 5.1.1·tesseract.js-core 5.1.1·한국어 학습자료 tessdata_best(Apache-2.0)<details><summary>라이선스 전문 보기</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:40vh;overflow:auto">■ fflate · MIT License
@@ -680,7 +683,7 @@ Copyright (C) SheetJS LLC, (C) gitbrent
       <li>번호 뒤에 건물명이 붙어 있거나(146현대아파트) 띄어쓰기가 어긋난 주소는 맞게 찾아도 「유사」로 표시해 한 번 더 보시도록 했습니다.</li>
       <li>시·군이 빠진 지역 주소록은 「검색 옵션 ▸ 기본 지역」에 시·군을 적어 두면 찾습니다.</li>
       <li>우편번호 칸은 표에서 바로 고칠 수 있고(Enter를 누르면 다음 줄로 넘어갑니다), 고친 값이 내려받는 파일에 들어갑니다.</li>
-      <li>글자가 작으면 왼쪽 위 <b>가− 가+</b>로 키우세요(Ctrl+＋ / Ctrl+－). 키운 크기는 다음에도 그대로 쓰입니다.</li>
+      <li>글자가 작으면 맨 위 단추줄의 <b>가− 가+</b>로 키우세요(Ctrl+＋ / Ctrl+－). 키운 크기는 다음에도 그대로 쓰입니다.</li>
       <li>표의 제목(행·원본 주소·우편번호·결과)을 누르면 그 기준으로 정렬됩니다.</li>
       <li>엑셀에서 여러 칸을 복사해 「직접 입력」에 붙여 넣으면 표 그대로 읽습니다. 파일은 창 아무 데나 끌어다 놓아도 됩니다.</li>
       <li>표 맨 위에 「○○ 주소록」 같은 제목이 얹혀 있어도, 그 아래의 항목 이름 줄(순번·성명·주소…)을 찾아 제목 줄로 잡습니다. 「주 소」처럼 띄어 쓴 머리글도 알아봅니다.</li>
@@ -736,7 +739,7 @@ Copyright (C) SheetJS LLC, (C) gitbrent
     <ul>
       <li>위의 <b>어르신 직접 입력</b>을 누르면 큰 글씨 대화 화면이 열립니다. 민원실 기기는 파일 주소 끝에 <code>#kiosk</code>를 붙여 열면 처음부터 이 화면으로 시작합니다.</li>
       <li>어르신이 아시는 대로 적으면(인터넷 되는 기기는 말로도 가능) 빠진 부분만 되묻습니다 · 시·군·구 고르기, 비슷한 곳 목록, 번지·대문 번호, 동·호수. 우편번호는 언제나 고시 자료로 확정합니다.</li>
-      <li>받는 분 이름·전화를 받고, 마지막에 보내는 분 정보를 받아 <b>접수 메모 번호</b>를 드립니다. 「종이로 뽑기」로 메모를 출력하거나, 직원이 「접수 화면으로 넘기기」를 누르면 이 프로그램의 주소록으로 들어와 복수배송지·라벨 등으로 바로 내보낼 수 있습니다.</li>
+      <li>받는 분 이름·전화를 받고, 마지막에 보내는 분 정보를 받아 <b>접수 메모 번호</b>를 드립니다. 「종이로 뽑기」로 메모를 출력하거나, 직원이 직원 설정(화면 오른쪽 아래 「직원」을 2초 누르기)의 「이 어르신 입력을 접수 화면으로 넘기기」를 누르면 이 프로그램의 주소록으로 들어와 복수배송지·라벨 등으로 바로 내보낼 수 있습니다. 마침 화면은 10분 동안 남아 있어 그사이 직원이 넘겨받을 수 있습니다. 직원 설정의 「어르신 화면 끝내기」로 직원 화면으로 돌아갑니다.</li>
       <li>직원 설정은 화면 오른쪽 아래 <b>직원</b> 단추를 2초 동안 누르면 열립니다 · 우리 동네(기본 지역), 자동 지우기 시간, 종이로 뽑기 용지(A4·감열 80mm·58mm), 선택 기능인 AI 주소 정리(이 PC의 로컬 모델만 연결).</li>
       <li>민원실에 구형 노트북과 저가 감열(영수증) 프린터를 두면, 어르신이 적은 주소가 「접수 메모」로 바로 뽑혀 창구에 전달됩니다. 감열 프린터를 기본 프린터로 두고 크롬을 <code>--kiosk --kiosk-printing</code>으로 실행하면 인쇄 확인 창 없이 뽑힙니다. 메모 길이는 내용만큼만 잡습니다.</li>
       <li>메모 아래쪽 <b>QR</b>을 창구 스캐너로 찍으면 「QR 메모 읽기」 창에 주소가 바로 들어옵니다. 스캐너가 한글 상태로 입력해도 바로잡아 읽으며, 여러 장을 이어서 찍은 뒤 「주소록으로 넣기」를 누르면 복수배송지·라벨로 이어집니다.</li>

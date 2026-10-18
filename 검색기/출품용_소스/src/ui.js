@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.8 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.9 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function () {
   "use strict";
 
@@ -814,6 +814,11 @@
       return [d];
     }));
     openSheet("직접 입력");
+    // 한 줄에 주소 하나씩 붙여 넣은 것은 열 확인이 필요 없으니 바로 검색한다(2026-10-18)
+    if (S.cols.addr.length) {
+      setMsg(qs("#fileMsg"), "붙여 넣은 주소 " + fmtNum(c.length) + "줄을 검색합니다.", "ok");
+      runSearch();
+    }
   }
   function loadWorkbook(a) {
     S.sheet = a;
@@ -1052,7 +1057,7 @@
         }
       }
     }
-    var h1 = v(/상세|나머지|주소\s*2|addr\w*\s*2/i, y);
+    var h1 = v(/상세|나머지|주소\s*2|addr\w*\s*2|동\s*[\/·]?\s*호|호수|세부\s*주소|건물명|아파트명/i, y);
     if (h1 >= 0 && x.addr.indexOf(h1) < 0) {
       x.addr2 = h1;
     }
@@ -1119,11 +1124,19 @@
     });
     var u1 = q1(r1, y, x.addr.length ? x.addr[0] : -1, t1);
     if (u1 < 0) {
+      // 제목으로 못 찾았을 때만 값으로 고른다(2026-10-18): 금액·수량 같은 숫자 열을 우편번호로 잡지 않게, 값의 90% 이상이 실제 우편번호이고 제목이 숫자 항목 이름이 아닐 때만
       var v1 = 0;
       s.forEach(function (b2, idx) {
-        if (b2 >= 0.6 && b2 > v1 && x.addr.indexOf(idx) < 0) {
-          v1 = b2;
-          u1 = idx;
+        var hk = headerKey(f[idx] || "");
+        if (b2 >= 0.6 && b2 > v1 && x.addr.indexOf(idx) < 0 && !/금액|가격|단가|수량|합계|비용|요금|무게|중량|개수|건수|매출|점수|나이|연령|순번|번호/.test(hk) || (b2 >= 0.6 && b2 > v1 && x.addr.indexOf(idx) < 0 && /우편|zip|post|우번/i.test(hk))) {
+          var vals = p(idx).filter(function (b3) {
+            return /^\d{5}$/.test(b3);
+          });
+          var known = vals.filter(isKnownZip).length;
+          if (vals.length && known >= vals.length * 0.9) {
+            v1 = b2;
+            u1 = idx;
+          }
         }
       });
     }
@@ -1288,7 +1301,15 @@
     qs("#step2").hidden = false;
     qs("#step3").hidden = true;
     qs("#step4").hidden = true;
-    if (!S.cols.addr.length) {
+    var nData = S.aoa.slice(S.headerIdx + 1).filter(function (r) {
+      return r.some(function (v) { return clean(v); });
+    }).length;
+    var allText = S.aoa.slice(0, 30).map(function (r) { return r.map(clean).join(" "); }).join(" ");
+    if (!nData) {
+      setMsg(qs("#fileMsg"), "제목 줄만 있고 주소 자료가 없습니다. 주소를 채운 파일을 넣거나, 시트가 여러 개면 위 「시트」에서 자료가 든 시트를 고르세요.", "warn");
+    } else if (allText.length > 20 && (allText.match(/[\uFFFD\u0000-\u0008]/g) || []).length > allText.length * 0.05) {
+      setMsg(qs("#fileMsg"), "엑셀 파일이 아니거나 손상된 파일로 보입니다(글자가 깨져 읽힘). 엑셀에서 열어 「다른 이름으로 저장 → Excel 통합 문서(.xlsx)」로 저장한 뒤 다시 넣어 주세요.", "warn");
+    } else if (!S.cols.addr.length) {
       setMsg(qs("#fileMsg"), "주소 열을 자동으로 찾지 못했습니다. 아래 「주소」 칸에서 직접 골라 주세요. 시·군이 빠진 주소록이면 검색 옵션의 기본 지역을 먼저 적어 주세요.", "warn");
     } else if (S.headerIdx >= 0) {
       setMsg(qs("#fileMsg"), (S.headerAuto || S.headerIdx + 1 + "행을 제목 줄로 보고 빼고 검색합니다.") + " 아니면 「제목 줄」에서 바꾸세요." + (hasSenderCols() ? " 보내는 분(주문자) 열도 찾았습니다 · 보내는 분 주소의 우편번호도 함께 찾습니다." : ""), "ok");
@@ -1302,7 +1323,19 @@
     var colMapEl = qs("#colMap");
     colMapEl.innerHTML = "";
     var a = false;
+    // 늘 쓰는 칸(주소·상세·우편번호·받는 분·전화)만 펼치고, 상품·메시지·수량·보내는 분은 접어 둔다(고른 것이 있으면 펼침)
+    var BASIC = ["addr", "addr2", "zip", "name", "tel", "mobile"];
+    var more = document.createElement("details");
+    more.className = "colmore";
+    more.style.gridColumn = "1/-1";
+    var moreN = 0;
+    more.innerHTML = "<summary>더 많은 열(상품명·배송 메시지·수량·보내는 분) · 우체국쇼핑 양식에 쓸 때만</summary><div class=\"cols\" style=\"margin-top:8px\"></div>";
+    var moreBox = more.querySelector(".cols");
     COL_FIELDS.forEach(function (b) {
+      var target = BASIC.indexOf(b.key) >= 0 ? colMapEl : moreBox;
+      if (target === moreBox && (b.key === "addr" ? S.cols.addr.length : S.cols[b.key] >= 0)) {
+        moreN++;
+      }
       if (b.grp === "s" && !a) {
         a = true;
         var c = document.createElement("div");
@@ -1310,7 +1343,7 @@
         c.style.gridColumn = "1/-1";
         c.style.margin = "8px 0 0";
         c.textContent = "보내는 분(주문자) · 파일에 있으면 우체국쇼핑 양식에 행마다 따로 넣습니다";
-        colMapEl.appendChild(c);
+        target.appendChild(c);
       }
       var d = document.createElement("div");
       d.className = "field" + (b.req ? " req" : "");
@@ -1325,7 +1358,7 @@
         g += "<option value=\"" + i + "\"" + (h ? " selected" : "") + ">" + escHtml(colOptionLabel(i)) + "</option>";
       }
       d.innerHTML = g + "</select>";
-      colMapEl.appendChild(d);
+      target.appendChild(d);
       qs("select", d).onchange = function () {
         var p = this.value;
         if (b.key === "addr") {
@@ -1336,6 +1369,13 @@
         renderPreview();
       };
     });
+    if (moreBox.children.length) {
+      more.open = moreN > 0;
+      if (moreN) {
+        more.querySelector("summary").textContent += " · " + moreN + "개 찾음";
+      }
+      colMapEl.appendChild(more);
+    }
   }
   function renderPreview() {
     var previewTableEl = qs("#previewTable");
@@ -1837,7 +1877,7 @@
     var g = document.createElement("button");
     g.type = "button";
     g.className = "chip mask" + (privacyMask.on ? " on" : "");
-    g.textContent = privacyMask.on ? "가림 켜짐" : "가림 꺼짐 · 노출 주의";
+    g.textContent = privacyMask.on ? "화면 가림 켜짐 · 눌러서 풀기" : "화면 가림 꺼짐 · 눌러서 가리기";
     g.title = "이름·전화·번지와 상세주소를 화면에서만 가립니다. 내려받는 파일에는 원래 값이 들어갑니다.";
     g.onclick = function () {
       privacyMask.on = !privacyMask.on;
@@ -2202,7 +2242,12 @@
       case "item":
         return g("item");
       case "memo":
-        return g("memo");
+        // 양식1·2(창구 접수용)는 확인하지 않은 유사(추정) 주소에 비고 표시(2026-10-18). 업로드 양식(우체국쇼핑 등)의 메모는 배송 메시지라 건드리지 않는다
+        var mv = g("memo");
+        if (!mv && a.status === "유사" && !a.edited && (S.preset === "reg" || S.preset === "parcel")) {
+          return "확인 필요(유사 주소)";
+        }
+        return mv;
       case "seq":
         return String(d.seq);
       case "const":
@@ -2307,9 +2352,17 @@
       qtyAdded: 0,
       self: 0,
       sBad: 0,
-      sBadRows: []
+      sBadRows: [],
+      similar: 0,
+      similarRows: []
     };
     S.rows.forEach(function (row) {
+      if ((row.addr || row.detail) && row.status === "유사" && !row.edited) {
+        W.similar++;
+        if (W.similarRows.length < 10) {
+          W.similarRows.push(row.i + 1);
+        }
+      }
       if (!row.addr && !row.detail) {
         W.empty++;
         if (W.emptyRows.length < 10) {
@@ -2843,6 +2896,9 @@
     } else if (W.nozip) {
       t.push("우편번호 없는 행이 " + fmtNum(W.nozip) + "건 들어 있습니다.");
     }
+    if (W.similar) {
+      t.push("비슷한 주소로 추정한(유사) 행 " + fmtNum(W.similar) + "건(" + rowListText(W.similarRows, W.similar) + ")은 접수 전에 주소를 확인하세요" + (S.preset === "reg" || S.preset === "parcel" ? "(비고에 「확인 필요」 표시)." : "(점검표로 모아 볼 수 있음)."));
+    }
     if (W.longName) {
       t.push("수취인명이 15자를 넘는 행 " + fmtNum(W.longName) + "건(" + rowListText(W.longRows, W.longName) + ").");
     }
@@ -2852,7 +2908,7 @@
     if (files.length > 1) {
       t.push("브라우저가 여러 파일 내려받기를 물으면 「허용」을 누르세요.");
     }
-    setMsg(dlMsgEl, t.join(" "), W.nozip || W.longName || W.noTel || W.sBad || W.empty || W.longSender ? "warn" : "ok");
+    setMsg(dlMsgEl, t.join(" "), W.nozip || W.similar || W.longName || W.noTel || W.sBad || W.empty || W.longSender ? "warn" : "ok");
   }
   function suggestCandidates(f) {
     if (f.status === "정확" && !f.changed) {
@@ -3904,7 +3960,7 @@
       qs("#optZipPolicy").value = a.zipPolicy;
     }
     privacyMask.on = a.mask !== false;
-    setZoom(a.zoom || 115);
+    setZoom(a.zoom || (window.matchMedia && (matchMedia("(pointer:coarse)").matches || innerWidth < 1000) ? 100 : 115));   // 태블릿·좁은 화면은 100%로 시작(가로로 넘치지 않게)
     qs("#btnZoomIn").onclick = function () {
       stepZoom(1);
     };

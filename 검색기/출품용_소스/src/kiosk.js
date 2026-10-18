@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.8 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.9 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 /* 민원실에서 어르신이 직접 쓰는 대화형 주소 입력.
    - 말(인터넷 PC)·글자로 받은 주소를 정리해 엔진에 묻고, 빠진 부분만 되묻는다.
    - 우편번호는 언제나 엔진(우편번호 고시 DB)이 확정한다. AI는 주소 조각을 뽑는 보조 역할만 한다.
@@ -218,6 +218,8 @@
     '.k-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 22px;font-size:.66em;color:#555;border-top:1px solid #eee}' +
     '.k-staff{flex:0 0 auto;white-space:nowrap;font-size:.9em;background:transparent;border:1px solid #ccc;border-radius:8px;padding:8px 12px;color:#777;cursor:pointer;user-select:none}' +
     '.k-act{position:sticky;bottom:0;z-index:3;margin-top:10px;padding:14px 0 6px;background:linear-gradient(rgba(255,253,248,0),#fffdf8 22%)}' +
+    '.k-grid{margin-bottom:12px}.k-choice{word-break:keep-all}.k-btn:disabled{opacity:.4;cursor:default;border-color:#bbb;background:#f3f3f3;color:#777}' +
+    '.k-chip{cursor:pointer;border:0;font-family:inherit}' +
     '.k-padwrap{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:flex-end}.k-padl{flex:1 1 100%;max-width:540px}.k-padr{flex:1 1 100%}' +
     '.k-padr .k-row{flex-wrap:nowrap}.k-padr .k-btn{flex:1 1 0;min-width:0;padding:10px 8px}' +
     '@media (min-width:900px){.k-padwrap{flex-wrap:nowrap}.k-padl{flex:0 1 540px}.k-padr{flex:1 1 260px}.k-padr .k-row{flex-direction:column}.k-padr .k-btn{flex:0 0 auto;width:100%}}' +
@@ -231,6 +233,7 @@
     '.k-big{font-size:2em;font-weight:900;color:#1b7f3b;margin:10px 0}' +
     '.k-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:5100}' +
     '.k-modal>div{background:#fff;border-radius:22px;padding:26px;max-width:680px;width:92%;font-size:calc(21px*var(--kf,1));max-height:90vh;overflow:auto}' +
+    '#kModalBtns{position:sticky;bottom:-26px;background:#fff;padding:10px 0 4px;margin-bottom:-4px}' +
     '.k-toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:#333;color:#fff;padding:14px 22px;border-radius:14px;font-size:calc(20px*var(--kf,1));z-index:5200;max-width:90%}' +
     '.k-field{display:block;margin:10px 0;font-size:16px}.k-field b{display:block;margin-bottom:4px}.k-field input{width:100%;font-size:16px;padding:8px;box-sizing:border-box}' +
     '.k-note{font-size:14px;color:#555;line-height:1.5}' +
@@ -294,11 +297,13 @@
     };
     var hold = null;
     var sb = $('#kStaff', root);
-    function down(e) { e.preventDefault(); hold = setTimeout(staffPanel, 2000); }
-    function up() { clearTimeout(hold); }
+    var t0 = 0;
+    function down(e) { e.preventDefault(); t0 = Date.now(); hold = setTimeout(function () { hold = null; staffPanel(); }, 2000); }
+    function up() { if (hold && t0 && Date.now() - t0 < 2000) { toast('직원용 설정이에요. 2초 동안 꾹 누르세요.'); } clearTimeout(hold); hold = null; t0 = 0; }
+    sb.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     sb.addEventListener('pointerdown', down);
     sb.addEventListener('pointerup', up);
-    sb.addEventListener('pointerleave', up);
+    sb.addEventListener('pointerleave', function () { clearTimeout(hold); hold = null; t0 = 0; });
     document.addEventListener('pointerdown', touch, true);
     document.addEventListener('keydown', touch, true);
     applyFont();
@@ -394,14 +399,15 @@
     var mic = SR ? '<button type="button" class="k-btn" id="kMic">말로 하기</button>' : '';
     var cam = camOk() ? '<button type="button" class="k-btn ok" id="kCam">📷 휴대폰 문자를 사진으로 찍기</button>' : '';
     frame(esc(who), esc(sub),
-      (cam ? '<div class="k-row" style="margin-top:0">' + cam + '</div>' : '') +
-      '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 정읍시 수성동 현대아파트 102동" value="' + esc(prefill || '') + '" style="margin-top:12px">' +
-      '<div><span class="k-chip">예) 전주시 완산구 효자로 225</span><span class="k-chip">예) 기장군 기장읍 시랑리 408-1</span><span class="k-chip">예) 서산 힐스테이트서산 405동</span></div>' +
+      '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 정읍시 수성동 현대아파트 102동" value="' + esc(prefill || '') + '" style="margin-top:4px">' +
+      '<div class="k-sub" style="margin-top:6px">이렇게 적으시면 돼요(누르면 칸에 들어가요):</div><div><button type="button" class="k-chip">전주시 완산구 효자로 225</button><button type="button" class="k-chip">기장군 기장읍 시랑리 408-1</button><button type="button" class="k-chip">서산 힐스테이트서산 405동</button></div>' +
       '<div class="k-row">' + mic + '<button type="button" class="k-btn pri" id="kGo">다 적었어요</button></div>' +
+      (cam ? '<div class="k-row">' + cam + '</div>' : '') +
       '<div class="k-row"><button type="button" class="k-btn sub sm" id="kRegion">지역부터 고르기</button>' +
       (hist.length > 1 ? '<button type="button" class="k-btn sub sm" id="kBack">이전으로</button>' : '') + '</div>');
     var inp = $('#kIn', main);
     setTimeout(function () { inp.focus(); }, 50);
+    Array.prototype.forEach.call(main.querySelectorAll('.k-chip'), function (el) { el.onclick = function () { inp.value = el.textContent; inp.focus(); }; });
     if ($('#kCam', main)) { $('#kCam', main).onclick = function () { screen(camScreen); }; }
     function go() {
       var v = clean(inp.value);
@@ -507,7 +513,7 @@
       });
     });
     if (cands.length === 1) { return setRegion(cands[0].g, cands[0].tok); }
-    if (!cands.length || cands.length > 12) { return pickSido(); }
+    if (!cands.length || cands.length > 12) { return pickSido(!cands.length ? '적으신 「' + clean(st.cur.text || st.cur.raw || '').slice(0, 30) + '」로는 찾지 못했어요. 지역부터 골라 볼까요?' : '같은 이름이 여러 곳에 있어요. 지역부터 골라 주세요.'); }
     var body = '<div>' + cands.map(function (x, i) { return '<button type="button" class="k-choice" data-c="' + i + '">' + esc(e.sggLabel(x.g)) + '</button>'; }).join('') + '</div>' +
       row([btn('여기 없어요', 'sub', pickSido), btn('이전으로', 'sub', back)]);
     frame('어느 시·군·구인가요?', '맞는 곳을 눌러 주세요.', body);
@@ -516,12 +522,15 @@
       el.onclick = function () { var x = cands[Number(el.getAttribute('data-c'))]; setRegion(x.g, x.tok); };
     });
   }
-  function pickSido() {
+  function pickSido(why) {
     var e = E(), db = e.db || {};
     var sido = db.sido || [];
-    var body = '<div class="k-grid">' + sido.map(function (n, i) { return '<button type="button" class="k-choice" data-s="' + i + '">' + esc(n) + '</button>'; }).join('') + '</div>' +
+    var mine = clean(cfg().region || mainRegion()).split(' ')[0];   // 우리 동네 시·도를 맨 앞에
+    var order = sido.map(function (n, i) { return i; });
+    order.sort(function (a, b) { return (sido[b] === mine) - (sido[a] === mine) || a - b; });
+    var body = '<div class="k-grid">' + order.map(function (i) { return '<button type="button" class="k-choice" data-s="' + i + '">' + esc(sido[i]) + '</button>'; }).join('') + '</div>' +
       row([btn('이전으로', 'sub', back)]);
-    frame('보내실 곳이 어느 시·도인가요?', '', body);
+    frame('보내실 곳이 어느 시·도인가요?', typeof why === 'string' ? esc(why) : '', body);
     bindRow([btn('이전으로', 'sub', back)]);
     Array.prototype.forEach.call(main.querySelectorAll('[data-s]'), function (el) {
       el.onclick = function () { screen(pickSgg, [Number(el.getAttribute('data-s'))]); };
@@ -577,15 +586,21 @@
       done: function (v) {
         if (!v) { return; }
         st.trail.push(['번호', v]);
-        var c = st.cur;
+        var c = st.cur, prev = c.text;
         c.text = clean(c.text + ' ' + v);
         var q = withRegion(c.text);
         var r2 = look(q);
         if (rank(r2) >= 4) { return screen(confirmAddr, [r2, false]); }
-        screen(confirmAddr, [rank(r2) >= rank(r) ? r2 : r, true]);
+        screen(numMiss, [r, v, prev]);   // 없는 번호: 「맞으세요?」로 넘기지 않고 다시 묻는다
       },
       skip: ['몰라요', function () { st.trail.push(['번호', '모름']); screen(confirmAddr, [r, true]); }]
     });
+  }
+  function numMiss(r, v, prev) {
+    var b = [btn('번호 다시 누르기', 'pri', function () { st.cur.text = prev; back(); }),
+      btn('번호 없이 갈게요', 'sub', function () { st.cur.text = prev; st.trail.push(['번호', '모름']); screen(confirmAddr, [r, true]); })];
+    frame('「' + esc(v) + '」번은 이 길에서 찾지 못했어요.', '번호를 한 번 더 확인해 주세요. 모르시면 번호 없이 가고, 창구에서 확인해 드릴게요.', row(b));
+    bindRow(b);
   }
   function giveUp() {
     var send = st.cur && st.cur.kind === 'send';
@@ -663,7 +678,7 @@
       screen(askPhone);
     })];
     if (mic) { b.unshift(mic); }
-    if (!send) { b.push(btn('이전으로', 'sub', back)); }
+    b.push(btn('이전으로', 'sub', back));
     frame(send ? '보내시는 분(어르신) 성함은요?' : '받으실 분 성함은요?', send ? '택배·소포에 보내는 분으로 적혀요.' : (c.ocr && c.ocr.name ? '사진에서 읽은 이름이에요. 맞는지 확인해 주세요.' : ''), '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 홍길동" value="' + esc(!send && c.ocr && c.ocr.name || '') + '">' + row(b));
     bindRow(b);
     var inp = $('#kIn', main);
@@ -814,17 +829,17 @@
     var s = st.sender || {};
     var list = st.entries.map(function (x) { return '<div class="k-card"><b>' + esc(x.zip || '확인 필요') + '</b> ' + esc(x.addr1) + ' ' + esc(x.addr2) + '<div class="k-sub">' + esc(x.name) + (x.phone ? ' · ' + esc(x.phone) : '') + '</div></div>'; }).join('');
     main.innerHTML = '<div class="k-bubble" style="text-align:center">다 됐어요!<div class="k-big">접수 메모 ' + esc(st.no) + '번</div>' +
-      '<small>창구 직원에게 「' + esc(st.no) + '번」이라고 말씀하시거나, 종이로 뽑아서 보여 주세요.</small></div>' +
+      '<small>' + (paper() === 'lbl' ? '스티커를 뽑아 창구 직원에게 보여 주세요.' : '종이로 뽑아 창구 직원에게 보여 주세요.') + ' 뽑지 못하셨으면 직원을 불러 「' + esc(st.no) + '번」이라고 말씀해 주세요. 이 화면은 10분 동안 남아 있어요.</small></div>' +
       '<div class="k-sub">보내시는 분: ' + esc(s.name || '') + (s.phone ? ' · ' + esc(s.phone) : '') + (s.addr1 ? ' · ' + esc(s.zip) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' + list +
-      '<div class="k-row"><button type="button" class="k-btn pri" id="kPrintBtn">' + (paper() === 'lbl' ? '주소 스티커 뽑기' : '종이로 뽑기') + '</button><button type="button" class="k-btn sub" id="kDone">처음 화면으로</button></div>' +
-      '<div class="k-row"><button type="button" class="k-btn sub sm" id="kHand">직원 확인: 접수 화면으로 넘기기</button></div>';
+      '<div class="k-row"><button type="button" class="k-btn pri" id="kPrintBtn">' + (paper() === 'lbl' ? '주소 스티커 뽑기' : '종이로 뽑기') + '</button><button type="button" class="k-btn sub" id="kDone">처음 화면으로</button></div>';
+    st.finished = true;   // 직원이 「접수 화면으로 넘기기」(직원 설정)를 할 수 있게 자동 지우기를 늦춘다
     speak('다 됐어요. 접수 메모 ' + st.no + '번입니다. 창구 직원에게 말씀해 주세요.');
     $('#kPrintBtn', main).onclick = printSlip;
     $('#kDone', main).onclick = function () {
       modal('<div class="k-bubble">적으신 내용을 지우고 처음으로 갈까요?<small>창구에 넘기거나 종이로 뽑으셨다면 지워도 괜찮아요.</small></div>',
         [['지우고 처음으로', function () { closeModal(); wipe(); }, 'pri'], ['아니요', closeModal, 'sub']]);
     };
-    $('#kHand', main).onclick = handOff;
+    touch();
     log('어르신 입력 완료', st.entries.length, '접수번호 ' + st.no);
     if (cfg().autoPrint) { toast('메모를 뽑고 있어요. 창구에 가져가세요.'); setTimeout(printSlip, 700); }
   }
@@ -1084,11 +1099,12 @@
       '<div style="display:flex;gap:8px;align-items:center"><input id="kfLblW" type="number" min="30" max="210" step="0.5" style="width:90px;font-size:16px;padding:8px"> × <input id="kfLblH" type="number" min="20" max="300" step="0.5" style="width:90px;font-size:16px;padding:8px"> mm</div>' +
       '<p class="k-note">라벨 프린터를 「기본 프린터」로 두고, 프린터 속성의 용지 크기를 같은 크기로 맞춰 두세요. 아래 「스티커 시험 인쇄」로 실제 기표지에 대 보고 크기를 고치면 됩니다. 감열(리본 없는) 접착 라벨 롤이면 됩니다.</p></div>' +
       '<label class="k-chk"><input type="checkbox" id="kfAuto"> 다 마치면 메모를 바로 뽑기</label>' +
+      '<details><summary style="cursor:pointer;margin:8px 0;font-weight:700">고급 설정(인쇄 확인 창 없애기 · AI 주소 정리)</summary>' +
       '<p class="k-note">감열 프린터를 「기본 프린터」로 두고 크롬을 <b>--kiosk --kiosk-printing</b> 옵션으로 실행하면 인쇄 확인 창 없이 바로 뽑힙니다. 영수증 용지는 붙지 않으니 창구 전달용 메모로 씁니다.</p>' +
       '<label class="k-field"><b>AI 주소 정리 연결(선택) · 주소</b><input id="kfUrl" value="' + esc(a.url || '') + '" placeholder="예) http://127.0.0.1:11434/v1/chat/completions"></label>' +
       '<label class="k-field"><b>모델 이름</b><input id="kfModel" value="' + esc(a.model || '') + '" placeholder="예) gemma3:4b · exaone3.5:7.8b"></label>' +
       '<label class="k-field"><b>키(필요한 곳만)</b><input id="kfKey" type="password" value="' + esc(a.key || '') + '"></label>' +
-      '<p class="k-note">이 PC에서 돌리는 로컬 모델(127.0.0.1)만 연결할 수 있습니다. AI에는 주소 문장만 보내고 이름·전화는 보내지 않으며, 우편번호는 언제나 고시 자료로 확정합니다.</p>' +
+      '<p class="k-note">이 PC에서 돌리는 로컬 모델(127.0.0.1)만 연결할 수 있습니다. AI에는 주소 문장만 보내고 이름·전화는 보내지 않으며, 우편번호는 언제나 고시 자료로 확정합니다.</p></details>' +
       '<p class="k-note" id="kfMsg"></p>',
       [['저장', function () {
         var u = clean($('#kfUrl').value);
@@ -1105,7 +1121,7 @@
           if (c.via === 'ble' || c.via === 'usb') { setCfg({ paper: 'lbl' }); $('#kfPaper').value = 'lbl'; $('#kfPaper').onchange(); toast('바로 인쇄를 쓰도록 용지를 「주소 스티커」로 바꿨어요. 저장을 눌러 주세요.'); }
         } });
       }, 'sub'],
-      ['닫기', closeModal, 'sub']]);
+      ['닫기', closeModal, 'sub']].concat(st && st.entries && st.entries.length ? [['이 어르신 입력을 접수 화면으로 넘기기', function () { closeModal(); handOff(); }, 'sub']] : []).concat([['어르신 화면 끝내기(직원 화면으로)', function () { closeModal(); if (!hasData() || confirm('적힌 내용이 있습니다. 지우고 어르신 화면을 닫을까요?')) { fresh(); closeKiosk(); } }, 'sub']]));
     $('#kfPaper').value = paper();
     $('#kfAuto').checked = !!c.autoPrint;
     var lz = lblSize();
@@ -1122,6 +1138,7 @@
     if (!root || root.hidden) { return; }
     clearTimeout(idleT);
     var sec = Number(cfg().idle) || 120;
+    if (st && st.finished) { sec = Math.max(sec, 600); }
     idleT = setTimeout(idleWarn, sec * 1000);
   }
   function idleWarn() {
@@ -1229,6 +1246,8 @@
     ['최연습', '063-000-0002', '전주시 완산구 효자로 225', '남예제', '010-0000-0025', '세종시 한누리대로 2130', '', '한우 세트', 1]
   ];
   function loadSample() {
+    var Z = window.__zip && __zip.S;
+    if (Z && ((Z.rows && Z.rows.length) || (Z.aoa && Z.aoa.length)) && !confirm('지금 열어 둔 주소록과 결과를 지우고 예시 주문서를 열까요?')) { return; }
     if (!injectSheet(SAMPLE_HEAD, SAMPLE, '예시', '예시_주문서(모의데이터).xlsx')) { alert('이 브라우저에서는 예시를 불러올 수 없습니다.'); return; }
     log('예시 체험', SAMPLE.length, '모의데이터');
   }
@@ -1240,8 +1259,14 @@
     document.documentElement.classList.add('k-on');
     welcome();
     touch();
+    try { history.pushState({ kiosk: 1 }, ''); } catch (e) { }   // 안드로이드 「뒤로」가 프로그램을 닫지 않고 앞 화면으로 가게
     log('어르신 직접 입력 화면 열기', 0, '');
   }
+  window.addEventListener('popstate', function () {
+    if (!root || root.hidden) { return; }
+    if ($('#kModal')) { closeModal(); } else { back(); }
+    try { history.pushState({ kiosk: 1 }, ''); } catch (e) { }
+  });
   function closeKiosk() {
     if (!root) { return; }
     clearTimeout(idleT); clearTimeout(warnT);

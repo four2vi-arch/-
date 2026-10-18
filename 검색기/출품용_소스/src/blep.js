@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.8 (출품본) · 블루투스(BLE)·USB(OTG) 라벨프린터 직접 인쇄 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.9 (출품본) · 블루투스(BLE)·USB(OTG) 라벨프린터 직접 인쇄 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 /* 태블릿(안드로이드 크롬)에서 컴퓨터 없이 무선 라벨프린터로 바로 뽑기 위한 모듈.
    - 브라우저의 인쇄 창을 거치지 않고, 스티커 한 장을 그림(캔버스)으로 그려 흑백 점으로 바꾼 뒤 TSPL 또는 ESC/POS 명령으로 BLE(저전력 블루투스)에 보낸다.
    - Web Bluetooth 는 BLE 만 된다(클래식 블루투스·SPP 전용 프린터는 못 쓴다). 프린터 쪽 규격은 기종마다 달라 실기 시험이 필요하며, 설정 창에서 명령·해상도·색 반전·회전·전송 크기를 고칠 수 있게 했다.
@@ -366,6 +366,7 @@
       '#bleSet h3{margin:0 0 8px;font-size:20px}#bleSet label{display:block;margin:8px 0;font-weight:700}#bleSet label small{font-weight:400;color:#666}' +
       '#bleSet select,#bleSet input[type=text],#bleSet input[type=number]{width:100%;box-sizing:border-box;font-size:16px;padding:9px;margin-top:3px}' +
       '#bleSet .b-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}#bleSet .b-chk{display:flex;gap:8px;align-items:center}#bleSet .b-chk input{width:22px;height:22px}' +
+      '#bleSet .b-adv{margin:10px 0}#bleSet .b-adv summary{cursor:pointer;color:#555;font-weight:700}' +
       '#bleSet .b-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}#bleSet button{font-size:16px;padding:12px 16px;border-radius:10px;border:2px solid #999;background:#fff;cursor:pointer;font-family:inherit;font-weight:700}' +
       '#bleSet button.pri{background:#c8102e;border-color:#c8102e;color:#fff}#bleSet .b-msg{min-height:3em;margin-top:8px;font-weight:700}#bleSet .b-note{font-size:13px;color:#555}';
     document.head.appendChild(s);
@@ -379,19 +380,29 @@
     function sel(id, label, cur, list) { return '<label>' + label + '<select id="' + id + '">' + list.map(function (x) { return '<option value="' + x[0] + '"' + (String(x[0]) === String(cur) ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>'; }
     m.innerHTML = '<div class="b-card" role="dialog" aria-label="프린터 연결 설정"><h3>프린터 연결 설정</h3>' +
       sel('bsVia', '인쇄 방식', s.via, [['dialog', '기기 인쇄 창(컴퓨터 등 · 크롬 인쇄 창)'], ['usb', 'USB 선(OTG)으로 바로 인쇄(태블릿)'], ['ble', '블루투스(BLE)로 바로 인쇄(태블릿)']]) +
+      '<div id="bsDirect">' +
       '<div class="b-two">' + sel('bsProto', '프린터 명령', s.proto, [['tspl', 'TSPL (라벨 프린터 대부분)'], ['escpos', 'ESC/POS (영수증·일부 라벨)']]) +
       sel('bsDpi', '해상도', s.dpi, [[203, '203dpi (대부분)'], [300, '300dpi']]) + '</div>' +
       '<div class="b-two">' + sel('bsRot', '회전', s.rotate, [[0, '0도'], [90, '90도'], [180, '180도'], [270, '270도']]) +
       '<label>라벨 간격(mm) <small>TSPL</small><input id="bsGap" type="number" min="0" max="10" step="0.5" value="' + esc(s.gap) + '"></label></div>' +
-      '<div class="b-two">' + sel('bsChunk', '한 번에 보내는 크기', s.chunk, [[20, '20바이트(가장 안전)'], [100, '100바이트'], [180, '180바이트'], [500, '500바이트(빠름)']]) +
+      '<details class="b-adv"><summary>고급 설정(처음에는 그대로 두세요)</summary>' +
+      '<div class="b-two b-bt">' + sel('bsChunk', '한 번에 보내는 크기', s.chunk, [[20, '20바이트(가장 안전)'], [100, '100바이트'], [180, '180바이트'], [500, '500바이트(빠름)']]) +
       '<label>보내는 간격(ms)<input id="bsDelay" type="number" min="0" max="200" value="' + esc(s.delay) + '"></label></div>' +
       sel('bsAfter', '인쇄 뒤 이송(ESC/POS)', s.after, [['ff', '용지 이송(FF)'], ['lf', '줄 이송 3줄'], ['none', '없음']]) +
       '<label class="b-chk"><input id="bsInv" type="checkbox"' + (s.invert ? ' checked' : '') + '> 색 반전(검은 바탕으로 나오면 켜세요)</label>' +
-      '<label>추가 서비스 번호(선택) <small>프린터를 못 찾으면 제조사 자료의 번호를 넣으세요(쉼표로 여러 개)</small><input id="bsUuid" type="text" value="' + esc(s.uuids) + '" placeholder="예) ffe0, 49535343-fe7d-4ae5-8fa9-9fafd205e455"></label>' +
+      '<label class="b-bt">추가 서비스 번호(선택) <small>프린터를 못 찾으면 제조사 자료의 번호를 넣으세요(쉼표로 여러 개)</small><input id="bsUuid" type="text" value="' + esc(s.uuids) + '" placeholder="예) ffe0, 49535343-fe7d-4ae5-8fa9-9fafd205e455"></label></details></div>' +
       '<div class="b-msg" id="bsMsg">' + (connected() ? '연결됨: ' + esc(deviceName() || '프린터') : '연결되지 않았어요.') + '</div>' +
       '<div class="b-row"><button class="pri" id="bsConn">프린터 연결</button><button id="bsTest">시험 인쇄</button><button id="bsSave">저장하고 닫기</button></div>' +
       '<p class="b-note"><b>USB</b>: 태블릿 충전 단자에 OTG 어댑터를 끼우고 프린터 USB 선을 연결한 뒤 「프린터 연결」을 누르세요. 처음에는 안드로이드가 허용 여부를 묻습니다(허용). 컴퓨터(윈도우)에서는 프린터 드라이버가 먼저 잡고 있어 열리지 않을 수 있습니다. 「한 번에 보내는 크기」·「보내는 간격」은 블루투스에서만 씁니다.<br><b>블루투스</b>: 태블릿(안드로이드 크롬)에서 BLE(저전력 블루투스) 라벨프린터를 쓸 때의 설정입니다. 프린터가 클래식 블루투스(SPP)만 지원하면 연결되지 않습니다. 안드로이드 11 이하는 「위치」 기능을 켜야 프린터가 검색될 수 있습니다. 시험 인쇄의 테두리가 라벨 가장자리와 맞는지 확인하고, 거꾸로·검은 바탕이면 회전·색 반전을 바꾸세요.</p></div>';
     document.body.appendChild(m);
+    function showFor() {   // 고른 방식에 맞는 칸만 보인다
+      var v = $('bsVia').value;
+      $('bsDirect').style.display = v === 'dialog' ? 'none' : '';
+      Array.prototype.forEach.call(m.querySelectorAll('.b-bt'), function (el) { el.style.display = v === 'ble' ? '' : 'none'; });
+      $('bsConn').style.display = $('bsTest').style.display = v === 'dialog' ? 'none' : '';
+    }
+    $('bsVia').onchange = showFor;
+    showFor();
     function read() {
       return set({ via: $('bsVia').value, proto: $('bsProto').value, dpi: Number($('bsDpi').value), rotate: Number($('bsRot').value), gap: Number($('bsGap').value) || 0,
         chunk: Number($('bsChunk').value), delay: Number($('bsDelay').value) || 0, after: $('bsAfter').value, invert: $('bsInv').checked, uuids: clean($('bsUuid').value) });

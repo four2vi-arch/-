@@ -99,7 +99,7 @@ async function open(browser, mock, extra) {
   page = await open(browser, MOCK(512));
   await page.evaluate(() => { __ble.openSettings({ size: () => [80, 50] }); });
   await page.waitForSelector('#bleSet');
-  await page.selectOption('#bsVia', 'ble'); await page.selectOption('#bsChunk', '180');
+  await page.selectOption('#bsVia', 'ble'); await page.click('#bleSet .b-adv summary'); await page.selectOption('#bsChunk', '180');
   await page.click('#bsConn'); await page.waitForFunction(() => /연결됨: MockLabel-BLE/.test(document.querySelector('#bsMsg').textContent));
   ok('설정 창에서 프린터 연결', true);
   await page.click('#bsTest'); await page.waitForFunction(() => /보냈어요/.test(document.querySelector('#bsMsg').textContent), null, { timeout: 15000 });
