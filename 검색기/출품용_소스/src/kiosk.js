@@ -179,8 +179,18 @@
 
   // ------------------------------------------------------------------ 상태
   var st, hist, root, main, idleT, warnT;
+  // 접수 메모 번호: 그날 001부터 차례로(같은 날 번호가 겹치지 않게). 저장이 막힌 브라우저는 무작위로
+  function nextNo() {
+    var KEY = 'zipfinder.kiosk.no', d = new Date(), day = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    try {
+      var o = JSON.parse(localStorage.getItem(KEY) || '{}');
+      var n = o.d === day ? (o.n || 0) + 1 : 1;
+      localStorage.setItem(KEY, JSON.stringify({ d: day, n: n }));
+      return ('00' + n).slice(-3);
+    } catch (e) { return String(Math.floor(Math.random() * 900) + 100); }
+  }
   function fresh() {
-    st = { entries: [], sender: null, cur: null, no: String(Math.floor(Math.random() * 900) + 100), trail: [] };
+    st = { entries: [], sender: null, cur: null, no: nextNo(), trail: [] };
     hist = [];
   }
   function newCur(kind) {
@@ -1006,7 +1016,7 @@
     var s = st.sender || {};
     var full = !!s.addr1;
     var head = (full ? ['보내는 분', '보내는 분 전화', '보내는 분 우편번호', '보내는 분 주소', '보내는 분 상세주소'] : [])
-      .concat(['받는 분', '받는 분 전화', '우편번호', '주소', '상세주소', '접수 확인']);
+      .concat(['받는 분', '받는 분 전화', '우편번호', '주소', '상세주소', '비고(접수 확인)']);   // 「비고」가 들어가야 메모 열로 알아보고 양식 비고에 「창구 확인 필요」가 남는다
     var memo = full ? '' : '보내는 분 ' + (s.name || '') + (s.phone ? ' ' + s.phone : '') + ' · 주소 창구 확인';
     var rows = st.entries.map(function (x) {
       var note = [x.check ? '창구 확인 필요' : '', memo].filter(Boolean).join(' / ');

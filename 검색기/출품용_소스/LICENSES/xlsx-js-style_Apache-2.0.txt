@@ -1,4 +1,5 @@
 xlsx-js-style 1.2.0 (SheetJS Community Edition 0.18.5 기반)
+수정 고지(Apache-2.0 4조 b항): 2026-10-18 물어물어 v1.9에서 XML 숫자 문자 참조(&#…;)를 풀 때 String.fromCharCode 대신 String.fromCodePoint를 쓰도록 두 곳을 고침(U+FFFF를 넘는 확장 한자·이모지가 다른 글자로 바뀌던 것). 그 밖은 원본 그대로.
 Copyright (C) SheetJS LLC, (C) gitbrent
 
 

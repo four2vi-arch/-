@@ -1061,15 +1061,39 @@
   ZipEngine.prototype._searchJibun = function (a, b, c, d) {
     var f;
     var g = null;
+    // 맞는 구간을 모두 본다(2026-10-18): 고시 자료에는 같은 번지가 우편번호가 다른 두 구간에 겹쳐 든 곳이 있다(282개 동, 768쌍).
+    // 가장 좁은 구간(한 번지 항목)을 먼저 쓰고, 번호가 둘 이상이면 multi로 알려 「정확」으로 확정하지 않게 한다.
+    var hits = [];
     for (f = 0; f < a.length; f += 6) {
       if (a[f] !== b) {
         continue;
       }
       if (cmpPair(a[f + 1], a[f + 2], c, d) <= 0 && cmpPair(c, d, a[f + 3], a[f + 4]) <= 0) {
-        return {
-          exact: true,
-          zip: a[f + 5]
-        };
+        hits.push({
+          zip: a[f + 5],
+          w: (a[f + 3] - a[f + 1]) * 100000 + ((a[f + 4] || 0) - (a[f + 2] || 0))
+        });
+      }
+    }
+    if (hits.length) {
+      hits.sort(function (x, y) {
+        return x.w - y.w;
+      });
+      var zs = [];
+      hits.forEach(function (x) {
+        if (zs.indexOf(x.zip) < 0) {
+          zs.push(x.zip);
+        }
+      });
+      return {
+        exact: true,
+        zip: hits[0].zip,
+        multi: zs.length > 1 ? zs : null
+      };
+    }
+    for (f = 0; f < a.length; f += 6) {
+      if (a[f] !== b) {
+        continue;
       }
       if (!g && a[f + 1] <= c && c <= a[f + 3]) {
         g = {
@@ -1370,7 +1394,8 @@
         if (p1.exact) {
           f1.push({
             g: b1[i],
-            zip: p1.zip
+            zip: p1.zip,
+            multi: p1.multi
           });
         } else if (p1.loose) {
           g1.push({
@@ -1394,6 +1419,8 @@
         s1.hitSggs = f1.length;
         if (r1) {
           d1 = makeResult("유사", "중", f1[0].zip, y + "같은 " + a1 + "·번지가 여러 시·군·구에 있음(" + this._sggList(f1) + ")", s1);
+        } else if (f1[0].multi) {
+          d1 = makeResult("유사", "중", f1[0].zip, y + "고시 자료에 이 번지의 우편번호가 " + f1[0].multi.length + "개(" + f1[0].multi.map(pad5).join("·") + ") · 가장 좁은 구간 기준, 창구 확인", s1);
         } else if (g) {
           d1 = makeResult("유사", z ? "중" : "상", f1[0].zip, y + "지번 일치", s1);
         } else {

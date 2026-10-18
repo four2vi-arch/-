@@ -687,6 +687,12 @@
       if (typeof a.v === "number" && Math.floor(a.v) === a.v && Math.abs(a.v) >= 10000000000 && Math.abs(a.v) < 10000000000000000 && (!a.w || !/[\/:\-년월]/.test(a.w))) {
         return String(a.v);
       }
+      if (a.w != null && /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(a.w) && typeof a.v === "number" && XLSX.SSF && XLSX.SSF.parse_date_code) {
+        var dc = XLSX.SSF.parse_date_code(a.v);   // 엑셀 기본 날짜 서식(미국식 1/5/26)은 2026-01-05로
+        if (dc && dc.y) {
+          return dc.y + "-" + ("0" + dc.m).slice(-2) + "-" + ("0" + dc.d).slice(-2);
+        }
+      }
       if (a.w != null) {
         return String(a.w);
       } else {
@@ -1055,6 +1061,19 @@
         for (var n = d1.a; n < d1.a + d1.len; n++) {
           x.addr.push(n);
         }
+      }
+    }
+    // 주소가 「시·도 시·군·구」 열과 나머지 열로 나뉜 명단(주소1=경상북도 성주군 | 주소2=선남면 문방2길 24, 2026-10-18): 바로 왼쪽 열이 지역 이름뿐이면 합친다
+    if (x.addr.length === 1 && x.addr[0] > 0) {
+      var lc = x.addr[0] - 1;
+      var lv = g.map(function (b2) {
+        return clean(b2[lc]);
+      }).filter(Boolean);
+      var reg = lv.filter(function (b2) {
+        return /^[가-힣]+(특별시|광역시|특별자치시|특별자치도|도|시)(\s+[가-힣]+(시|군|구)){0,2}$/.test(b2);
+      }).length;
+      if (lv.length >= 2 && reg >= lv.length * 0.7) {
+        x.addr = [lc, x.addr[0]];
       }
     }
     var h1 = v(/상세|나머지|주소\s*2|addr\w*\s*2|동\s*[\/·]?\s*호|호수|세부\s*주소|건물명|아파트명/i, y);
@@ -1467,6 +1486,7 @@
     var c = a.r;
     var d = a.old;
     var f = isKnownZip(d);
+    a.keptDiff = false;
     a.status = c.grade;
     a.conf = c.conf;
     a.note = c.note;
@@ -1475,7 +1495,8 @@
       if (b === "fill" && f) {
         a.zip = d;
         if (d !== c.zip) {
-          a.note += " · 기존 " + d + " 유지(검색값 " + c.zip + ")";
+          a.note += " · 기존 " + d + " 유지(검색값 " + c.zip + ") · 확인 필요";
+          a.keptDiff = true;   // 정확히 찾은 번호와 다른 기존 번호를 남겼다: 점검표·색 표시에 넣는다
         }
       } else if (d && d !== c.zip) {
         a.note += " · 기존 " + d + " → 교체";
@@ -1711,6 +1732,15 @@
         defaultSggs: [hint]
       });
       if (r.grade === "실패") {
+        return;
+      }
+      // 추정 지역에 철자 보정까지 겹치면 다른 도시의 비슷한 길로 바꿔치기한다(「옥천읍 응천길」→ 청주 「학천길」, 2026-10-18). 보정이 든 결과와,
+      // 적힌 읍·면 이름이 추정 지역 주소에 없는 결과는 쓰지 않는다
+      if (/보정/.test(String(r.note || ""))) {
+        return;
+      }
+      var emd = (String(v.addr || "") + " " + String(v.detail || "")).match(/[가-힣]{1,6}(읍|면)(?![가-힣])/g) || [];
+      if (emd.some(function (t) { return String(r.addr1 || "").indexOf(t) < 0; })) {
         return;
       }
       var label = S.engine.sggLabel(hint).split(" ").slice(1).join(" ") || S.engine.sggLabel(hint);
@@ -2044,6 +2074,9 @@
       return "";
     }
     var c = b.replace(/[^\d]/g, "");
+    if (/^\+?\s*82/.test(b) && /^82\d{8,10}$/.test(c)) {
+      c = "0" + c.slice(2).replace(/^0/, "");   // 국제 번호 +82 10-… → 010-…
+    }
     if (/^1\d{8,9}$/.test(c) || /^[2-6]\d{7,9}$/.test(c)) {
       c = "0" + c;
     }
@@ -2063,7 +2096,11 @@
     return b;
   }
   function isMobile(a) {
-    return /^01[016789]/.test(a.replace(/[^\d]/g, ""));
+    var d = String(a || "").replace(/[^\d]/g, "");
+    if (/^\+?\s*82/.test(String(a || "")) && /^82/.test(d)) {
+      d = "0" + d.slice(2).replace(/^0/, "");
+    }
+    return /^01[016789]/.test(d);
   }
   function readSenderForm() {
     return {
@@ -2224,6 +2261,9 @@
       case "addrFull":
         return [rec.addr1, rec.addr2].filter(Boolean).join(" ");
       case "addrStd":
+        if (a.status === "실패" && !a.edited) {
+          return [rec.addr1, rec.addr2].filter(Boolean).join(" ");   // 못 찾은 주소는 원문 그대로(첫 낱말을 시·도로 보고 지우지 않게)
+        }
         return standardAddress(rec.addr1, rec.addr2, a.r && a.status !== "실패" ? a.r.kind : "");
       case "phone":
         return p || h;
@@ -2245,7 +2285,8 @@
         // 양식1·2(창구 접수용)는 확인하지 않은 유사(추정) 주소에 비고 표시(2026-10-18). 업로드 양식(우체국쇼핑 등)의 메모는 배송 메시지라 건드리지 않는다
         var mv = g("memo");
         if (!mv && a.status === "유사" && !a.edited && (S.preset === "reg" || S.preset === "parcel")) {
-          return "확인 필요(유사 주소)";
+          var orig = clean([a.addr, a.detail].filter(Boolean).join(" "));
+          return "확인 필요(유사 주소" + (orig ? " · 원문 " + (orig.length > 40 ? orig.slice(0, 40) + "…" : orig) : "") + ")";
         }
         return mv;
       case "seq":
@@ -2354,9 +2395,22 @@
       sBad: 0,
       sBadRows: [],
       similar: 0,
-      similarRows: []
+      similarRows: [],
+      dup: 0,
+      dupRows: []
     };
+    var seenKey = {};
     S.rows.forEach(function (row) {
+      var dk = (S.cols.name >= 0 ? clean((S.aoa[row.i] || [])[S.cols.name]) : "") + "|" + clean(row.addr) + "|" + clean(row.detail);
+      if ((row.addr || row.detail) && dk.replace(/\|/g, "")) {
+        if (seenKey[dk]) {
+          W.dup++;
+          if (W.dupRows.length < 10) {
+            W.dupRows.push(row.i + 1);
+          }
+        }
+        seenKey[dk] = 1;
+      }
       if ((row.addr || row.detail) && row.status === "유사" && !row.edited) {
         W.similar++;
         if (W.similarRows.length < 10) {
@@ -2471,6 +2525,7 @@
     });
     var q = [];
     var r = [];
+    var rowMap = {};   // 원본 행 번호 → 내려받는 파일의 행 번호(못 찾은 행을 뺄 때 원본 숫자·날짜 서식을 제자리에 다시 입히려고)
     var s = qs("#chkSkipFail").checked;
     for (var i = 0; i < d.length; i++) {
       var t = d[i].slice();
@@ -2491,21 +2546,24 @@
       if (h >= 0) {
         t.splice(h, 0, w);
       } else if (u && !u.self) {
-        t[g] = u.zip;
+        t[g] = u.zip || (u.status === "실패" ? t[g] : u.zip);   // 못 찾은 행은 원본의 우편번호를 그대로 둔다(「원본 + 우편번호」)
       }
       var x = S.cols.sZip;
       if (x >= 0 && i !== f && u && u.s && u.s.zip) {
         t[h >= 0 && x >= h ? x + 1 : x] = u.s.zip;
       }
+ rowMap[i] = q.length;
       q.push(t.concat(v));
-      r.push(i === f ? "head" : u ? u.edited ? "edit" : u.status === "정확" ? "" : u.status === "유사" ? u.conf === "하" ? "sim2" : "sim" : "fail" : "");
+      r.push(i === f ? "head" : u ? u.edited ? "edit" : u.status === "정확" ? (u.keptDiff ? "sim" : "") : u.status === "유사" ? u.conf === "하" ? "sim2" : "sim" : "fail" : "");
     }
     if (f < 0) {}
     var y = {
       aoa: q,
       marks: r,
       zipCol: h >= 0 ? h : g,
-      extraFrom: S.ncol + (h >= 0 ? 1 : 0)
+      extraFrom: S.ncol + (h >= 0 ? 1 : 0),
+      rowMap: rowMap,
+      skipped: s
     };
     return y;
   }
@@ -2647,7 +2705,7 @@
     h.Props = {
       Title: d,
       Subject: "개인정보 포함",
-      Company: "우정사업본부",
+      Company: "",
       Author: APP.author,
       Manager: APP.author,
       Keywords: APP_CREDIT,
@@ -2679,9 +2737,11 @@
   }
   function overlayOriginalCells(a, b) {
     var c = S.wb && S.wb.Sheets[S.sheet];
-    if (!c || !c["!ref"] || qs("#chkSkipFail").checked) {
+    if (!c || !c["!ref"]) {
       return a;
     }
+    var rm = b.skipped ? b.rowMap || {} : null;   // 못 찾은 행을 뺐으면 행 번호를 옮겨 입힌다
+    var base = Math.max(0, S.headerIdx);
     var d = S.cols.zip >= 0 ? -1 : b.zipCol;
     Object.keys(c).forEach(function (f) {
       if (f.charAt(0) === "!") {
@@ -2699,8 +2759,16 @@
         return;
       }
       var p = d >= 0 && g.c >= d ? g.c + 1 : g.c;
+      var rr = g.r;
+      if (rm) {
+        var k = g.r - (S.aoaStart || 0);
+        if (!(k in rm)) {
+          return;
+        }
+        rr = rm[k] + (S.aoaStart || 0);
+      }
       var q = XLSX.utils.encode_cell({
-        r: g.r,
+        r: rr,
         c: p
       });
       var r = a[q] && a[q].s;
@@ -2716,7 +2784,7 @@
         a[q].s = r;
       }
     });
-    if (c["!merges"]) {
+    if (c["!merges"] && !rm) {
       a["!merges"] = c["!merges"].map(function (f) {
         function g(h) {
           if (d >= 0 && h >= d) {
@@ -2851,7 +2919,7 @@
       for (var p = 0; p < parts; p++) {
         files.push({
           rows: g.rows.slice(p * step, (p + 1) * step),
-          name: baseName() + q + tag + (parts > 1 ? "_" + (p + 1) : "")
+          name: baseName() + q + tag + (parts > 1 ? "_" + ("000" + (p + 1)).slice(-String(parts).length) : "")
         });
       }
     });
@@ -2896,6 +2964,25 @@
     } else if (W.nozip) {
       t.push("우편번호 없는 행이 " + fmtNum(W.nozip) + "건 들어 있습니다.");
     }
+    var longCells = 0;
+    if (a === "xls") {
+      g.rows.forEach(function (rw) {
+        (rw || []).forEach(function (v) {
+          if (String(v == null ? "" : v).length > 255) {
+            longCells++;
+          }
+        });
+      });
+    }
+    if (longCells) {
+      t.push("xls 형식은 한 칸에 255자까지만 들어가 " + fmtNum(longCells) + "칸이 잘렸습니다. 긴 주소가 있으면 xlsx를 고르세요.");
+    }
+    if (a === "csv") {
+      t.push("CSV를 엑셀로 바로 열면 우편번호·전화의 앞자리 0이 사라질 수 있습니다. 엑셀에서 쓰려면 xlsx를 고르세요.");
+    }
+    if (W.dup) {
+      t.push("받는 분·주소가 같은 행이 " + fmtNum(W.dup) + "건 있습니다(" + rowListText(W.dupRows, W.dup) + ") · 중복 발송인지 확인하세요.");
+    }
     if (W.similar) {
       t.push("비슷한 주소로 추정한(유사) 행 " + fmtNum(W.similar) + "건(" + rowListText(W.similarRows, W.similar) + ")은 접수 전에 주소를 확인하세요" + (S.preset === "reg" || S.preset === "parcel" ? "(비고에 「확인 필요」 표시)." : "(점검표로 모아 볼 수 있음)."));
     }
@@ -2908,7 +2995,7 @@
     if (files.length > 1) {
       t.push("브라우저가 여러 파일 내려받기를 물으면 「허용」을 누르세요.");
     }
-    setMsg(dlMsgEl, t.join(" "), W.nozip || W.similar || W.longName || W.noTel || W.sBad || W.empty || W.longSender ? "warn" : "ok");
+    setMsg(dlMsgEl, t.join(" "), W.nozip || W.similar || W.dup || longCells || W.longName || W.noTel || W.sBad || W.empty || W.longSender ? "warn" : "ok");
   }
   function suggestCandidates(f) {
     if (f.status === "정확" && !f.changed) {
@@ -2925,7 +3012,7 @@
   }
   function downloadReport() {
     var a = S.rows.filter(function (row) {
-      return row.status !== "정확" || row.changed;
+      return row.status !== "정확" || row.changed || row.keptDiff;
     });
     if (!a.length) {
       return setMsg(qs("#dlMsg"), "점검할 행이 없습니다. 모두 정확히 찾았습니다.", "ok");
