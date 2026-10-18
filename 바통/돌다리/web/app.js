@@ -25,7 +25,7 @@ function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); l
 const areaOf = it => it.area || '기타';
 const isSug = it => it.decided !== true && it.src !== '직접 입력';   // 아직 넣기·버리기를 누르지 않은 제안
 const kept = () => ITEMS.filter(i => i.keep && !isSug(i));
-const usedAreas = () => AREAS.concat(['기타']).filter(a => ITEMS.some(i => areaOf(i) === a));
+const usedAreas = () => { const conf = AREAS.concat(['기타']); const extra = [...new Set(ITEMS.map(areaOf))].filter(a => !conf.includes(a)).sort(); return conf.slice(0, -1).concat(extra, ['기타']).filter(a => ITEMS.some(i => areaOf(i) === a && (i.keep || isSug(i)))); };   // 버린 것만 남은 업무는 뺀다, 설정 밖 업무 이름도 보인다
 const issues = () => ITEMS.filter(i => i.kind3 === '현안');
 const recurs = () => ITEMS.filter(i => i.kind3 === '반복' || (i.kind3 === '현안' && i.recur));
 const fileName = f => String(f || '').split('/').pop();
@@ -37,6 +37,7 @@ async function refresh() {
   AREAS = (ST.areas_text || '').split('\n').map(l => l.split(/[:：]/)[0].trim()).filter(Boolean);
   OV = ST.overview || {}; ASSETS = ST.assets || {};
   if (ST.step >= 4 || ST.n_items) { const j = await api('/api/items'); ITEMS = j.items; } else ITEMS = [];   // 다시 만드는 동안에도 이전 초안을 볼 수 있게
+  setTimeout(fitTop, 0);
   $('#subline').textContent = (ST.folder ? ST.folder + ' · ' : '') + (ST.handover_from || ST.handover_to ? `인계자 ${ST.handover_from || '?'} → 인수자 ${ST.handover_to || '?'} · ` : '') + '이 PC 안에서만 작동';
   renderNav(); renderAside();
   const mb = $('#missBand'); if (mb) { mb.hidden = !(ST.missing && ST.missing.length); mb.textContent = (ST.missing || []).length ? `읽는 데 필요한 부품이 없습니다: ${(ST.missing || []).map(x => x.what + '(' + x.module + ')').join(', ')}. 이 형식은 「못 읽은 문서」로 남습니다. 휴대용 묶음(돌다리_실행.bat)을 쓰거나 「python -m pip install -r requirements.txt」를 실행하세요.` : ''; }
@@ -83,10 +84,10 @@ function renderNav() {
     if (!ITEMS.length) return '';
     const sugN = r => r.filter(isSug).length;
     if (id === 's1a') { const n = usedAreas().filter(a => (OV[a] || {}).desc).length; return n === usedAreas().length ? '<span class="st ok">작성</span>' : `<span class="st todo">${n}/${usedAreas().length}</span>`; }
-    if (id === 's1b') { const r = recurs(); const s = sugN(r); return s ? `<span class="st ai">제안 ${s}</span>` : `<span class="st ok">${r.filter(i => i.keep).length}건</span>`; }
-    if (id === 's1c') { const r = issues(); const s = sugN(r); return s ? `<span class="st ai">제안 ${s}</span>` : `<span class="st ok">${r.filter(i => i.keep && i.status !== '미결').length}건</span>`; }
+    if (id === 's1b') { const r = recurs(); const s = sugN(r); return s ? `<span class="st ai">확인 전 ${s}</span>` : `<span class="st ok">${r.filter(i => i.keep).length}건</span>`; }
+    if (id === 's1c') { const r = issues(); const s = sugN(r); return s ? `<span class="st ai">확인 전 ${s}</span>` : `<span class="st ok">${r.filter(i => i.keep && i.status !== '미결').length}건</span>`; }
     if (id === 's1d') { return `<span class="st">${issues().filter(i => i.keep && !isSug(i) && i.status === '미결').length}건</span>`; }
-    if (id === 's2') { const s = ITEMS.filter(i => i.kind3 === '문서' && isSug(i)).length; return s ? `<span class="st ai">제안 ${s}</span>` : `<span class="st ok">${kept().length}건</span>`; }
+    if (id === 's2') { const s = ITEMS.filter(i => i.kind3 === '문서' && isSug(i)).length; return s ? `<span class="st ai">확인 전 ${s}</span>` : `<span class="st ok">${kept().length}건</span>`; }
     if (id === 's3') { return AS.every(([k]) => (ASSETS[k] || '').trim()) ? '<span class="st ok">작성</span>' : '<span class="st todo">빈 칸</span>'; }
     if (id === 's4') { return `<span class="st">${contactsAll().length}명</span>`; }
     return '';
@@ -133,6 +134,10 @@ function card(it, o) {
   if (it.kind3 === '현안' && !sug && it.keep) chips.push(`<span class="chip st">${STATUS[it.status || '진행']}</span>`);
   if (ST.info && ST.info.manual && it.cls === '공문' && !it.reflected) chips.push('<span class="chip st" title="누적 매뉴얼에 이 문서번호·제목이 없음">★ 매뉴얼 미반영</span>');
   if (it.src === '모델') chips.push('<span class="chip">AI 요지</span>');
+  if (it.private) chips.push('<span class="chip st" title="멘토 면담·교육과제 같은 개인 문서로 보입니다. 넣지 않으면 결과물에 제목도 싣지 않습니다">개인 문서?</span>');
+  if (it.secret) chips.push('<span class="chip st" title="비밀번호·계정 줄이 있습니다. 원문 발췌에서는 가렸습니다">계정 정보 있음</span>');
+  if (it.bulk && !isSug(it)) chips.push('<span class="chip">일괄 넣음</span>');
+  if (it.status_by === '규칙' && it.status === '미결') chips.push('<span class="chip st" title="원문에 「회신 대기·결론 못 냄」 같은 말이 있어 미결로 제안">미결 제안</span>');
   let body = `<div class="t"><span class="d" ${it.date_src === '수정일' ? 'title="문서에 날짜가 없어 파일 수정일로 대신함"' : ''}>${esc(dateText(it))}</span><input class="text" data-k="title" value="${esc(it.title)}" ${ro ? 'disabled' : ''}>${it.docno ? `<span class="d">${esc(it.docno)}</span>` : ''}${chips.join('')}</div>`;
   if (it.summary) body += `<div class="s">요지: ${esc(it.summary)}</div>`;
   else if (it.quote) body += `<div class="s">원문: ${esc(it.quote)}</div>`;
@@ -143,9 +148,10 @@ function card(it, o) {
   body += `<div class="s">${it.file ? `<button class="ghost sm doc-open" data-f="${esc(it.file)}">원문 ▸</button> 파일: ` + esc(it.file) : '전임자가 직접 적음'}${it.attachments && it.attachments.length ? ' · 붙임 ' + it.attachments.length + '개' : ''}${who ? ' · 담당: ' + who : ''}${it.due && it.due.length > 1 ? ' · 기한 후보 ' + it.due.map(d => d.date).join(', ') : ''}</div>`;
   if (!sug && it.keep && !ro) body += `<input class="memo" data-k="note" value="${esc(it.note || '')}" placeholder="메모(후임자에게 남길 말)">`;
   if (ro && it.note) body += `<div class="s">메모: ${esc(it.note)}</div>`;
+  if (ro && it.keep) body += `<input class="memo" data-k="question" value="${esc(it.question || '')}" placeholder="전임자에게 물을 것(결과물 4절 「인수자 질문」에 실림)">`;
   let act = '';
-  if (ro) act = sug ? '<span class="chip">전임자 미확인</span>' : `<label><input type="checkbox" class="seen" ${it.seen ? 'checked' : ''}> 확인</label>`;
-  else if (sug) act = `<button class="y" data-act="in">넣기</button><button class="n" data-act="out">버리기</button>`;
+  if (ro) act = !it.keep && !sug ? '<span class="chip">전임자가 뺌</span>' : `${sug ? '<span class="chip">확인 전</span> ' : ''}<label><input type="checkbox" class="seen" ${it.seen ? 'checked' : ''}> 인수 확인</label>`;
+  else if (sug) act = `<button class="y" data-act="in">넣기</button><button class="n" data-act="out">버리기</button><select class="mini" data-k="area" data-autoin="1" title="업무를 바꾸면 넣기로 처리">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>`;
   else if (it.keep) act = `<button class="n" data-act="out">빼기</button>`;
   else act = `<button class="y" data-act="in">되살리기</button>`;
   if (!ro && !sug && it.keep) act += `<select class="mini" data-k="area" title="업무 바꾸기">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select><select class="mini" data-k="kind3" title="절 바꾸기">${KINDS.map(k => `<option ${it.kind3 === k ? 'selected' : ''}>${k}</option>`).join('')}</select>`;
@@ -154,8 +160,10 @@ function card(it, o) {
 function bindCards(root) {
   root.querySelectorAll('.sug[data-id], .trow[data-id]').forEach(el => {
     const id = +el.dataset.id; const it = ITEMS.find(i => i.id === id); if (!it) return;
-    el.querySelectorAll('[data-k]').forEach(inp => inp.onchange = () => { mark(id, inp.dataset.k, inp.value); if (inp.dataset.k === 'area' || inp.dataset.k === 'kind3') { renderNav(); renderAside(); } });   // 업무·절을 바꿔도 카드는 다음 화면 이동 때까지 제자리(바뀌어 사라진 줄 알던 것)
-    el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { const on = b.dataset.act === 'in'; mark(id, 'keep', on); mark(id, 'decided', true); rerender(); });
+    el.querySelectorAll('[data-k]').forEach(inp => inp.onchange = () => { mark(id, inp.dataset.k, inp.value); if (inp.dataset.autoin && isSug(it)) { mark(id, 'keep', true); mark(id, 'decided', true); } if (inp.dataset.k === 'area' || inp.dataset.k === 'kind3') { renderNav(); renderAside(); } });   // 업무·절을 바꿔도 카드는 다음 화면 이동 때까지 제자리(바뀌어 사라진 줄 알던 것)
+    el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { const on = b.dataset.act === 'in';
+      if (!on && it.kind3 === '현안' && it.recur && it.recur.years && confirm(`「${it.title}」은(는) 해마다 오는 업무입니다(${it.recur.years.join('·')}). 현안에서는 빼고 1-나 반복 업무로 남길까요?\n[확인] 반복 업무로 남김  [취소] 완전히 버림`)) { mark(id, 'kind3', '반복'); mark(id, 'keep', true); mark(id, 'decided', true); rerender(); return; }
+      mark(id, 'keep', on); mark(id, 'decided', true); rerender(); });
     const sn = el.querySelector('.seen'); if (sn) sn.onchange = () => { mark(id, 'seen', sn.checked); renderNav(); renderAside(); };
     const dv = el.querySelector('.doc-open'); if (dv) dv.onclick = () => toggleDoc(el, dv);
   });
@@ -171,7 +179,8 @@ async function toggleDoc(el, btn) {
     btn.textContent = '원문 ▾'; } catch (e) { alert(e.message); }
 }
 function dateText(it) { const d = String(it.date || ''); if (!d) return '날짜 없음'; if (it.date_src === '연도만') return d.slice(0, 4) + '년'; return d + (it.date_src === '수정일' ? '(수정일)' : ''); }
-function mark(id, k, v) { pending[id] = pending[id] || {id}; pending[id][k] = v; const it = ITEMS.find(i => i.id === id); if (it) { it[k] = v; if (k === 'area') it.area_by = '사람'; } clearTimeout(flushTimer); flushTimer = setTimeout(flush, 500); }
+let dirtyAfterExport = false;
+function mark(id, k, v) { dirtyAfterExport = true; pending[id] = pending[id] || {id}; pending[id][k] = v; const it = ITEMS.find(i => i.id === id); if (it) { it[k] = v; if (k === 'area') it.area_by = '사람'; } clearTimeout(flushTimer); flushTimer = setTimeout(flush, 500); }
 async function flush() {
   if (!Object.keys(pending).length) return;
   const body = {changes: Object.values(pending)}; pending = {};
@@ -181,7 +190,13 @@ window.addEventListener('beforeunload', () => { if (Object.keys(pending).length 
 function rerender() { renderNav(); renderMain(); renderAside(); }
 function bulkBtns(rows, label) {
   const s = rows.filter(isSug); if (!s.length || mode === 'take') return '';
-  return `<span class="r"><button class="ghost sm" data-bulk="in">${label || '남은 제안'} ${s.length}개 모두 넣기</button><button class="ghost sm" data-bulk="out">모두 버리기</button></span>`;
+  return `<span class="r"><button class="ghost sm" data-bulk="in" title="한꺼번에 넣은 것은 결과물에 [일괄 넣음]으로 표시됩니다">${label || '확인 전'} ${s.length}개 모두 넣기</button><button class="ghost sm" data-bulk="out">모두 버리기</button></span>`;
+}
+function areaOut(a, rows) { const n = rows.filter(isSug).length; return n && mode !== 'take' ? `<span class="r"><button class="ghost sm" data-areaout="${esc(a)}">이 업무 확인 전 ${n}개 버리기</button></span>` : ''; }
+function bindAreaOut(root, rowsFn) {
+  root.querySelectorAll('[data-areaout]').forEach(b => b.onclick = async () => { const a = b.dataset.areaout; const ids = rowsFn().filter(i => areaOf(i) === a && isSug(i)).map(i => i.id);
+    if (!confirm(`「${a}」의 확인 전 ${ids.length}개를 모두 버릴까요? (이미 넘긴 업무 등)`)) return;
+    try { const j = await api('/api/items', {changes: Object.values(pending), bulk: [{ids, keep: false}]}); pending = {}; ITEMS = j.items; rerender(); } catch (e) { alert(e.message); } });
 }
 function bindBulk(root, rowsFn) {
   root.querySelectorAll('[data-bulk]').forEach(b => b.onclick = async () => {
@@ -209,13 +224,13 @@ function triTable(rows, o) {
     if (it.recur && it.recur.years) chips.push(`<span class="chip cy">${it.recur.cycle === '매월' ? '매월' : '매년 ' + it.recur.month + '월'}</span>`);
     if (ST.info && ST.info.manual && it.cls === '공문' && !it.reflected) chips.push('<span class="chip st">★</span>');
     if (it.src === '모델') chips.push('<span class="chip">AI</span>');
-    const act = ro ? (sug ? '<span class="chip">미확인</span>' : `<label><input type="checkbox" class="seen" ${it.seen ? 'checked' : ''}> 확인</label>`)
-      : sug ? `<button class="y" data-act="in">넣기</button> <button class="n" data-act="out">버리기</button>` : it.keep ? `<button class="n" data-act="out">빼기</button>` : `<button class="y" data-act="in">되살리기</button>`;
+    const act = ro ? (!it.keep && !sug ? '<span class="chip">뺌</span>' : `<label><input type="checkbox" class="seen" ${it.seen ? 'checked' : ''}> 인수 확인</label><input class="text" data-k="question" value="${esc(it.question || '')}" placeholder="물을 것" style="margin-top:3px">`)
+      : sug ? `<button class="y" data-act="in">넣기</button> <button class="n" data-act="out">버리기</button>${it.private ? ' <span class="chip st">개인?</span>' : ''}${it.secret ? ' <span class="chip st">계정</span>' : ''}` : it.keep ? `<button class="n" data-act="out">빼기</button>` : `<button class="y" data-act="in">되살리기</button>`;
     return `<tr class="trow ${sug ? 'sugrow' : !it.keep ? 'offrow' : ''}" data-id="${it.id}"><td class="d">${esc(dateText(it))}</td><td><input class="text" data-k="title" value="${esc(it.title)}" ${ro ? 'disabled' : ''}><div class="s" title="${esc(it.file || '')}">${it.file ? `<button class="ghost sm doc-open" data-f="${esc(it.file)}">원문 ▸</button> ` : ''}${esc(it.cls || '')}${it.docno ? ' · ' + esc(it.docno) : ''} · ${esc(fileName(it.file))}${it.summary ? '<br>요지: ' + esc(it.summary) : it.quote ? '<br>원문: ' + esc(it.quote) : ''}</div></td>
       <td>${chips.join(' ')}</td>${o.issue ? `<td>${!sug && it.keep && !ro ? `<select class="mini" data-k="status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(it.status || '진행') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>` : esc(STATUS[it.status || '진행'])}<input class="when" data-k="due_next" value="${esc(it.due_next || '')}" placeholder="기한" style="width:100%;margin-top:3px" ${ro ? 'disabled' : ''}></td>` : ''}
       <td>${ro ? esc(it.todo || '') + (it.next ? '<br>다음: ' + esc(it.next) : '') : `<input class="text" data-k="todo" value="${esc(it.todo || '')}" placeholder="할 일">${o.issue ? `<input class="text" data-k="next" value="${esc(it.next || '')}" placeholder="다음에 할 일" style="margin-top:3px">` : ''}`}</td>
       <td class="act">${act}${!ro && !sug && it.keep ? `<select class="mini" data-k="area" title="업무">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select><select class="mini" data-k="kind3" title="절">${KINDS.map(k => `<option ${it.kind3 === k ? 'selected' : ''}>${k}</option>`).join('')}</select>` : ''}</td></tr>`; };
-  return `<table class="tri"><tr><th style="width:84px">날짜</th><th>문서</th><th style="width:52px"></th>${o.issue ? '<th style="width:124px">상태·기한</th>' : ''}<th style="width:23%">할 일${o.issue ? ' · 다음' : ''}</th><th style="width:118px"></th></tr>${rows.map(tr).join('')}</table>`;
+  return `<table class="tri"><tr><th style="width:84px">날짜</th><th style="min-width:38%">문서</th><th style="width:52px"></th>${o.issue ? '<th style="width:124px">상태·기한</th>' : ''}<th style="width:23%">할 일${o.issue ? ' · 다음' : ''}</th><th style="width:118px"></th></tr>${rows.map(tr).join('')}</table>`;
 }
 // 순서: 제안 먼저, 최근 것 먼저. 한 절 안에서는 넣기·버리기를 눌러도 줄이 제자리에 있게(다른 절로 갈 때 다시 정렬)
 let ORD = null;
@@ -244,6 +259,7 @@ function renderPrep(m) {
   if (f.length) {
     h += `<div class="pills"><span class="pill">읽은 문서 <b>${f.length}</b></span>${ST.n_ocr ? `<span class="pill">OCR로 읽음 <b>${ST.n_ocr}</b></span>` : ''}<span class="pill">못 읽은 문서 <b>${ST.n_fail || 0}</b></span><span class="pill">읽지 않는 형식 <b>${ST.n_skip || 0}</b></span><span class="pill">원본 변경 <b>${ST.originals_changed || 0}</b></span></div>`;
     if (ST.warn) h += `<div class="note">${esc(ST.warn)}</div>`;
+    if (ST.areas_src === '폴더') h += `<div class="note">업무를 맨 위 폴더 이름(${esc(AREAS.slice(0, 6).join(', '))}${AREAS.length > 6 ? ' …' : ''})으로 나눴습니다. 폴더가 업무별이 아니면(월별·종류별 등) <button class="ghost sm" id="btnKeyword">키워드로 나누기</button></div>`;
     if (ST.subdirs && ST.subdirs.length) { const ex = new Set(ST.exclude || []); h += `<details><summary>읽을 하위 폴더 고르기(${ST.subdirs.length - ex.size}/${ST.subdirs.length})</summary>` + ST.subdirs.map(d => `<label style="display:inline-flex;gap:4px;margin:2px 10px 2px 0"><input type="checkbox" class="sub" value="${esc(d)}" ${ex.has(d) ? '' : 'checked'}>${esc(d)}</label>`).join('') + `<div class="row"><button class="ghost sm" id="subAll">모두</button><button class="ghost sm" id="subNone">모두 해제</button><button class="ghost sm" id="btnReread">이 폴더들로 다시 읽기</button></div></details>`; }
   }
   h += `</div><div class="sec"><h3>② 초안 만들기</h3>`;
@@ -251,6 +267,7 @@ function renderPrep(m) {
   else {
     const p = ST.plan || {};
     h += `<div class="row"><label>기간 <select id="months">${[6, 12, 18, 24, 36].map(n => `<option value="${n}" ${(+ST.months || 12) === n ? 'selected' : ''}>최근 ${n}개월</option>`).join('')}</select></label><span class="s">업무마다 다르게 두려면 아래 「업무 키워드」 줄 끝에 「| 24개월」처럼 적습니다. 해마다 오는 업무는 기간과 상관없이 지난 3년 파일 날짜로 찾습니다.</span></div>`;
+    h += `<div class="s">기간 기준일 <b>${esc(p.base_date || '')}</b>(${esc(p.base_why || '')}). 인계 일자를 1-가에 적으면 그날 기준으로 다시 셉니다.${p.n_dupver ? ` 같은 파일 사본·이전 판 ${p.n_dupver}건은 최신 하나만 올립니다.` : ''}${p.n_private ? ` 개인 문서로 보이는 ${p.n_private}건은 현안으로 올리지 않습니다.` : ''}${p.n_secret ? ` <b style="color:var(--fail)">비밀번호·계정 줄이 든 문서 ${p.n_secret}건</b>(발췌에서 가림).` : ''}</div>`;
     h += `<div class="pills"><span class="pill">기간 안 문서 <b>${p.n_items || 0}</b></span><span class="pill">현안 후보 <b>${p.n_issue || 0}</b></span><span class="pill">반복 업무 <b>${p.n_recur || 0}</b></span><span class="pill">연혁 <b>${p.n_hist || 0}</b></span><span class="pill">현황 자료 <b>${p.n_status || 0}</b></span><span class="pill">그 밖의 문서 <b>${p.n_doc || 0}</b></span><span class="pill">기간 밖 <b>${p.n_old || 0}</b></span><span class="pill">붙임 <b>${p.n_attach || 0}</b></span></div>`;
     h += `<div class="row"><div class="seg" id="engineSeg"><button data-e="rules" class="${engine === 'rules' ? 'on' : ''}">규칙만 · 몇 초</button><button data-e="model" class="${engine === 'model' ? 'on' : ''}">AI 모델도 사용 · 요지·할 일 받기</button></div>
       <span id="modelRow" ${engine === 'model' ? '' : 'hidden'}><select id="model"><option value="">모델 고르기</option>${ST.model ? `<option value="${esc(ST.model)}" selected>${esc(ST.model)}</option>` : ''}</select> <input type="text" id="url" value="${esc(ST.url || '')}" style="width:280px"> <button class="ghost sm" id="btnModels">목록 새로고침</button>
@@ -264,12 +281,13 @@ function renderPrep(m) {
     h += `<details><summary>업무 키워드·기간 설정${ST.areas_src === '폴더' ? ' <span class="chip">폴더 이름으로 나눔</span>' : ''}</summary><div class="s" style="margin-top:8px">한 줄에 「업무 이름: 키워드, 키워드 | 기간」. 맨 위 폴더 이름이 업무 이름과 같으면 그 업무로, 아니면(미분류·서식 폴더 등) 제목·앞부분에 키워드가 많이 든 업무로 분류합니다. 기간을 안 적으면 위 기본 기간.</div><textarea id="areas" style="width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(ST.areas_text || '')}</textarea><div class="row"><button class="ghost sm" id="btnAreas">적용(다시 분류)</button><button class="ghost sm" id="btnAreasDefault">기본값으로</button></div></details>`;
   }
   h += '</div>';
-  if (ITEMS.length) { const nS = ITEMS.filter(isSug).length; h += `<div class="good">초안이 있습니다. 왼쪽 「1-가. 담당 업무」부터 차례로 채우세요. <button class="btn sm" id="goS1">서식으로</button>${nS && mode === 'give' ? ` <button class="ghost sm" id="btnAllIn">제안 ${nS}건 전부 넣기(나중에 「빼기」로 정리)</button>` : ''}</div>`; }
+  if (ITEMS.length) { const nS = ITEMS.filter(isSug).length; h += `<div class="good">초안이 있습니다. 왼쪽 「1-가. 담당 업무」부터 차례로 채우세요. <button class="btn sm" id="goS1">서식으로</button>${nS && mode === 'give' ? ` <button class="ghost sm" id="btnAllIn" style="font-size:.78rem">확인 전 ${nS}건 한꺼번에 넣기</button><span class="s"> (한꺼번에 넣은 것은 결과물에 [일괄 넣음]으로 표시)</span>` : ''}</div>`; }
   h += `<details><summary>처음 쓰는 분 · 다섯 단계</summary><div class="s" style="margin-top:6px">① 폴더를 읽고 「초안 만들기」(규칙만이면 몇 초). ② 1-가에서 인계자·인수자·입회자와 업무별 한 줄 설명. ③ 1-다 현안에서 넣기·버리기, 미결은 상태를 「미결」로. ④ 3절 물품·예산을 직접 적기. ⑤ 「인계·인수서 내려받기」 → docx는 서식에 맞추고 _온나라.txt는 칸마다 붙여 넣기. 넣기 전 제안도 「확인 전」으로 함께 실립니다.</div></details>`;
   m.innerHTML = h; bindPrep();
 }
 function bindPrep() {
   const g = $('#goS1'); if (g) g.onclick = () => { sec = 's1a'; rerender(); };
+  const kw = $('#btnKeyword'); if (kw) kw.onclick = async () => { try { await settings({areas_mode: 'keyword', areas_text: ''}); await refresh(); alert('업무를 키워드로 다시 나눴습니다. 필요하면 아래 「업무 키워드·기간 설정」에서 업무 이름과 키워드를 고치세요. 초안을 다시 만들면 반영됩니다.'); } catch (e) { alert(e.message); } };
   const ai = $('#btnAllIn'); if (ai) ai.onclick = async () => { const ids = ITEMS.filter(isSug).map(i => i.id); if (!confirm(`제안 ${ids.length}건을 모두 넣을까요? 필요 없는 것은 각 절에서 「빼기」로 정리하면 됩니다.`)) return;
     try { const j = await api('/api/items', {changes: Object.values(pending), bulk: [{ids, keep: true}]}); pending = {}; ITEMS = j.items; sec = 's1c'; rerender(); } catch (e) { alert(e.message); } };
   $('#btnExtract').onclick = () => doExtract($('#folder').value, []);
@@ -294,6 +312,7 @@ function bindPrep() {
 }
 async function settings(extra) {
   const body = Object.assign({}, extra || {});
+  if (Object.keys(body).some(k => ['overview', 'assets', 'handover_from', 'handover_to', 'witness', 'handover_date', 'org', 'areas_text'].includes(k))) dirtyAfterExport = true;
   const take = (sel, k, f) => { const el = $(sel); if (el) body[k] = f ? f(el) : el.value; };
   if (!('model' in body)) take('#model', 'model'); take('#url', 'url', el => el.value.trim()); take('#months', 'months', el => +el.value); take('#manualPath', 'manual_path', el => el.value.trim());
   if (engine === 'rules') body.model = '';
@@ -327,13 +346,17 @@ async function pkLoad(path) {
 function renderS1a(m) {
   const used = usedAreas(); const ro = mode === 'take';
   let h = head('1-가. 담당 업무', '인계자·인수자·입회자(바로 위 상급자)와 일자를 적고, 업무마다 한 줄 설명과 조심할 것을 적습니다. 숫자는 문서에서 센 것입니다.');
-  h += `<div class="q"><div class="row"><label>인계자 <input type="text" id="hFrom" value="${esc(ST.handover_from || '')}" placeholder="이름(직급)" ${ro ? 'disabled' : ''}></label><label>인수자 <input type="text" id="hTo" value="${esc(ST.handover_to || '')}" placeholder="이름(직급)" ${ro ? 'disabled' : ''}></label><label>입회자 <input type="text" id="hWit" value="${esc(ST.witness || '')}" placeholder="바로 위 상급자" ${ro ? 'disabled' : ''}></label><label>일자 <input type="text" id="hDate" value="${esc(ST.handover_date || '')}" placeholder="YYYY-MM-DD" style="width:130px" ${ro ? 'disabled' : ''}></label><label>소속 <input type="text" id="hOrg" value="${esc(ST.org || '')}" placeholder="예) 정읍우체국 영업과 우편영업실" style="width:260px" ${ro ? 'disabled' : ''}></label></div></div>`;
-  h += '<div class="sec"><h3>업무별 설명 <span class="chip">키워드로 나눈 것 · 준비 화면에서 고칠 수 있음</span></h3>' + used.map(a => { const r = ITEMS.filter(i => areaOf(i) === a); const c = completeness(a); const ov = OV[a] || {}; const n = k => r.filter(i => i.kind3 === k && i.keep && !isSug(i)).length;
+  h += `<div class="q"><div class="row"><label>인계자 <input type="text" id="hFrom" value="${esc(ST.handover_from || '')}" placeholder="이름(직급)" ${ro ? 'disabled' : ''}></label><label>인수자 <input type="text" id="hTo" value="${esc(ST.handover_to || '')}" placeholder="이름(직급)" ${ro ? 'disabled' : ''}></label><label>입회자 <input type="text" id="hWit" value="${esc(ST.witness || '')}" placeholder="바로 위 상급자" ${ro ? 'disabled' : ''}></label><label>일자 <input type="text" id="hDate" value="${esc(ST.handover_date || '')}" placeholder="YYYY-MM-DD" style="width:130px" ${ro ? 'disabled' : ''}></label><label>소속 <input type="text" id="hOrg" value="${esc(ST.org || '')}" placeholder="예) ○○우체국 ○○과" style="width:260px" ${ro ? 'disabled' : ''}></label></div></div>`;
+  h += `<div class="sec"><h3>업무별 설명 <span class="chip">${ST.areas_src === '폴더' ? '맨 위 폴더 이름으로 나눈 것' : '키워드로 나눈 것'} · 준비 화면에서 고칠 수 있음</span></h3>` + used.map(a => { const r = ITEMS.filter(i => areaOf(i) === a); const c = completeness(a); const ov = OV[a] || {}; const n = k => r.filter(i => i.kind3 === k && i.keep && !isSug(i)).length; const sN = r.filter(isSug).length;
     const hist = r.filter(i => i.kind3 === '연혁' || i.hist).sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
     const stat = r.filter(i => i.kind3 === '현황');
-    return `<div class="q"><div class="qt">${esc(a)} <span class="chip">현안 ${n('현안')} · 반복 ${n('반복')} · 연혁 ${hist.length} · 현황 ${stat.length} · 문서 ${r.filter(i => i.keep && !isSug(i)).length}</span> ${c.done ? '<span class="st ok">작성</span>' : c.sug ? `<span class="st ai">제안 ${c.sug}</span>` : ''}</div><input data-ov="desc" data-a="${esc(a)}" value="${esc(ov.desc || '')}" placeholder="이 업무가 무엇인지 한 줄 (예: 요금후납 계약 체결·갱신·미납 관리)" ${ro ? 'disabled' : ''}><input data-ov="tip" data-a="${esc(a)}" value="${esc(ov.tip || '')}" placeholder="자주 틀리거나 조심할 것 (예: 미납 2개월째 업체는 발송 정지 전에 유선 통보)" style="margin-top:6px" ${ro ? 'disabled' : ''}>${hist.length || stat.length ? `<details ${hist.filter(isSug).length || stat.filter(isSug).length ? 'open' : ''}><summary>연혁 ${hist.length}건 · 현황 자료 ${stat.length}건 ${bulkBtns(hist.concat(stat), '연혁·현황 제안')}</summary>${hist.map(i => card(i)).join('')}${stat.map(i => card(i)).join('')}</details>` : ''}</div>`; }).join('') + '</div>';
+    return `<div class="q"><div class="qt">${esc(a)} <span class="chip">넣음: 현안 ${n('현안')} · 반복 ${n('반복')} · 문서 ${r.filter(i => i.keep && !isSug(i)).length}${sN ? ' · 확인 전 ' + sN : ''}</span> ${c.done ? '<span class="st ok">작성</span>' : c.sug ? `<span class="st ai">확인 전 ${c.sug}</span>` : ''}${!ro ? ` <button class="ghost sm" data-gone="${esc(a)}" title="앞서 다른 사람에게 넘긴 업무: 남은 확인 전 제안을 모두 버리고 1-가에 「인계 완료」 한 줄만 남깁니다">이미 넘긴 업무</button>` : ''}</div>${ov.gone ? `<div class="s">[인계 완료] ${esc(ov.gone)}</div>` : ''}<input data-ov="desc" data-a="${esc(a)}" value="${esc(ov.desc || '')}" placeholder="이 업무가 무엇인지 한 줄 (예: 요금후납 계약 체결·갱신·미납 관리)" ${ro ? 'disabled' : ''}><input data-ov="tip" data-a="${esc(a)}" value="${esc(ov.tip || '')}" placeholder="자주 틀리거나 조심할 것 (예: 미납 2개월째 업체는 발송 정지 전에 유선 통보)" style="margin-top:6px" ${ro ? 'disabled' : ''}>${hist.length || stat.length ? `<details ${hist.filter(isSug).length || stat.filter(isSug).length ? 'open' : ''}><summary>연혁 ${hist.length}건 · 현황 자료 ${stat.length}건 ${bulkBtns(hist.concat(stat), '연혁·현황 제안')}</summary>${hist.map(i => card(i)).join('')}${stat.map(i => card(i)).join('')}</details>` : ''}</div>`; }).join('') + '</div>';
   h += '<div class="s">연혁은 제목에 협약·계약·개정·변경·도입·종료·이관·지정·시범 같은 전환점 말이 있거나 옛 인수인계서·누적 매뉴얼에 든 문서입니다. 기간 밖이어도 업무마다 최근 12건까지 올립니다. 현황 자료는 대장·현황·명단·실적 파일의 최신판입니다. 그 밖의 기간 밖 문서는 내보내기의 붙임 1에 업무·연도별 제목으로 실립니다.</div>';
   m.innerHTML = h; bindCopy(); bindCards(m); bindBulk(m, b => { const q = b.closest('.q'); const a = q.querySelector('input[data-ov="desc"]').dataset.a; return ITEMS.filter(i => areaOf(i) === a && (i.kind3 === '연혁' || i.hist || i.kind3 === '현황')); });
+  m.querySelectorAll('[data-gone]').forEach(b => b.onclick = async () => { const a = b.dataset.gone;
+    const who = prompt(`「${a}」을(를) 이미 누구에게 넘겼나요? 예) 2026. 5. 1. 박○○ 주무관에게 인계\n(이 업무의 확인 전 제안 ${ITEMS.filter(i => areaOf(i) === a && isSug(i)).length}건은 모두 버립니다)`, (OV[a] || {}).gone || ''); if (who === null) return;
+    OV[a] = Object.assign({}, OV[a] || {}, {gone: who.trim()});
+    try { await settings({overview: OV}); const ids = ITEMS.filter(i => areaOf(i) === a && isSug(i)).map(i => i.id); const j = await api('/api/items', {changes: Object.values(pending), bulk: ids.length ? [{ids, keep: false, area_done: true}] : []}); pending = {}; ITEMS = j.items; rerender(); } catch (e) { alert(e.message); } });
   const sv = () => settings({handover_from: $('#hFrom').value, handover_to: $('#hTo').value, witness: $('#hWit').value, handover_date: $('#hDate').value, org: $('#hOrg').value}).then(() => renderNav()).catch(e => alert(e.message));
   ['#hFrom', '#hTo', '#hWit', '#hDate', '#hOrg'].forEach(s => $(s).onchange = sv);
   m.querySelectorAll('input[data-ov]').forEach(t => t.onchange = async () => { const a = t.dataset.a; OV[a] = Object.assign({}, OV[a] || {}, {[t.dataset.ov]: t.value}); try { await settings({overview: OV}); ST.overview = OV; renderNav(); renderAside(); } catch (e) { alert('저장 실패: ' + e.message); } });
@@ -359,10 +382,10 @@ function renderS1b(m) {
 function renderS1c(m) {
   const rows = issues().filter(i => isSug(i) || i.status !== '미결');
   let h = head('1-다. 현안사항 및 문제점', '기한이 남았거나 최근에 온 문서, 미결·보류 같은 말이 든 문서입니다. 넣기 → 상태·다음에 할 일 한 줄. 「미결」로 두면 1-라로 갑니다.', bulkBtns(rows) + viewSeg());
-  for (const a of usedAreas()) { const r = rows.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건${r.filter(isSug).length ? ' · 제안 ' + r.filter(isSug).length : ''}</span></h3>` + (view === 'table' ? triTable(sortRows(r), {issue: true}) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
+  for (const a of usedAreas()) { const r = rows.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건${r.filter(isSug).length ? ' · 확인 전 ' + r.filter(isSug).length : ''}</span>${areaOut(a, r)}</h3>` + (view === 'table' ? triTable(sortRows(r), {issue: true}) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
   if (!rows.length) h += '<div class="s">현안 후보가 없습니다. 아래에서 직접 적을 수 있습니다.</div>';
   h += addRow('현안');
-  m.innerHTML = h; bindCards(m); bindBulk(m, () => rows); bindAdd('현안'); bindCopy(); bindView(m);
+  m.innerHTML = h; bindCards(m); bindBulk(m, () => rows); bindAreaOut(m, () => rows); bindAdd('현안'); bindCopy(); bindView(m);
 }
 // --- 1-라. 미결
 function renderS1d(m) {
@@ -377,13 +400,15 @@ function renderS2(m) {
   const rows = ITEMS;
   let h = head('2. 관련 문서 현황', `최근 ${ST.months || 12}개월 문서를 업무별로. 현안·반복으로 간 것도 함께 실립니다(여기서 버리면 1-다·1-나에서도 빠집니다). ${info.manual ? `누적 매뉴얼 「${esc(fileName(info.manual))}」(문서번호 ${info.manual_refs}개)에 없는 공문은 ★ 표시.` : '폴더에 누적 매뉴얼(이름에 「매뉴얼」)이 있으면 반영 여부를 대조합니다.'} 기간 밖 문서 ${info.n_old || 0}건은 폴더에 그대로 둡니다.`, bulkBtns(rows, '이 절의 제안'));
   h = h.replace('</p>', '</p>' + (mode === 'take' ? '' : `<div class="row">${viewSeg().replace('class="r"', '')}</div>`));
-  for (const a of usedAreas()) { const r = ITEMS.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건</span></h3>` + (view === 'table' ? triTable(sortRows(r)) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
+  for (const a of usedAreas()) { const r = ITEMS.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건</span>${areaOut(a, r)}</h3>` + (view === 'table' ? triTable(sortRows(r)) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
   h += addRow('문서');
-  m.innerHTML = h; bindCards(m); bindBulk(m, () => rows); bindAdd('문서'); bindCopy(); bindView(m);
+  m.innerHTML = h; bindCards(m); bindBulk(m, () => rows); bindAreaOut(m, () => ITEMS); bindAdd('문서'); bindCopy(); bindView(m);
 }
 // --- 3. 물품·예산
 function renderS3(m) {
-  m.innerHTML = head('3. 주요 물품 및 예산 등', '문서에서 찾을 수 없어 전임자가 직접 적는 칸입니다. 서식의 필수 항목입니다.') + AS.map(([k, q, ex]) => `<div class="q"><div class="qt">${q}</div><textarea data-as="${k}" ${mode === 'take' ? 'disabled' : ''}>${esc(ASSETS[k] || '')}</textarea>${ASSETS[k] ? '' : `<div class="ex">${esc(ex)}</div>`}</div>`).join('');
+  const hints = (ST.info && ST.info.asset_hints) || {};
+  m.innerHTML = head('3. 주요 물품 및 예산 등', '전임자가 직접 적는 칸입니다(서식의 필수 항목). 문서에서 관련 있어 보이는 줄을 아래에 참고로 보여 드립니다. 「넣기」를 누르면 칸에 덧붙습니다.') + AS.map(([k, q, ex]) => `<div class="q"><div class="qt">${q}</div><textarea data-as="${k}" ${mode === 'take' ? 'disabled' : ''}>${esc(ASSETS[k] || '')}</textarea>${ASSETS[k] ? '' : `<div class="ex">${esc(ex)}</div>`}${(hints[k] || []).length && mode !== 'take' ? `<details><summary>문서에서 찾은 관련 줄 ${hints[k].length}개(참고)</summary>${hints[k].map((x, i) => `<div class="s" style="margin:3px 0"><button class="ghost sm" data-hint="${k}" data-i="${i}">넣기</button> ${esc(x.line)} <span style="color:var(--ink3)">· ${esc(fileName(x.file))}</span></div>`).join('')}</details>` : ''}</div>`).join('');
+  m.querySelectorAll('[data-hint]').forEach(b => b.onclick = () => { const k = b.dataset.hint, x = hints[k][+b.dataset.i]; const t = m.querySelector(`textarea[data-as="${k}"]`); t.value = (t.value ? t.value + '\n' : '') + x.line; t.onchange(); b.disabled = true; });
   bindCopy();
   m.querySelectorAll('textarea[data-as]').forEach(t => t.onchange = async () => { ASSETS[t.dataset.as] = t.value; try { await settings({assets: ASSETS}); ST.assets = ASSETS; renderNav(); } catch (e) { alert('저장 실패: ' + e.message); } });
 }
@@ -418,6 +443,8 @@ $('#q').oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(async () => 
 
 // ---------------------------------------------------------------- 머리글: 모드·글자·인쇄·내보내기
 $('#modeSeg').querySelectorAll('button').forEach(b => b.onclick = () => { mode = b.dataset.m; ls('mode', mode); $$('#modeSeg button').forEach(x => x.classList.toggle('on', x === b)); rerender(); });
+function fitTop() { const t = document.querySelector('.top'); if (!t) return; const hgt = t.offsetHeight; document.documentElement.style.setProperty('--toph', hgt + 'px'); }
+window.addEventListener('resize', fitTop);
 function applyPrefs() { document.documentElement.style.setProperty('--s', String(+(ls('fs') || 1))); const t = ls('theme'); if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
 $('#fsup').onclick = () => { ls('fs', Math.min(1.4, +(ls('fs') || 1) + 0.1).toFixed(2)); applyPrefs(); };
 $('#fsdn').onclick = () => { ls('fs', Math.max(0.8, +(ls('fs') || 1) - 0.1).toFixed(2)); applyPrefs(); };
@@ -431,13 +458,19 @@ $('#btnExport').onclick = async () => {
   if (who.length) warn.push(`· ${who.join('·')} 이름이 비어 있습니다(1-가 맨 위)`);
   const nS = ITEMS.filter(i => i.keep && isSug(i)).length; if (nS) warn.push(`· 아직 넣기·버리기를 안 누른 제안 ${nS}건이 「[확인 전]」 표시로 함께 실립니다`);
   const nA = AS.filter(([k]) => !(ASSETS[k] || '').trim()).length; if (nA) warn.push(`· 3절 물품·예산 ${nA}칸이 「(적지 않음)」으로 나갑니다`);
+  const nD = usedAreas().filter(a => !((OV[a] || {}).desc || (OV[a] || {}).gone || '').trim()).length; if (nD) warn.push(`· 1-가 업무 설명이 빈 업무 ${nD}개(「(적지 않음)」으로 나감)`);
+  const nT = ITEMS.filter(i => i.kind3 === '현안' && i.keep && !(i.todo || '').trim() && !(i.next || '').trim()).length; if (nT) warn.push(`· 1-다 할 일·다음이 빈 현안 ${nT}건(인수자가 무엇을 할지 모름)`);
+  const nB = ITEMS.filter(i => i.keep && i.bulk).length; if (nB) warn.push(`· 한꺼번에 넣은 ${nB}건은 [일괄 넣음]으로 표시됩니다`);
+  const nP = ITEMS.filter(i => i.keep && !isSug(i) && i.private).length; if (nP) warn.push(`· 개인 문서로 보이는 ${nP}건을 넣었습니다: ${ITEMS.filter(i => i.keep && !isSug(i) && i.private).slice(0, 4).map(i => i.title).join(', ')}`);
+  const nS2 = ITEMS.filter(i => i.keep && i.secret).length; if (nS2) warn.push(`· 비밀번호·계정 줄이 든 문서 ${nS2}건(발췌에서는 가렸지만 원문을 확인하세요)`);
   if (warn.length && !confirm('내보내기 전에 확인하세요.\n\n' + warn.join('\n') + '\n\n이대로 만들까요? (나중에 고쳐서 다시 내보낼 수 있습니다)')) return;
-  try { await api('/api/export', {}); ST = await api('/api/state'); showExports(); window.scrollTo(0, 0); } catch (e) { alert(e.message); }
+  try { await api('/api/export', {}); ST = await api('/api/state'); dirtyAfterExport = false; showExports(); window.scrollTo(0, 0); } catch (e) { alert(e.message); }
 };
 function exportsHtml() {
   const files = ST.exports || []; if (!files.length) return '';
   const link = n => `<a href="/api/download?name=${encodeURIComponent(n)}">${esc(n)}</a>`;
   const docx = files.find(n => n.endsWith('.docx')), rest = files.filter(n => n !== docx);
+  if (dirtyAfterExport) return `<div class="note" id="exportBox"><b>내려받은 뒤 고친 내용이 있습니다.</b> 예전 파일(${esc(files[0] || '')})에는 반영되지 않았으니 오른쪽 위 「인계·인수서 내려받기」를 다시 누르세요. <button class="ghost sm" id="btnOpenWork">작업 폴더 열기</button></div>`;
   return `<div class="good" id="exportBox"><b>업무인계·인수서를 만들었습니다.</b> ${docx ? `<a class="btn sm" style="text-decoration:none" href="/api/download?name=${encodeURIComponent(docx)}">워드 파일(.docx) 받기</a>` : ''} <button class="ghost sm" id="btnOpenWork">작업 폴더 열기</button>
     <div class="s" style="margin-top:6px">.docx는 한글·워드에서 열어 서식에 붙입니다. 그 밖의 파일: ${rest.map(link).join(' · ')} (_온나라.txt는 온나라 칸마다 붙여 넣는 글, _원본지문.csv는 원본이 바뀌지 않았다는 증빙). 위치: ${esc(ST.work || '')}</div></div>`;
 }

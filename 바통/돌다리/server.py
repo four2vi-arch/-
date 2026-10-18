@@ -17,7 +17,7 @@ import ocr
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '3.6 (2026-10-18)'
+VERSION = '3.7 (2026-10-18)'
 MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '$RECYCLE.BIN', 'System Volume Information'}   # 돌다리 작업 폴더는 이름이 아니라 실제 경로(WORK)로 뺀다(업무 폴더 안 「작업」 폴더는 읽는다)
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4,6}(_\d+)?(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
@@ -193,7 +193,7 @@ def do_extract(folder, exclude=None):
         if not files:
             STATE['extract_error'] = ('이 폴더(하위 폴더 포함)에서 읽을 수 있는 문서를 찾지 못했습니다.' + (' 못 읽은 파일 %d개의 사유는 4절 「확인하지 못한 자료」에 있습니다.' % len(failures) if failures else ' 폴더가 비어 있습니다.') + ' 업무 폴더를 다시 고르세요.')
         fa = docs.folder_areas(files)   # 맨 위 폴더가 업무 이름이면 그것으로 업무를 나눈다(사용자가 키워드를 손본 뒤에는 그대로 둔다)
-        if fa and STATE.get('areas_src') in (None, '', '기본', '폴더'):
+        if fa and STATE.get('areas_src') in (None, '', '기본', '폴더') and STATE.get('areas_mode') != 'keyword':
             STATE['areas'] = fa; STATE['areas_src'] = '폴더'
             log('업무를 폴더 이름으로 나눕니다: %d개' % len(fa))
         STATE['plan'] = make_plan()
@@ -211,19 +211,28 @@ def checkpoint_info():
 
 
 def _files_with_units():
-    return [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mtime': f.get('mtime', ''), 'units': _units.get(f['file'], [])} for f in STATE['files']]
+    sha = {x['file']: x.get('sha256_before', '') for x in STATE.get('fingerprints') or []}   # 같은 파일 사본을 한 항목으로 묶는 데 쓴다
+    return [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mtime': f.get('mtime', ''), 'units': _units.get(f['file'], []), 'sha': sha.get(f['file'], '')} for f in STATE['files']]
+
+
+def _base():
+    files = _files_with_units()
+    return files, docs.base_date(files, STATE.get('handover_date') or '')
 
 
 def make_plan():
     """문서 단위 계획(v3): 기간 안 문서·현안 후보·반복 업무·모델 호출 수. 글자가 아직 안 읽혔으면(되읽기 중) 이름·수정일만으로 센다."""
-    return docs.plan_summary(_files_with_units(), STATE.get('areas') or core.DEFAULT_AREAS, int(STATE.get('months') or 12), STATE.get('model_scope') or 'issues', avg_sec=STATE['avg_sec'])
+    files, (bd, why) = _base()
+    p = docs.plan_summary(files, STATE.get('areas') or core.DEFAULT_AREAS, int(STATE.get('months') or 12), STATE.get('model_scope') or 'issues', avg_sec=STATE['avg_sec'], today=bd)
+    p['base_why'] = why
+    return p
 
 
 def run_draft():
-    files = _files_with_units()
+    files, (bd, bwhy) = _base()
     t0 = time.time()
     fa = docs.folder_areas(files)
-    if fa and STATE.get('areas_src') in (None, '', '기본', '폴더') and [a['name'] for a in fa] != [a['name'] for a in (STATE.get('areas') or [])]:
+    if fa and STATE.get('areas_src') in (None, '', '기본', '폴더') and STATE.get('areas_mode') != 'keyword' and [a['name'] for a in fa] != [a['name'] for a in (STATE.get('areas') or [])]:
         with LOCK:
             STATE['areas'] = fa; STATE['areas_src'] = '폴더'
         log('업무를 폴더 이름으로 나눕니다: %d개' % len(fa))
@@ -248,7 +257,8 @@ def run_draft():
                 log('누적 매뉴얼 파일이 없습니다: ' + mp)
         items, calls, errors, info = docs.build_docs(files, STATE.get('areas') or core.DEFAULT_AREAS, int(STATE.get('months') or 12), STATE['model'] or 'none', STATE['url'], '',
                                                       STATE.get('model_scope') or 'issues', MAX_CHARS3, progress=progress, should_stop=lambda: STATE['stop'],
-                                                      checkpoint=os.path.join(WORK, CHECKPOINT), folder=STATE['folder'], prev_items=STATE['items'] or STATE.get('prev_items') or [], manual=manual)
+                                                      checkpoint=os.path.join(WORK, CHECKPOINT), folder=STATE['folder'], prev_items=STATE['items'] or STATE.get('prev_items') or [], manual=manual, today=bd)
+        info['base_why'] = bwhy
         n_reused = sum(1 for c in calls if c.get('reused'))
         if n_reused:
             log('이전 회차의 모델 응답 %d회를 다시 부르지 않고 재사용' % n_reused)
@@ -451,7 +461,7 @@ class H(BaseHTTPRequestHandler):
             full = os.path.realpath(os.path.join(WORK, name))
             if not name or os.path.dirname(full) != os.path.realpath(WORK) or not os.path.exists(full):
                 return self._send(404, {'error': '없음'})
-            ctype = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' if name.endswith('.docx') else 'text/markdown; charset=utf-8'
+            ctype = {'.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.csv': 'text/csv; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.json': 'application/json'}.get(os.path.splitext(name)[1].lower(), 'text/markdown; charset=utf-8')
             with open(full, 'rb') as f:
                 return self._send(200, f.read(), ctype, {'Content-Disposition': "attachment; filename*=UTF-8''" + urllib.parse.quote(name)})
         return self._send(404, {'error': '없는 주소'})
@@ -498,7 +508,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:
-                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path', 'ocr', 'ocr_pages', 'ocr_images'):
+                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path', 'ocr', 'ocr_pages', 'ocr_images', 'areas_mode'):
                     if k in body:
                         STATE[k] = body[k]
                 if 'areas_text' in body:
@@ -548,9 +558,13 @@ class H(BaseHTTPRequestHandler):
                     it = by_id.get(ch.get('id'))
                     if not it:
                         continue
-                    for k in ('keep', 'decided', 'status', 'next', 'note', 'seen'):
+                    for k in ('keep', 'decided', 'status', 'next', 'note', 'seen', 'question'):
                         if k in ch:
                             it[k] = ch[k]
+                    if 'keep' in ch or 'decided' in ch:
+                        it['bulk'] = False   # 하나씩 고른 것은 「일괄 넣음」이 아니다
+                    if 'status' in ch or 'next' in ch:
+                        it['status_by'] = '사람'
                     for k in ('due_next', 'summary', 'when'):   # 사람이 고친 표시를 남긴다(초안을 다시 만들어도 잃지 않게)
                         if k in ch:
                             it[k] = ch[k]; it[k + '_by'] = '사람'
@@ -565,7 +579,7 @@ class H(BaseHTTPRequestHandler):
                     for i in b.get('ids', []):
                         it = by_id.get(i)
                         if it is not None:
-                            it['keep'] = bool(b.get('keep')); it['decided'] = True
+                            it['keep'] = bool(b.get('keep')); it['decided'] = True; it['bulk'] = bool(b.get('keep')) and not b.get('area_done')   # 일괄 넣기는 결과물에 「일괄 넣음」으로 남긴다
                 for new in body.get('add', []):
                     nid = max([0] + [it['id'] for it in STATE['items']]) + 1
                     d_in, w_in = str(new.get('date', '')).strip(), str(new.get('when', '')).strip()

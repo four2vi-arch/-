@@ -44,6 +44,12 @@ with zipfile.ZipFile(z, 'w') as zf:
     zf.writestr('제출목록.txt', '제출 목록\n12월 5일까지 보완 요청')
     zf.writestr('매대사진목록.txt', '매대 사진 목록\n보류')
 w('소포/=1+2.txt', '수식처럼 보이는 이름의 메모 보류')
+# v3.7(인계자·인수자 모의 심사)
+w('2025.11/활성화 방안 보고_v1.txt', '제목: 활성화 방안 보고\n초안 1차')
+w('2025.11/활성화 방안 보고_최종.txt', '제목: 활성화 방안 보고\n최종본 11월 30일까지 국장님 보고')
+w('요금후납/20261005_계정메모.txt', '판매자센터 아이디: kim_01 비번: abcd1234\n11월 3일까지 비번 변경 필요')
+w('소포/20261006_멘토 면담 기록.txt', '가족 사정(부모님 병환)으로 10월 30일까지 보직 희망서 제출')
+w('요금후납/20261007_월간업무.txt', '매월 5일까지 전월 후납 실적 보고 바람')
 
 srv = subprocess.Popen([sys.executable, '-B', os.path.join(ROOT, 'server.py'), '--port', str(PORT), '--work', OUT, '--no-browser'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 BASE = 'http://127.0.0.1:%d' % PORT
@@ -122,8 +128,23 @@ try:
     csvp = os.path.join(OUT, [f for f in files if f.endswith('_원본지문.csv')][0]); csv = open(csvp, encoding='utf-8-sig').read()
     check('원본지문: 읽은 뒤 바뀐 원본을 「아니오」로 잡음', re.search(r'할일\.md",\d+,\w+,\w+,아니오', csv) is not None)
     check('원본지문: 수식처럼 시작하는 이름에 작은따옴표', "\"'=1+2" in csv or "'=1+2" in csv.split('소포/')[-1] or "소포/=1+2" in csv, '')
+    items = api('/api/items')['items']
+    check('수정본(_v1·_최종)은 최신 하나만 항목', sum(1 for i in items if '활성화 방안' in i['title']) == 1, [i['title'] for i in items if '활성화 방안' in i['title']])
+    check('월별 폴더(2025.11)를 업무로 보지 않음', not any(i['area'] in ('11', '2025.11') for i in items))
+    check('비밀번호 값은 결과물에 없음(●●●로 가림)', 'abcd1234' not in md and 'kim_01' not in md and 'abcd1234' not in xmlstr)
+    check('개인 문서(멘토 면담)는 본문에 없음', '부모님' not in md and '멘토 면담' not in md.split('## 붙임 1')[0])
+    check('「매월 5일까지」 줄이 반복 업무로', any(i['kind3'] == '반복' and (i.get('recur') or {}).get('cycle') == '매월' and '매월 5일' in i['title'] for i in items))
+    check('「결론 못 냄」 현안은 미결로 제안', any('주간회의록' in i['file'] and i.get('status') == '미결' for i in items))
+    check('인수 직후 할 일 표·인수 확인 칸·인수자 질문 칸', '인수 직후 할 일' in md and '인수 확인' in md and '인수자 질문' in md)
+    with zipfile.ZipFile(docx) as zf:
+        check('docx 쪽 번호(바닥글)·서식 표기', 'word/footer1.xml' in zf.namelist() and '별지 제12호서식' in xmlstr)
+    one = [i for i in items if i.get('src') == '규칙' and not i.get('decided')][:1]
+    if one:
+        api('/api/items', {'bulk': [{'ids': [one[0]['id']], 'keep': True}], 'changes': [{'id': one[0]['id'], 'question': '이 건 끝났나요?'}]})
+        r3 = api('/api/export', {}); md3 = open(os.path.join(OUT, [f for f in r3['files'] if f.endswith('.md')][0]), encoding='utf-8').read()
+        check('일괄 넣기는 [일괄 넣음]으로, 인수자 질문은 4절에', '[일괄 넣음]' in md3 and '이 건 끝났나요?' in md3 and '하나씩 확인한 항목' in md3)
     rep = api('/api/report')['html']
-    check('인쇄본 머리말 = md 머리말(제목)', rep.split('</h2>')[0].split('>')[-1] in md.split('\n')[0])
+    check('인쇄본 머리말 = md 머리말(제목)', rep.split('</h2>')[0].split('>')[-1] in [l for l in md.split('\n') if l.startswith('# ')][0])
     check('원문 보기 API', api('/api/doc?file=' + urllib.parse.quote(meeting['file'])).get('head'))
     log = srv
 finally:
