@@ -21,7 +21,11 @@ ROOT = os.path.dirname(HERE)
 APP_FILES = ['server.py', 'core.py', 'docs.py', 'export.py', 'extract.py', 'ocr.py', 'requirements.txt']
 APP_DIRS = ['web']
 # 파이썬 표준 라이브러리 중 돌다리가 쓰지 않는 큰 묶음(빼도 동작에 영향 없음)
-DROP = re.compile(r'^tools/(Lib/(ensurepip|idlelib|turtledemo|tkinter|test|lib2to3)/|Lib/site-packages/pip|Scripts/|tcl/|include/|libs/)', re.I)
+DROP = re.compile(r'^tools/(Lib/(ensurepip|idlelib|turtledemo|tkinter|test|lib2to3|venv|pydoc_data|sqlite3)/|Lib/site-packages/pip|Scripts/|tcl/|include/|libs/'
+                  r'|DLLs/(_ssl|_hashlib|_sqlite3)\.pyd$|DLLs/(libssl-3|libcrypto-3|sqlite3)\.dll$)', re.I)
+# 10.18. 공공 GitLab이 큰 파일을 서버 검사로 거절(22.9MB): 돌다리는 https·sqlite를 쓰지 않고(이 PC 127.0.0.1만, hashlib은 내장 sha256으로 대신)
+# Pillow의 AVIF 그림 부품(4.3MB)도 쓰지 않는다. 빠져도 Pillow·urllib·asyncio는 ImportError를 받아 그 기능만 끈다
+WDROP = re.compile(r'^PIL/_avif\.', re.I)
 
 RUN_BAT = r'''@echo off
 chcp 65001 >nul
@@ -105,6 +109,8 @@ def build(nupkg, wheels, out):
                         nm = m.group(2)
                     elif re.match(r'^[^/]+\.data/', nm):
                         continue   # scripts·headers는 쓰지 않는다
+                    if WDROP.match(nm):
+                        continue
                     z.writestr('doldari/python/Lib/site-packages/' + nm, wz.read(i))
         # 3) 돌다리 소스
         for f in APP_FILES:

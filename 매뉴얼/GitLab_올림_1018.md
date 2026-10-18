@@ -19,7 +19,7 @@
 - 올린 뒤: 저장소에서 HTML을 내려받아 `certutil -hashfile 우편번호_자동검색기_v1.10_출품본.html SHA256` → 위 값과 같은지, 열어서 맨 아래 「원본 확인됨」.
 
 ## 돌다리(handover-doldari)
-- 처음 올리는 본 묶음: `README.md`, `.gitattributes`, `.gitignore`, `실행물/doldari_v3.7.1_portable_win64.zip`(SHA-256 `c8fd6183d19e874a0c55c56dbd57834791ea34a5da9d67fcfe61aa1729e91f60`)·`읽어보기.txt`, `모의데이터/`(업무폴더 zip·정답표·README), `소스/`.
+- 처음 올리는 본 묶음: `README.md`, `.gitattributes`, `.gitignore`, `실행물/doldari_v3.7.1_portable_win64.zip`(SHA-256 `41d2cda67ee5ce4010032d56cdd4106315bd1e2fb2e9f867abd319440f63c8f9`)·`읽어보기.txt`, `모의데이터/`(업무폴더 zip·정답표·README), `소스/`.
 - 커밋 메시지: `v3.7.1 휴대용 실행물·모의데이터·소스 등록`. v3.6 묶음을 이미 올렸으면 `실행물/doldari_v3.6_portable_win64.zip`은 지운다.
 - 23MB 압축이 Web IDE에서 실패하면 그 파일만 빼고 커밋한 뒤 파일 목록 화면 「+ ▼ → 파일 업로드」로 따로 올린다(매뉴얼 10절).
 
