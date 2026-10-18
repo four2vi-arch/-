@@ -276,7 +276,7 @@
     '.k-num{font-size:1.8em;font-weight:900;letter-spacing:.05em;min-height:1.45em;border-bottom:4px solid #c8102e;padding:6px 0;max-width:540px}' +
     '.k-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 22px;font-size:.66em;color:#555;border-top:1px solid #eee}' +
     '.k-staff{flex:0 0 auto;white-space:nowrap;font-size:.9em;background:transparent;border:1px solid #ccc;border-radius:8px;padding:8px 12px;color:#777;cursor:pointer;user-select:none}' +
-    '.k-act{position:sticky;bottom:0;z-index:3;margin-top:10px;padding:14px 0 6px;background:linear-gradient(rgba(255,253,248,0),#fffdf8 22%)}' +
+    '.k-act{position:sticky;bottom:-30px;z-index:3;margin-top:10px;padding:12px 0 36px;margin-bottom:-30px;background:#fffdf8;border-top:1px solid #ece4d6}' +
     '.k-grid{margin-bottom:12px}.k-choice{word-break:keep-all}.k-btn:disabled{opacity:.4;cursor:default;border-color:#bbb;background:#f3f3f3;color:#777}' +
     '.k-chip{cursor:pointer;border:0;font-family:inherit}' +
     '.k-padwrap{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:flex-end}.k-padl{flex:1 1 100%;max-width:540px}.k-padr{flex:1 1 100%}' +
@@ -382,12 +382,12 @@
       speechSynthesis.speak(u);
     } catch (e) { }
   }
-  function toast(t) {
+  function toast(t, ms) {
     var d = document.createElement('div');
     d.className = 'k-toast';
     d.textContent = t;
     document.body.appendChild(d);
-    setTimeout(function () { d.remove(); }, 3500);
+    setTimeout(function () { d.remove(); }, ms || 3500);
   }
   function modal(html, buttons) {
     closeModal();
@@ -624,9 +624,9 @@
   // ------------------------------------------------------------------ 4. 후보 고르기·번호 묻기
   function chooseCand(list) {
     var body = '<div>' + list.map(function (x, i) {
-      return '<button type="button" class="k-choice" data-c="' + i + '">' + esc(x.addr) + '<small>' + (x.far ? '<b class="k-warn">다른 지역</b> · ' : '') + esc(x.range || '') + (x.zip ? ' · 우편번호 ' + esc(x.zip) : '') + '</small></button>';
+      return '<button type="button" class="k-choice" data-c="' + i + '">' + esc(x.addr) + '<small>' + (x.far && regionOpts() ? '<b class="k-warn">다른 지역</b> · ' : '') + esc(x.range || '') + (x.zip ? ' · 우편번호 ' + esc(x.zip) : '') + '</small></button>';
     }).join('') + '</div>' + row([btn('여기 없어요', 'sub', function () { screen(askAddress, ['다르게 한 번 더 적어 주세요. 아파트·건물 이름이나 길 이름을 넣으면 쉬워요.']); }), btn('이전으로', 'sub', back)]);
-    frame('혹시 이 중에 있나요?', '맞는 곳을 눌러 주세요.', body);
+    frame('혹시 이 중에 있나요?', '맞는 곳을 눌러 주세요.' + (list.length > 3 ? ' 모두 ' + list.length + '곳이에요. 아래로 밀면 더 있어요.' : ''), body);
     bindRow([btn('여기 없어요', 'sub', function () { screen(askAddress, ['다르게 한 번 더 적어 주세요. 아파트·건물 이름이나 길 이름을 넣으면 쉬워요.']); }), btn('이전으로', 'sub', back)]);
     Array.prototype.forEach.call(main.querySelectorAll('[data-c]'), function (el) {
       el.onclick = function () {
@@ -919,11 +919,16 @@
     var s = st.sender || {};
     if (!st.no) { st.no = nextNo(); }
     var what = paper() === 'lbl' ? '주소 스티커' : '접수 메모';
-    var list = st.entries.map(function (x) { return '<div class="k-card"><b>' + esc(x.zip || '우편번호 창구 확인') + '</b> ' + esc(x.addr1) + ' ' + esc(x.addr2) + '<div class="k-sub">' + esc(x.name) + (x.phone ? ' · ' + esc(x.phone) : '') + (x.check ? ' · <span class="k-warn">창구에서 한 번 더 확인</span>' : '') + '</div></div>'; }).join('');
+    var helpOnly = st.entries.length === 1 && st.entries[0].why === '직원 도움 요청';
+    var list = helpOnly ? '<div class="k-card"><b>주소는 창구에서 직원이 함께 찾아 드려요.</b></div>' : st.entries.map(function (x) {
+      var sub = [esc(x.name), x.phone ? esc(x.phone) : '', x.check ? '<span class="k-warn">창구에서 한 번 더 확인</span>' : ''].filter(Boolean).join(' · ');   // 이름이 없을 때 앞에 「· 」가 붙던 것
+      return '<div class="k-card"><b>' + esc(x.zip || '우편번호 창구 확인') + '</b> ' + esc(x.addr1) + ' ' + esc(x.addr2) + (sub ? '<div class="k-sub">' + sub + '</div>' : '') + '</div>';
+    }).join('');
+    var sline = [esc(s.name || ''), s.phone ? esc(s.phone) : '', s.addr1 ? esc(s.zip || (s.check ? '우편번호 창구 확인' : '')) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : ''].filter(function (v) { return clean(v); }).join(' · ');
     main.innerHTML = '<div class="k-bubble" style="text-align:center">다 됐어요! 아래 빨간 단추를 눌러 ' + what + '를 뽑아 주세요.<div class="k-big">' + esc(st.no) + '번</div>' +
       '<small>소포 상자와 뽑은 ' + what + '를 들고 창구로 오세요. 뽑지 못하셨으면 직원을 불러 「' + esc(st.no) + '번」이라고 말씀해 주세요(이 화면은 10분 동안 남아 있어요).</small></div>' +
       '<div class="k-row" style="margin-top:4px"><button type="button" class="k-btn pri" id="kPrintBtn">' + what + ' 뽑기</button><button type="button" class="k-btn sub" id="kDone">처음 화면으로</button></div>' +
-      '<div class="k-sub">보내시는 분: ' + esc(s.name || '') + (s.phone ? ' · ' + esc(s.phone) : '') + (s.addr1 ? ' · ' + esc(s.zip || (s.check ? '우편번호 창구 확인' : '')) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' + list;   // 뽑기 단추를 맨 위에(화면 아래로 밀려 안 보이던 것)
+      (sline ? '<div class="k-sub">보내시는 분: ' + sline + '</div>' : '') + list;   // 뽑기 단추를 맨 위에(화면 아래로 밀려 안 보이던 것)
     st.finished = true;   // 직원이 「접수 화면으로 넘기기」(직원 설정)를 할 수 있게 자동 지우기를 늦춘다
     speak('다 됐어요. 빨간 단추를 눌러 ' + what + '를 뽑아 주세요. ' + st.no + '번입니다.');
     $('#kPrintBtn', main).onclick = function () { st.printed = true; printSlip(); };
@@ -1357,6 +1362,7 @@
     document.documentElement.classList.add('k-on');
     welcome();
     touch();
+    if (!regionOpts()) { setTimeout(function () { toast('직원 안내: 「직원」 단추를 2초 누르고 「우리 동네(기본 지역)」를 정해 두세요. 동 이름만 말씀하셔도 이 지역에서 먼저 찾습니다.', 9000); }, 600); }
     try { history.pushState({ kiosk: 1 }, ''); } catch (e) { }   // 안드로이드 「뒤로」가 프로그램을 닫지 않고 앞 화면으로 가게
     log('어르신 직접 입력 화면 열기', 0, '');
   }

@@ -53,7 +53,7 @@ ollama pull gemma3:4b
 
 ## 무결성
 
-출품본 파일 전체 SHA-256: `9161dc00ed162de31c9e6a1fd332c03d3aeabb54606b4be824edbc0aa2bbba0a`(2026-10-18 v1.10 판). `소스/`에서 `python build.py`를 실행하면 같은 파일이 만들어집니다(윈도·리눅스에서 SHA-256 일치 확인). 윈도에서는 `certutil -hashfile 파일이름 SHA256`으로 확인합니다.
+출품본 파일 전체 SHA-256: `6447728b04811599a47cd2b52df3d137e3b7fb65cd374967a5914136d9c5f5e4`(2026-10-18 v1.10 판). `소스/`에서 `python build.py`를 실행하면 같은 파일이 만들어집니다(윈도·리눅스에서 SHA-256 일치 확인). 윈도에서는 `certutil -hashfile 파일이름 SHA256`으로 확인합니다.
 
 ## 권리 표기
 

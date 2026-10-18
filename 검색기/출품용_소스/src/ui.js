@@ -2290,7 +2290,7 @@
         }
         return mv;
       case "seq":
-        return String(d.seq);
+        return d.seq;   // 숫자로 저장(엑셀에서 「텍스트로 저장된 숫자」 표시가 뜨던 것)
       case "const":
         return c.def || "";
       case "blank":
@@ -2494,6 +2494,9 @@
           if (a.dot && /addr2$/i.test(cd.src) && !v) {
             v = ".";
           }
+          if (cd.src === "seq" && /^\d{1,9}$/.test(v)) {
+            return Number(v);   // 순번은 숫자 칸으로(엑셀의 「텍스트로 저장된 숫자」 표시)
+          }
           return v;
         }));
         meta.push({
@@ -2597,7 +2600,10 @@
         if (h === "" && (!b.marks || !b.marks[i])) {
           continue;
         }
-        var r = {
+        var r = typeof g[j] === "number" ? {
+          t: "n",
+          v: g[j]
+        } : {
           t: "s",
           v: h
         };
