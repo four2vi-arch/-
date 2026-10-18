@@ -4073,9 +4073,12 @@
       var privacyDlgEl = qs("#privacyDlg");
       S.privacyPending = true;
       // 어르신 화면(#kiosk)으로 열렸으면 직원용 개인정보 안내는 어르신 화면을 닫을 때까지 미룬다(어르신 화면을 덮던 것, 2026-10-18)
+      var privWait = 0;
       (function showPrivacy() {
-        if (document.documentElement.classList.contains("k-on") || /kiosk/.test(location.hash) && !S.kioskSeen) {
+        // 어르신 화면이 떠 있는 동안은 미루고, 닫히면 보인다. 주소에 #kiosk가 있어도 2분 안에 안 뜨면(자료 준비 실패) 그냥 보인다
+        if (document.documentElement.classList.contains("k-on") || /^#kiosk\b/.test(location.hash) && !S.kioskSeen && privWait < 120000) {
           S.kioskSeen = S.kioskSeen || document.documentElement.classList.contains("k-on");
+          privWait += 1500;
           return setTimeout(showPrivacy, 1500);
         }
         if (privacyDlgEl.showModal) {

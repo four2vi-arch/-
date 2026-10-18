@@ -86,7 +86,7 @@
   }
   var BLD = /(아파트|빌라|맨션|타운|오피스텔|주공|빌딩|하이츠|캐슬|자이|푸르지오|힐스테이트|래미안|더샵|편한세상|센트럴|스위첸|휴먼시아|리젠시|팰리스|타워|주택|연립|상가|병원|학교|교회|회관|센터|우체국|시청|군청|구청|면사무소|주민센터)/;
   function tailDetail(t) {
-    var m = String(t || '').match(/(\d{1,4}\s*동\s*)?\d{1,4}\s*호|\d{1,3}\s*층/);
+    var m = String(t || '').match(/(\d{1,4}\s*동\s*)?\d{1,4}\s*호|\d{1,3}\s*층|(?:^|\s)\d{1,4}\s*동(?=\s|$)/);
     return m ? clean(m[0]) : '';
   }
   function rank(r) {
@@ -96,24 +96,53 @@
     return 0;
   }
   // 「동은 맞고 번지가 없음 → 후보 n개 중 구간이 가장 넓은 번호」는 추정이다: 화면·스티커에 우편번호로 쓰지 않는다(v1.10, 어르신 모의 심사에서 틀린 번호가 확정되던 것)
-  function isGuess(r) { var n = (r && r.note) || ''; return !!r && r.grade !== '정확' && /구간이 가장 넓은|가까운 구간|번지 없음|번호 없음/.test(n) && !/우편번호는 1개/.test(n); }
+  function isGuess(r) {
+    var n = (r && r.note) || '';
+    if (!r || r.grade === '정확') { return false; }
+    if (/우편번호가 갈림|같은 이름이 이 시·군·구에 \d+곳/.test(n)) { return true; }   // 2차 검토: 행정동이 여러 번호로 갈리거나 같은 이름 건물이 여러 곳(「정읍 농협」)
+    return /구간이 가장 넓은|가까운 구간|번지 없음|번호 없음/.test(n) && !/우편번호는 1개/.test(n);
+  }
+  var DETAIL_RX = /(\d{1,4}\s*동\s*)?\d{1,4}\s*호|\d{1,3}\s*층|(^|\s)\d{1,4}\s*동(?=\s|$)/g;   // 「102동 304호」「2층」「101동」(호 없이 동 번호만 적은 것도)
+  function bsearch(q) { try { return (E().search(q, 12) || []).filter(function (x) { return x.range === '건물명'; }); } catch (x) { return []; } }
+  function sggWord() { var t = clean(cfg().region || mainRegion()).split(' '); return t[t.length - 1] || ''; }
+  // 후보가 이 우체국 지역(설정) 또는 어르신이 적은 지역에 있는지. 다른 지역 건물은 뒤로, 고르면 창구 확인
+  function nearOf(q) {
+    var o = regionOpts(), g = o ? o.defaultSggs : [];
+    var words = clean(q).split(' ').map(function (w) { return w.replace(/(특별자치도|특별자치시|광역시|특별시|도|시|군|구)$/, ''); }).filter(function (w) { return w.length >= 2 && !/동$|리$|읍$|면$/.test(w) && !BLD.test(w); });
+    return function (x) {
+      if (g.indexOf(x.g) >= 0) { return true; }
+      var head = String(x.addr || '').split(' ').slice(0, 2).join(' ');
+      return words.some(function (w) { return head.indexOf(w) >= 0; });
+    };
+  }
+  function localFirst(list, q) {
+    var near = nearOf(q);
+    list.forEach(function (x) { x.far = !near(x); });
+    return list.filter(function (x) { return !x.far; }).concat(list.filter(function (x) { return x.far; }));
+  }
   // 건물 이름으로 다시 찾기: 「대치동 은마아파트」처럼 동 이름이 같이 있으면 일반 검색이 비므로 건물명 판정과 「동 이름 줄기+단지명」을 써 본다
   function byBuilding(q) {
     var e = E(), o = regionOpts(), b = null;
     try { b = e._lookupBuilding(q, o); } catch (x) { b = null; }
-    if (b && rank(b) >= 3) { return { r: b }; }
-    var list = [];
-    try { list = (e.search(q, 12) || []).filter(function (x) { return x.range === '건물명'; }); } catch (x) { list = []; }
-    var m = q.match(/([가-힣]{1,4})동\s+([가-힣A-Za-z0-9]+)/);
-    if (!list.length && m && BLD.test(m[2])) {   // 「시기동 주공아파트」 → 「시기주공아파트」
-      var q3 = clean(q.replace(m[0], m[1] + m[2]).replace(/(\d{1,4}\s*동\s*)?\d{1,4}\s*호|\d{1,3}\s*층/g, ' '));
-      try { list = (e.search(q3, 12) || []).filter(function (x) { return x.range === '건물명'; }); } catch (x) { list = []; }
+    if (b && rank(b) >= 3 && !/같은 이름이 이 시·군·구에 \d+곳/.test(b.note || '')) { return { r: b }; }
+    var near = nearOf(q), tried = [], list = [];
+    function tryQ(x) {
+      x = clean(x); if (!x || tried.indexOf(x) >= 0) { return; } tried.push(x);
+      if (list.some(near)) { return; }
+      var l = bsearch(x);
+      if (l.length && (!list.length || l.some(near))) {   // 이 지역 후보가 나오면 그것을 앞에, 먼저 나온 다른 지역 후보는 뒤에 남긴다
+        var seen = {}; list = l.filter(near).concat(list, l).filter(function (y) { var k = y.zip + y.addr; if (seen[k]) { return false; } seen[k] = 1; return true; });
+      }
     }
-    if (!list.length) {
-      var q2 = clean(q.replace(/[가-힣]{1,4}동(?=\s)/, ' ').replace(/(\d{1,4}\s*동\s*)?\d{1,4}\s*호|\d{1,3}\s*층/g, ' '));   // 동 낱말을 빼고
-      try { list = (e.search(q2, 12) || []).filter(function (x) { return x.range === '건물명'; }); } catch (x) { list = []; }
+    var qd = clean(q.replace(DETAIL_RX, ' '));
+    tryQ(q); tryQ(qd);
+    var m = qd.match(/([가-힣]{1,4})동\s+([가-힣A-Za-z0-9]+)/);
+    if (m && BLD.test(m[2])) { tryQ(qd.replace(m[0], m[1] + m[2])); }   // 「시기동 주공아파트」 → 「시기주공아파트」
+    tryQ(qd.replace(/[가-힣]{1,4}동(?=\s)/, ' '));                     // 동 낱말을 빼고
+    if (!list.some(near) && sggWord()) {                                // 다른 지역 건물만 나오면 이 우체국 지역 이름을 붙여 한 번 더(「수성동 현대아파트」가 대구 수성현대로 가던 것)
+      tried.slice().forEach(function (x) { if (x.indexOf(sggWord()) < 0) { tryQ(sggWord() + ' ' + x); } });
     }
-    return list.length ? { list: list } : null;
+    return list.length ? { list: localFirst(list, q) } : null;
   }
   function regionOpts() {
     var r = clean(cfg().region || mainRegion());
@@ -516,7 +545,7 @@
     if (rank(r) < 4 && BLD.test(c.text) && c.tries <= 3) {
       var hb = byBuilding(q);
       if (!hb) {                       // 「현대아파트」처럼 흔한 꼬리말을 떼고 이름만으로 한 번 더
-        var q2 = clean(q.replace(/(\d{1,4}\s*동\s*)?\d{1,4}\s*호|\d{1,3}\s*층/g, ' ').replace(/(아파트|빌라|맨션|오피스텔)(?=\s|$)/g, ' '));
+        var q2 = clean(q.replace(DETAIL_RX, ' ').replace(/(아파트|빌라|맨션|오피스텔)(?=\s|$)/g, ' '));
         if (q2 && q2 !== q) { hb = byBuilding(q2); }
       }
       if (hb && hb.r) { return screen(confirmAddr, [hb.r, hb.r.conf !== '상']); }
@@ -595,7 +624,7 @@
   // ------------------------------------------------------------------ 4. 후보 고르기·번호 묻기
   function chooseCand(list) {
     var body = '<div>' + list.map(function (x, i) {
-      return '<button type="button" class="k-choice" data-c="' + i + '">' + esc(x.addr) + '<small>' + esc(x.range || '') + (x.zip ? ' · 우편번호 ' + esc(x.zip) : '') + '</small></button>';
+      return '<button type="button" class="k-choice" data-c="' + i + '">' + esc(x.addr) + '<small>' + (x.far ? '<b class="k-warn">다른 지역</b> · ' : '') + esc(x.range || '') + (x.zip ? ' · 우편번호 ' + esc(x.zip) : '') + '</small></button>';
     }).join('') + '</div>' + row([btn('여기 없어요', 'sub', function () { screen(askAddress, ['다르게 한 번 더 적어 주세요. 아파트·건물 이름이나 길 이름을 넣으면 쉬워요.']); }), btn('이전으로', 'sub', back)]);
     frame('혹시 이 중에 있나요?', '맞는 곳을 눌러 주세요.', body);
     bindRow([btn('여기 없어요', 'sub', function () { screen(askAddress, ['다르게 한 번 더 적어 주세요. 아파트·건물 이름이나 길 이름을 넣으면 쉬워요.']); }), btn('이전으로', 'sub', back)]);
@@ -604,7 +633,7 @@
         var x = list[Number(el.getAttribute('data-c'))];
         st.trail.push(['고른 곳', x.addr]);
         if (x.range === '건물명' && x.zip) {   // 건물을 골랐으면 그 건물의 우편번호 그대로(다시 찾으면 동 전체 추정 번호로 바뀌던 것)
-          return screen(confirmAddr, [{ grade: '유사', conf: '상', zip: x.zip, addr1: x.addr, addr2: '', note: '건물명 일치(목록에서 고름)' }, false]);
+          return screen(confirmAddr, [{ grade: '유사', conf: x.far ? '중' : '상', zip: x.zip, addr1: x.addr, addr2: '', note: '건물명 일치(목록에서 고름' + (x.far ? ', 다른 지역' : '') + ')' }, !!x.far]);
         }
         var r = look(x.addr);
         if (rank(r) >= 2 && /번지 없음|건물번호 없음|번호 없음|가까운|구간이 가장 넓은/.test(r.note || '')) { st.cur.text = x.addr; st.cur.region = ''; return screen(askNumber, [r]); }
@@ -640,14 +669,22 @@
   }
   function giveUp() {
     var send = st.cur && st.cur.kind === 'send';
-    var b = [btn('다시 적기', 'pri', function () { newCurKeep(); screen(askAddress); }), btn('창구에서 할게요', 'sub', function () { screen(send ? finish : listView); })];
-    frame('주소를 찾기가 어려워요.', '괜찮아요. 창구 직원이 도와 드릴게요. 적으신 내용은 메모로 남겨 둘게요.', row(b));
-    bindRow(b);
     var c = st.cur;
-    if (c.kind === 'recv' && c.raw && !c.gaveUp) {
-      c.gaveUp = true;
-      st.entries.push({ name: '', phone: '', zip: '', addr1: c.raw, addr2: '', check: true, note: '주소 찾기 실패 · 창구 확인' });
-    }
+    var b = [btn('다시 적기', 'pri', function () { newCurKeep(); screen(askAddress); }), btn('창구에서 할게요', 'sub', function () {
+      if (send) { return screen(finish); }
+      if (c.kind === 'recv' && c.raw && !c.gaveUp) {   // 2차 검토: 화면이 뜨자마자 넣어 「다시 적기」·뒤로 가기 뒤에도 빈 받는 곳이 남던 것
+        c.gaveUp = true;
+        st.entries.push({ name: '', phone: '', zip: '', addr1: c.raw, addr2: '', check: true, why: '주소 찾기 실패', note: '주소 찾기 실패 · 창구 확인' });
+      }
+      if (!st.entries.length) {   // 아무것도 적지 않고 「직원 도움」: 번호표만 받아 창구로(「0곳이에요」에서 막히던 것)
+        st.entries.push({ name: '', phone: '', zip: '', addr1: '(창구에서 주소 확인)', addr2: '', check: true, why: '직원 도움 요청', note: '직원 도움 요청 · 창구 확인' });
+        if (!st.no) { st.no = nextNo(); }
+        return screen(finish);
+      }
+      screen(listView);
+    })];
+    frame('주소를 찾기가 어려워요.', '괜찮아요. 창구 직원이 도와 드릴게요.' + (c.raw ? ' 적으신 내용은 메모로 남겨 둘게요.' : ''), row(b));
+    bindRow(b);
   }
   function newCurKeep() { var k = st.cur ? st.cur.kind : 'recv'; newCur(k); }
 
@@ -696,7 +733,7 @@
   function afterDetail() {
     var c = st.cur;
     if (c.kind === 'send') {
-      st.sender.zip = c.res.zip || '';
+      st.sender.zip = c.res.zip || ''; st.sender.zipGuess = c.res.zipGuess || ''; st.sender.check = !!c.check; st.sender.why = c.why || '';
       st.sender.addr1 = c.base || c.res.addr1 || '';
       st.sender.addr2 = c.detail;
       return screen(finish);
@@ -707,13 +744,14 @@
   // ------------------------------------------------------------------ 6. 이름·전화
   function askName() {
     var c = st.cur, send = c.kind === 'send';
-    var mic = SR && !micOff() ? btn('말로 하기', '', function () { listen(function (t) { $('#kIn', main).value = clean(t); }); }) : null;
+    var mic = SR && !micOff() ? btn('말로 하기', '', function () { listen(function (t) { $('#kIn', main).value = clean(t); }); }, 'kMic') : null;
     var b = [btn('다음', 'pri', function () {
       var v = clean($('#kIn', main).value);
       if (!v) { toast('성함을 적어 주세요. 모르시면 「아들」처럼 적으셔도 돼요.'); return; }
       if (v.length > 15) { toast('성함은 15자 안으로 적어 주세요.'); return; }
-      v = clean(v.replace(/\s*(할머니|할아버지|어머님|아버님|님|씨|선생님|여사님?)$/, '')) || v;   // 스티커에 「할머니 귀하」가 찍히지 않게 호칭은 뗀다
-      if (/^(아들|딸|손주|손자|손녀|며느리|사위|동생|언니|오빠|형|누나|큰아들|작은아들|큰딸|작은딸|아들네|딸네)$/.test(v)) { c.check = true; c.why = clean((c.why || '') + ' · 받는 분 성함 창구 확인'); }
+      var nv = nameFix(v);   // 「김순자 할머니」→「김순자」. 「아들」「딸네」「김씨」처럼 성함이 아닌 것은 그대로 두고 창구 확인
+      v = nv.name;
+      if (!send) { c.nameCheck = nv.check; }
       st.trail.push([send ? '보내시는 분' : '받으실 분', v]);
       if (send) { st.sender = st.sender || {}; st.sender.name = v; } else { c.name = v; }
       screen(askPhone);
@@ -725,6 +763,13 @@
     var inp = $('#kIn', main);
     inp.onkeydown = function (e) { if (e.key === 'Enter') { b[mic ? 1 : 0].fn(); } };
     setTimeout(function () { inp.focus(); }, 50);
+  }
+  var KIN = /^(우리\s*)?(아들|딸|손주|손자|손녀|며느리|사위|동생|언니|오빠|형|누나|큰아들|작은아들|큰딸|작은딸|막내|할머니|할아버지|외할머니|외할아버지|어머니|어머님|아버지|아버님|엄마|아빠|삼촌|외삼촌|이모|고모|큰엄마|큰아버지|작은엄마|작은아버지|아드님|따님|사모님|선생님|이장님|친구|(아들|딸|동생|언니|오빠|형|누나|삼촌|이모|고모|친구)네)$/;
+  function nameFix(v) {
+    if (KIN.test(v)) { return { name: v, check: true }; }
+    var t = clean(v.replace(/\s*(할머니|할아버지|어머님|아버님|선생님|여사님?|님|씨|귀하)$/, ''));
+    if (t.length >= 2 && !KIN.test(t)) { return { name: t, check: false }; }
+    return { name: v, check: true };   // 「김씨」「박선생님」: 성만 남으면 그대로 두고 창구 확인
   }
   function askPhone() {
     var c = st.cur, send = c.kind === 'send';
@@ -751,7 +796,9 @@
   function saveEntry() {
     var c = st.cur, r = c.res || {};
     if (!st.no) { st.no = nextNo(); }   // 접수 번호는 첫 받는 곳을 저장할 때 받는다(지울 때마다 번호가 건너뛰던 것)
-    st.entries.push({ name: c.name, phone: c.phone, zip: r.zip || '', zipGuess: r.zipGuess || '', addr1: c.base || r.addr1 || '', addr2: c.detail, check: c.check, why: c.why || '', note: [c.ai ? 'AI 정리' : '', c.why || ''].filter(Boolean).join(' · ') });
+    var why = [c.why, c.nameCheck ? '받는 분 성함 창구 확인' : ''].filter(Boolean).join(' · ');
+    var at = c.saved && st.entries.indexOf(c.saved) >= 0 ? st.entries.indexOf(c.saved) : st.entries.length;   // 뒤로 가기로 다시 저장하면 고쳐 쓴다(같은 곳이 두 번 들어가던 것)
+    st.entries[at] = c.saved = ({ name: c.name, phone: c.phone, zip: r.zip || '', zipGuess: r.zipGuess || '', addr1: c.base || r.addr1 || '', addr2: c.detail, check: !!(c.check || c.nameCheck), why: why, note: [c.ai ? 'AI 정리' : '', why].filter(Boolean).join(' · ') });
     log('어르신 직접 입력', 1, '접수번호 ' + st.no + ' · ' + st.entries.length + '번째');
     screen(listView);
   }
@@ -876,7 +923,7 @@
     main.innerHTML = '<div class="k-bubble" style="text-align:center">다 됐어요! 아래 빨간 단추를 눌러 ' + what + '를 뽑아 주세요.<div class="k-big">' + esc(st.no) + '번</div>' +
       '<small>소포 상자와 뽑은 ' + what + '를 들고 창구로 오세요. 뽑지 못하셨으면 직원을 불러 「' + esc(st.no) + '번」이라고 말씀해 주세요(이 화면은 10분 동안 남아 있어요).</small></div>' +
       '<div class="k-row" style="margin-top:4px"><button type="button" class="k-btn pri" id="kPrintBtn">' + what + ' 뽑기</button><button type="button" class="k-btn sub" id="kDone">처음 화면으로</button></div>' +
-      '<div class="k-sub">보내시는 분: ' + esc(s.name || '') + (s.phone ? ' · ' + esc(s.phone) : '') + (s.addr1 ? ' · ' + esc(s.zip) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' + list;   // 뽑기 단추를 맨 위에(화면 아래로 밀려 안 보이던 것)
+      '<div class="k-sub">보내시는 분: ' + esc(s.name || '') + (s.phone ? ' · ' + esc(s.phone) : '') + (s.addr1 ? ' · ' + esc(s.zip || (s.check ? '우편번호 창구 확인' : '')) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' + list;   // 뽑기 단추를 맨 위에(화면 아래로 밀려 안 보이던 것)
     st.finished = true;   // 직원이 「접수 화면으로 넘기기」(직원 설정)를 할 수 있게 자동 지우기를 늦춘다
     speak('다 됐어요. 빨간 단추를 눌러 ' + what + '를 뽑아 주세요. ' + st.no + '번입니다.');
     $('#kPrintBtn', main).onclick = function () { st.printed = true; printSlip(); };
@@ -913,7 +960,7 @@
     if (!window.TextEncoder) { return ''; }
     var s = st.sender;
     var o = { v: 1, no: st.no, s: s ? [s.name || '', s.phone || '', s.zip || '', s.addr1 || '', s.addr2 || ''] : null,
-      e: st.entries.map(function (x) { return [x.name || '', x.phone || '', x.zip || '', x.addr1 || '', x.addr2 || '', x.check ? 1 : 0]; }) };
+      e: st.entries.map(function (x) { return [x.name || '', x.phone || '', x.zip || '', x.addr1 || '', x.addr2 || '', x.check ? 1 : 0, x.why || '']; }) };
     var bytes = new TextEncoder().encode(JSON.stringify(o)), tag = 'R';
     if (window.fflate && fflate.deflateSync) { try { bytes = fflate.deflateSync(bytes, { level: 9 }); tag = 'D'; } catch (e) { tag = 'R'; } }
     var t = 'ZQ1' + tag + ':' + b32enc(bytes);
@@ -960,10 +1007,10 @@
     var org = clean(cfg().org || ''), qr = qrSvg(memoPayload());
     return '<h1>' + (org ? esc(org) + ' ' : '') + '우편 접수 메모</h1><div class="p-no">' + esc(st.no) + '번</div>' +
       '<div class="p-s">' + t.toLocaleString('ko-KR') + ' · 보내는 분: ' + esc(s.name || '') + (s.phone ? ' (' + esc(s.phone) + ')' : '') +
-      (s.addr1 ? ' · ' + esc(s.zip || '') + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' +
+      (s.addr1 ? ' · ' + esc(s.zip || (s.check ? '우편번호 확인 필요' : '')) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' +
       st.entries.map(function (x, i) {
         return '<div class="p-it"><div class="p-zip">' + esc(x.zip || '우편번호 확인 필요') + '</div><div>' + esc(x.addr1) + ' ' + esc(x.addr2) + '</div>' +
-          '<div class="p-s">' + (i + 1) + '. 받는 분 ' + esc(x.name || '(미입력)') + (x.phone ? ' · ' + esc(x.phone) : '') + (x.check ? ' · 창구 확인 필요' + (x.why ? '(' + esc(x.why.replace(/^ · /, '')) + ')' : '') : '') + '</div></div>';
+          '<div class="p-s">' + (i + 1) + '. 받는 분 ' + esc(x.name || '(미입력)') + (x.phone ? ' · ' + esc(x.phone) : '') + (x.check ? ' · 창구 확인 필요' + (x.why ? '(' + esc(x.why) + ')' : '') : '') + '</div></div>';
       }).join('') + (qr ? '<div class="p-qr">' + qr + '<div class="p-s">창구에서 이 QR을 찍으면 주소가 바로 들어갑니다</div></div>' : '') +
       '<div class="p-foot">개인정보가 담긴 메모입니다. 접수가 끝나면 창구에서 파기합니다.</div>';
   }
@@ -1054,13 +1101,14 @@
       .concat(['받는 분', '받는 분 전화', '우편번호', '주소', '상세주소', '비고(접수 확인)']);   // 「비고」가 들어가야 메모 열로 알아보고 양식 비고에 「창구 확인 필요」가 남는다
     var memo = full ? '' : '보내는 분 ' + (s.name || '') + (s.phone ? ' ' + s.phone : '') + ' · 주소 창구 확인';
     var rows = st.entries.map(function (x) {
-      var note = [x.check ? '창구 확인 필요' : '', memo].filter(Boolean).join(' / ');
+      var note = [x.check ? '창구 확인 필요' + (x.why ? '(' + x.why + ')' : '') : '', memo, s.check ? '보내는 분 주소 창구 확인' : ''].filter(Boolean).join(' / ');
       return (full ? [s.name || '', s.phone || '', s.zip || '', s.addr1 || '', s.addr2 || ''] : []).concat([x.name, x.phone, x.zip, x.addr1, x.addr2, note]);
     });
     var ws = XLSX.utils.aoa_to_sheet([head].concat(rows));
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '어르신입력');
     var buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    if (!st.no) { st.no = nextNo(); }
     var name = '어르신입력_' + st.no + '번_' + stamp() + '.xlsx';
     var inp = document.getElementById('fileInput');
     try {
@@ -1182,6 +1230,7 @@
   function touch() {
     if (!root || root.hidden) { return; }
     clearTimeout(idleT);
+    if (document.getElementById('kLeft')) { clearTimeout(warnT); closeModal(); }   // 「계속하시겠어요?」 중 글쇠를 눌러도 계속(숨은 칸에 글자가 들어가며 지워지던 것)
     var sec = Number(cfg().idle) || 120;
     if (st && st.entries && st.entries.length) { sec = Math.max(sec, 300); }   // 저장한 받는 곳이 있으면 5분(휴대폰에서 번호를 찾는 동안 지워지던 것)
     if (st && st.finished) { sec = Math.max(sec, 600); }
@@ -1250,7 +1299,7 @@
       var s = o.s || ['', '', '', '', ''];
       o.e.forEach(function (x) {
         n++;
-        rows.push([s[0], s[1], s[2], s[3], s[4], x[0], x[1], x[2], x[3], x[4], [x[5] ? '창구 확인 필요' : '', '메모 ' + o.no + '번'].filter(Boolean).join(' / ')]);
+        rows.push([s[0], s[1], s[2], s[3], s[4], x[0], x[1], x[2], x[3], x[4], [x[5] ? '창구 확인 필요' + (x[6] ? '(' + x[6] + ')' : '') : '', '메모 ' + o.no + '번'].filter(Boolean).join(' / ')]);
       });
     });
     if (!injectSheet(head, rows, 'QR메모', 'QR메모_' + stamp() + '.xlsx')) { recvMsg('이 브라우저에서는 넣을 수 없어요.'); return; }

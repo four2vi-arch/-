@@ -81,6 +81,52 @@ const zipShown = p => p.evaluate(() => { const z = document.querySelector('#kMai
   const sec = await p.evaluate(() => { const s = __kiosk.state(); s.entries.push({ name: '가상', zip: '56180', addr1: '정읍시 충정로 234-1', addr2: '' }); return true; });
   ok('저장 후 자리 비움 연장(코드 확인)', sec);
   await p.context().close();
+  // 8. 2차 검토(10.18): 다른 지역 건물이 하나뿐인 후보로 나와 확정되던 것 → 이 지역 건물 먼저, 다른 지역은 「다른 지역」 표시
+  p = await open(b);
+  await say(p, '수성동 현대아파트');
+  let cs = await p.$$eval('#kMain .k-choice', xs => xs.map(x => x.textContent));
+  ok('「수성동 현대아파트」 첫 후보가 이 지역(정읍)', cs.length && /정읍시/.test(cs[0]) && !/대구/.test(cs[0]), cs.slice(0, 2).join(' / '));
+  await p.context().close();
+  p = await open(b);
+  await say(p, '대치동 은마아파트');
+  cs = await p.$$eval('#kMain .k-choice', xs => xs.map(x => x.textContent));
+  const fi = cs.findIndex(t => /다른 지역/.test(t));
+  if (fi >= 0) { await (await p.$$('#kMain .k-choice'))[fi].click(); await p.waitForTimeout(400); }
+  ok('다른 지역 건물을 고르면 「비슷한 주소 · 창구 확인」', fi >= 0 && /창구에서 한 번 더/.test(await p.textContent('#kMain .k-card').catch(() => '')), cs.slice(0, 2).join(' / '));
+  await p.context().close();
+  // 9. 행정동이 여러 번호로 갈림 → 숫자를 보이지 않음 / 「101동」만 적어도 아파트로 찾음
+  p = await open(b);
+  await say(p, '정읍시 내장상동');
+  { const m = await btn(p, '몰라요').catch(() => null); if (m) { await m.click(); await p.waitForTimeout(400); } }
+  ok('「내장상동」(번호가 갈리는 행정동) → 우편번호는 창구에서', /창구에서 정해/.test(await p.textContent('#kMain .k-card').catch(() => '')) && !(await zipShown(p)));
+  await p.context().close();
+  p = await open(b);
+  await say(p, '시기동 주공아파트 101동');
+  ok('「시기동 주공아파트 101동」(호 없음) → 건물 후보', !!(await p.$('#kMain .k-choice')) && /주공/.test(await p.textContent('#kMain .k-choice')), await bubble(p));
+  await p.context().close();
+  // 10. 아무것도 적지 않고 「직원 도움」 → 번호표 화면 / 「다시 적기」 뒤에 빈 받는 곳이 남지 않음
+  p = await open(b);
+  await (await btn(p, '시작하기')).click(); await p.waitForSelector('#kHelp'); await p.click('#kHelp'); await p.waitForTimeout(300);
+  await (await btn(p, '창구에서 할게요')).click(); await p.waitForTimeout(400);
+  ok('빈 「직원 도움」 → 마침 화면(접수 번호)', !!(await p.$('#kPrintBtn')) && /\d{3}번/.test(await p.textContent('#kMain')));
+  await p.context().close();
+  p = await open(b);
+  await (await btn(p, '시작하기')).click(); await p.fill('#kIn', '수성동 어딘가 할머니댁'); await p.click('#kHelp'); await p.waitForTimeout(300);
+  await (await btn(p, '다시 적기')).click(); await p.waitForTimeout(300);
+  ok('「직원 도움」 → 「다시 적기」 뒤 빈 받는 곳 없음', (await p.evaluate(() => __kiosk.state().entries.length)) === 0);
+  await p.context().close();
+  // 11. 성함: 「김씨」「아드님」은 그대로 두고 창구 확인, 뒤로 가서 다시 저장해도 한 곳
+  p = await open(b);
+  await say(p, '정읍시 충정로 234');
+  await (await btn(p, '네, 맞아요')).click(); await (await btn(p, '더 적을 게 없어요')).click();
+  await p.fill('#kIn', '김씨'); await (await btn(p, '다음')).click(); await (await btn(p, '건너뛰기')).click(); await p.waitForTimeout(300);
+  st = await p.evaluate(() => __kiosk.state());
+  ok('「김씨」 → 그대로·창구 확인, 사유 앞에 「· 」 없음', st.entries[0].name === '김씨' && st.entries[0].check && !/^ ?·/.test(st.entries[0].why), JSON.stringify(st.entries[0]).slice(0, 140));
+  await p.goBack().catch(() => { }); await p.waitForTimeout(400);
+  const sk2 = await btn(p, '건너뛰기').catch(() => null); if (sk2) { await sk2.click(); await p.waitForTimeout(300); }
+  ok('뒤로 가기 뒤 다시 저장해도 받는 곳 1곳', (await p.evaluate(() => __kiosk.state().entries.length)) === 1);
+  ok('오류 없음(8~11)', p.errs.length === 0, p.errs.join('|'));
+  await p.context().close();
   await b.close();
   console.log(`\n통과 ${pass} · 실패 ${fail}`); process.exit(fail ? 1 : 0);
 })();
