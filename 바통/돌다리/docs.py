@@ -43,7 +43,8 @@ PRIVATE_NOT = re.compile(r'민원|고객|금융|다문화|가족친화|검진|�
 PRIVATE_DIR = re.compile(r'(?:^|/)(?:개인|사적|수습\s*교육|멘토링)[^/]*/')
 SECRET_KEY = r'(?:비밀\s*번호|비번|패스\s*워드|password|passwd|(?<![A-Za-z])PW(?![A-Za-z])|암호(?!화))'
 SECRET_VAL = re.compile('(' + SECRET_KEY + r'[^A-Za-z0-9\n]{0,15}?)(?!20\d{2}\s*[.\-/년]|0\d{1,2}-\d{3,4}-\d)([A-Za-z0-9!@#$%^&*_+=.~\-]{4,})(?![년월일])', re.I)   # 열쇠 말 뒤 15자 안의 값(「비밀번호는 매월 바뀜(현재 Gaon#77)」)
-SECRET_ID = re.compile(r'((?:아이디|(?<![A-Za-z])ID(?![A-Za-z])|계정)(?:\s*정보)?\S{0,3}\s*[:：=]?\s*)([A-Za-z][A-Za-z0-9_.@\-]{2,})(\s*/\s*[^\s,)]+)?', re.I)
+SECRET_ID = re.compile(r'((?:아이디|(?<![A-Za-z])ID(?![A-Za-z])|계정)(?:\s*정보)?(?:은|는|이|가)?(?:\s*[:：=]\s*|\s+))([A-Za-z][A-Za-z0-9_.@\-]{2,})(\s*/\s*[^\s,)]+)?', re.I)   # 「계정.txt」의 확장자는 값이 아님
+ID_LIKE = re.compile(r'(?<![A-Za-z0-9_])(?=[A-Za-z0-9_.@\-]*[0-9_])[A-Za-z][A-Za-z0-9_.@\-]{4,}(?![A-Za-z0-9_])')   # 계정 목록 표의 아이디 칸(영문+숫자·밑줄)
 DATE_FOLDER = re.compile(r'^(\d{2,4}([.\-_ ]\d{1,2}){0,2}\s*(월|년|년도)?|\d{1,2}\s*월|다운로드|downloads?|바탕\s*화면|desktop|새\s*폴더|new folder|임시|temp|tmp|백업|backup|문서|documents?)$', re.I)
 YY_DATE = re.compile(r"[’'‘`]\s?(\d{2})\.\s?(\d{1,2})\.\s?(\d{1,2})")
 VERSION_TAIL = re.compile(r'(?:[\s_\-]*(?:v\d+|ver\.?\s*\d+|\d차|수정본?|최종\S*|진짜\S*|복사본|사본|copy|\(\d+\)))+$', re.I)   # 끝 숫자만(「현황_09」)은 월별로 다른 문서라 꼬리로 보지 않는다
@@ -820,7 +821,10 @@ def asset_hints(files, docs):
                 continue
             for k, rx in ASSET_LINE.items():
                 if len(out[k]) < 6 and rx.search(l) and not any(l == x['line'] for x in out[k]):
-                    out[k].append({'line': mask_secret(l), 'file': f['file']})
+                    v = mask_secret(l)
+                    if k == 'acct':   # 표의 아이디 칸(「hb_kim01」)은 열 제목이 다른 줄이라 줄 단위로는 못 가린다
+                        v = ID_LIKE.sub('●●●', v)
+                    out[k].append({'line': v, 'file': f['file']})
     return out
 
 

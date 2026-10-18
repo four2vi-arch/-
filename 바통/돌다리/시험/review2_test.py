@@ -63,6 +63,11 @@ out = allout(session(items, info, org='가온우체국 우편영업실'))
 leak = [x for x in ('gaon01', 'Pass1234', 'gaonpw99', 'Zz9!xx', 'Gaon#77', 'qwer1234') if x in out or x in repr(items) or x in repr(info)]
 ok('비밀번호·아이디 값이 결과물·세션에 없음', not leak, leak)
 ok('가린 뒤에도 할 일 줄은 남음(「10월 30일까지 변경 요청」)', '변경 요청' in out)
+tbl = F('총무/업무용 시스템 계정 목록.xlsx', '1행: 시스템\t아이디\t비고\n2행: 가온전자결재\tga_lee77\t권한 해제 요청함\n3행: 예산시스템\tga_lee77\t비밀번호는 보안USB 계정.txt에 있음')
+tbl['kind'] = 'xlsx'
+_, _, _, info_t = build([tbl])
+ok('계정 목록 표의 아이디 칸은 3절 참고 줄에서도 가림', not any('ga_lee77' in h['line'] for h in info_t['asset_hints']['acct']) and any('●●●' in h['line'] for h in info_t['asset_hints']['acct']), info_t['asset_hints']['acct'])
+ok('「계정.txt」의 확장자는 아이디로 보지 않음', docs.mask_secret('비밀번호는 보안USB 계정.txt에 있음') == '비밀번호는 보안USB 계정.txt에 있음')
 ok('지나치게 가리지 않음(계정 2026년·ID 2026-001호·암호화·비밀번호 변경해야 함)', all(docs.mask_secret(t) == t for t in ('특별회계 계정 2026년 결산', 'ID 2026-001호 공문', '암호화 모듈 점검', '매월 1일 비밀번호 변경해야 함', '비밀번호 변경 후 063-000-0404로 연락')))
 
 # 5. 직원 비상연락망의 휴대전화·주소는 4절에 없음
