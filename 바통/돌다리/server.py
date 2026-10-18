@@ -17,14 +17,14 @@ import ocr
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '3.5 (2026-10-15)'
+VERSION = '3.6 (2026-10-18)'
 MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
-SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '작업', '$RECYCLE.BIN', 'System Volume Information'}
-SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4}(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
+SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '$RECYCLE.BIN', 'System Volume Information'}   # 돌다리 작업 폴더는 이름이 아니라 실제 경로(WORK)로 뺀다(업무 폴더 안 「작업」 폴더는 읽는다)
+SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4,6}(_\d+)?(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
 PROGRAM_FILES = ('server.py', 'core.py', 'extract.py', '돌다리_실행.bat', 'measure.py')
 STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'suggest': '', 'files': [], 'failures': [], 'fingerprints': [], 'plan': None, 'progress': None,
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
-         'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 22.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': [],
+         'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 40.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': [],
          'areas': core.DEFAULT_AREAS, 'overview': {}, 'handover_from': '', 'handover_to': '', 'assets': {}, 'keyfiles': [],
          'months': 12, 'model_scope': 'issues', 'witness': '', 'handover_date': '', 'org': '', 'info': {}, 'manual_path': '', 'ocr': 'auto', 'ocr_pages': 5, 'ocr_images': False}
 _ocr_status = None   # ocr.available() 결과(시작·설정 때만 다시 센다)
@@ -72,7 +72,7 @@ def _reload_units():
     t0 = time.time(); folder = STATE['folder']
     try:
         set_ocr_config()
-        files, _, _ = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | set(STATE.get('exclude', [])), skip_names=SKIP_NAMES)
+        files, _, _ = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | set(STATE.get('exclude', [])), skip_names=SKIP_NAMES, skip_paths=[WORK])
         if STATE['folder'] == folder:   # 되읽는 사이에 다른 폴더를 읽었으면 버린다
             mc = {}
             for f in files:
@@ -121,11 +121,47 @@ def backup_draft():
         log('이전 초안 %d항목을 %s에 남기고 폴더를 다시 읽습니다' % (len(STATE['items']), name))
 
 
+def recheck_originals():
+    """내보내기 때 원본을 다시 SHA-256으로 재어 지문표의 「처리 후」를 지금 값으로 바꾼다. 없어진 파일은 「없어짐」."""
+    folder = STATE.get('folder') or ''
+    for x in STATE['fingerprints']:
+        p = os.path.join(folder, *x['file'].split('/'))
+        if os.name == 'nt' and not p.startswith('\\\\?\\'):
+            p = '\\\\?\\' + os.path.abspath(p)
+        try:
+            x['sha256_after'] = EX.sha256(p)
+        except Exception:
+            x['sha256_after'] = '없어짐'
+        x['unchanged'] = x['sha256_after'] == x['sha256_before']
+
+
+def check_modules():
+    """읽기에 필요한 부품이 있는지(없으면 화면 맨 위에 알린다. 파일이 손상된 것처럼 보이지 않게)."""
+    miss = []
+    for mod, what in (('pypdf', 'PDF'), ('olefile', '한글(.hwp)'), ('openpyxl', '엑셀(.xlsx)')):
+        try:
+            __import__(mod)
+        except Exception:
+            miss.append({'module': mod, 'what': what})
+    return miss
+
+
+MISSING = check_modules()
+
+
+def is_work(path):
+    """돌다리 작업 폴더(결과·세션 저장 위치)인지: 이름이 아니라 실제 경로로 본다."""
+    try:
+        return bool(WORK) and os.path.normcase(os.path.realpath(path)) == os.path.normcase(os.path.realpath(WORK))
+    except Exception:
+        return False
+
+
 def do_extract(folder, exclude=None):
     t0 = time.time()
     backup_draft()
     exclude = set(exclude or [])
-    subdirs = sorted(d for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d)) and d not in SKIP_DIRS and not d.startswith('.'))
+    subdirs = sorted(d for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d)) and d not in SKIP_DIRS and not d.startswith('.') and not is_work(os.path.join(folder, d)))
     warn, suggest = '', ''
     if any(os.path.exists(os.path.join(folder, x)) for x in PROGRAM_FILES):
         # 프로그램 폴더를 골랐다: 결과·web 폴더는 기본으로 빼고, 업무 폴더로 보이는 하위 폴더가 하나면 바꾸기를 제안한다
@@ -141,7 +177,7 @@ def do_extract(folder, exclude=None):
     STATE['extracting'] = {'index': 0, 'total': 0, 'file': '', 'sec': 0}
     eng = set_ocr_config()
     log('OCR: %s' % (eng or '끔(엔진 없음 또는 설정 끔)'))
-    files, failures, fps = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | exclude, skip_names=SKIP_NAMES, skip_root_files=bool(warn), progress=prog)
+    files, failures, fps = EX.extract_folder(folder, skip_dirs=SKIP_DIRS | exclude, skip_names=SKIP_NAMES, skip_root_files=bool(warn), progress=prog, skip_paths=[WORK])
     n_ocr = 0
     for f in files:
         f['file'] = f['file'].replace('\\', '/')
@@ -152,7 +188,10 @@ def do_extract(folder, exclude=None):
         x['file'] = x['file'].replace('\\', '/')
     with LOCK:
         STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mchars': f.get('mchars', f['chars']), 'mtime': f.get('mtime', ''), 'year': year_of(f), 'ocr': bool(f.get('ocr'))} for f in files], 'n_ocr': n_ocr,
-                      'failures': failures, 'fingerprints': fps, 'items': [], 'dropped': [], 'errors': [], 'calls': [], 'exports': [], 'step': 2, 'progress': None})
+                      'failures': failures, 'fingerprints': fps, 'items': [], 'dropped': [], 'errors': [], 'calls': [], 'exports': [], 'step': 2, 'progress': None,
+                      'prev_items': STATE['items'] or STATE.get('prev_items') or []})   # 넣기·버리기·메모·직접 적은 항목은 다시 만들 때 파일 기준으로 이어 간다
+        if not files:
+            STATE['extract_error'] = ('이 폴더(하위 폴더 포함)에서 읽을 수 있는 문서를 찾지 못했습니다.' + (' 못 읽은 파일 %d개의 사유는 4절 「확인하지 못한 자료」에 있습니다.' % len(failures) if failures else ' 폴더가 비어 있습니다.') + ' 업무 폴더를 다시 고르세요.')
         fa = docs.folder_areas(files)   # 맨 위 폴더가 업무 이름이면 그것으로 업무를 나눈다(사용자가 키워드를 손본 뒤에는 그대로 둔다)
         if fa and STATE.get('areas_src') in (None, '', '기본', '폴더'):
             STATE['areas'] = fa; STATE['areas_src'] = '폴더'
@@ -209,12 +248,13 @@ def run_draft():
                 log('누적 매뉴얼 파일이 없습니다: ' + mp)
         items, calls, errors, info = docs.build_docs(files, STATE.get('areas') or core.DEFAULT_AREAS, int(STATE.get('months') or 12), STATE['model'] or 'none', STATE['url'], '',
                                                       STATE.get('model_scope') or 'issues', MAX_CHARS3, progress=progress, should_stop=lambda: STATE['stop'],
-                                                      checkpoint=os.path.join(WORK, CHECKPOINT), folder=STATE['folder'], prev_items=STATE['items'], manual=manual)
+                                                      checkpoint=os.path.join(WORK, CHECKPOINT), folder=STATE['folder'], prev_items=STATE['items'] or STATE.get('prev_items') or [], manual=manual)
         n_reused = sum(1 for c in calls if c.get('reused'))
         if n_reused:
             log('이전 회차의 모델 응답 %d회를 다시 부르지 않고 재사용' % n_reused)
         with LOCK:
             STATE['items'], STATE['dropped'], STATE['calls'], STATE['errors'], STATE['info'] = items, [], calls, errors, info
+            STATE['prev_items'] = []
             STATE['progress'] = dict(STATE['progress'] or {}, index=len(items), total=len(items), calls_done=len(calls), calls_total=len(calls), sec=round(time.time() - t0), stopped=info.get('stopped', False))
             if calls:
                 STATE['avg_sec'] = round(sum(c['sec'] for c in calls) / len(calls), 1)
@@ -295,7 +335,7 @@ def list_dir(path):
     try:
         for name in sorted(os.listdir(path), key=str.lower):
             full = os.path.join(path, name)
-            if name.startswith('.') or name.startswith('$') or name in SKIP_DIRS:
+            if name.startswith('.') or name.startswith('$') or name in SKIP_DIRS or is_work(full):
                 continue
             if os.path.isdir(full):
                 dirs.append({'name': name, 'path': full})
@@ -358,10 +398,19 @@ class H(BaseHTTPRequestHandler):
                 st['areas_text'] = docs.areas_text(STATE.get('areas') or core.DEFAULT_AREAS)
                 st['n_skip'] = sum(1 for x in STATE['failures'] if x.get('skip')); st['n_fail'] = len(STATE['failures']) - st['n_skip']
                 st['ocr_status'] = ocr_status(); st['ocr_engine'] = EX.OCR_CONFIG.get('engine', '')
+                st['missing'] = MISSING; st.pop('prev_items', None)
             return self._send(200, st)
         if p.path == '/api/items':
             with LOCK:
                 return self._send(200, {'items': STATE['items'], 'dropped': STATE['dropped']})
+        if p.path == '/api/doc':   # 원문 보기: 앞부분과 기한·미결 같은 말이 든 줄(이 PC 안에서만)
+            name = urllib.parse.parse_qs(p.query).get('file', [''])[0]
+            units = _units.get(name)
+            if units is None:
+                return self._send(404, {'error': '이 문서의 글자를 아직 읽지 않았습니다(폴더를 다시 읽으면 보입니다)'})
+            lines = [l.strip() for u in units for l in u['text'].split('\n') if l.strip()]
+            hot = [i for i, l in enumerate(lines) if docs.HOT_LINE.search(l)][:12]
+            return self._send(200, {'file': name, 'head': lines[:30], 'hot': [lines[i][:200] for i in hot], 'n_lines': len(lines)})
         if p.path in ('/api/onnara', '/api/report'):   # 온나라 붙여넣기용 절별 평문 / 인쇄용 서식 HTML(현재 상태로 바로 만든다)
             with LOCK:
                 session = {'items': STATE['items'], 'areas': STATE.get('areas') or core.DEFAULT_AREAS, 'overview': STATE.get('overview') or {}, 'assets': STATE.get('assets') or {},
@@ -473,11 +522,22 @@ class H(BaseHTTPRequestHandler):
             if STATE.get('reloading'):
                 return self._send(409, {'error': '이전 폴더의 글자를 아직 되읽는 중입니다(큰 폴더는 몇 분). 잠시 뒤 다시 누르거나, ①에서 폴더를 다시 「읽기」 하세요.'})
             if not STATE['files']:
-                return self._send(400, {'error': '먼저 폴더를 읽어야 합니다'})
+                if STATE.get('folder'):
+                    return self._send(400, {'error': '이 폴더에서 읽을 수 있는 문서를 찾지 못했습니다(못 읽은 파일 %d개는 ②의 「못 읽은 파일」에 사유가 있습니다). 업무 폴더를 다시 고르세요.' % len(STATE.get('failures') or [])})
+                return self._send(400, {'error': '먼저 ①에서 업무 폴더를 고르고 「읽기」를 누르세요'})
             with LOCK:
                 STATE['running'] = True; STATE['stop'] = False; STATE['step'] = 3; STATE['progress'] = {'index': 0, 'total': (STATE['plan'] or {}).get('n_items', 0), 'calls_done': 0, 'calls_total': (STATE['plan'] or {}).get('calls', 0), 'sec': 0}
             threading.Thread(target=run_draft, daemon=True).start()
             return self._send(200, {'ok': True})
+        if p == '/api/openwork':   # 내보낸 파일이 있는 작업 폴더를 탐색기로 연다
+            try:
+                if os.name == 'nt':
+                    os.startfile(WORK)
+                else:
+                    subprocess.Popen(['xdg-open', WORK], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return self._send(200, {'ok': True})
+            except Exception as e:
+                return self._send(200, {'ok': False, 'error': '폴더를 열지 못했습니다. 탐색기에서 직접 여세요: ' + WORK})
         if p == '/api/stop':
             STATE['stop'] = True
             return self._send(200, {'ok': True})
@@ -488,16 +548,19 @@ class H(BaseHTTPRequestHandler):
                     it = by_id.get(ch.get('id'))
                     if not it:
                         continue
-                    for k in ('keep', 'decided', 'status', 'next', 'note', 'seen', 'due_next', 'summary', 'when'):
+                    for k in ('keep', 'decided', 'status', 'next', 'note', 'seen'):
                         if k in ch:
                             it[k] = ch[k]
+                    for k in ('due_next', 'summary', 'when'):   # 사람이 고친 표시를 남긴다(초안을 다시 만들어도 잃지 않게)
+                        if k in ch:
+                            it[k] = ch[k]; it[k + '_by'] = '사람'
                     for k in ('title', 'todo'):
                         if k in ch:
                             it[k] = str(ch[k]); it[k + '_by'] = '사람'
                     if 'area' in ch:
                         it['area'] = str(ch['area']); it['area_by'] = '사람'
                     if 'kind3' in ch and ch['kind3'] in ('현안', '반복', '문서', '연혁', '현황'):
-                        it['kind3'] = ch['kind3']
+                        it['kind3'] = ch['kind3']; it['kind3_by'] = '사람'
                 for b in body.get('bulk', []):          # 일괄: {'ids': [...], 'keep': true/false}
                     for i in b.get('ids', []):
                         it = by_id.get(i)
@@ -505,6 +568,10 @@ class H(BaseHTTPRequestHandler):
                             it['keep'] = bool(b.get('keep')); it['decided'] = True
                 for new in body.get('add', []):
                     nid = max([0] + [it['id'] for it in STATE['items']]) + 1
+                    d_in, w_in = str(new.get('date', '')).strip(), str(new.get('when', '')).strip()
+                    if d_in and not re.match(r'^\d{4}(-\d{2}(-\d{2})?)?$', d_in):   # 「매주 금요일」처럼 날짜가 아닌 글은 시기로
+                        w_in, d_in = (w_in or d_in), ''
+                    new = dict(new, date=d_in, when=w_in)
                     rec = {'id': nid, 'file': '', 'kind': '', 'cls': '직접 입력', 'date': str(new.get('date', '')).strip()[:10], 'docno': '', 'title': str(new.get('title', '')).strip()[:160],
                            'area': str(new.get('area') or '기타'), 'area_by': '사람', 'due': [], 'due_next': str(new.get('due_next', '')).strip()[:10], 'contacts': [], 'recur': None, 'attachments': [],
                            'kind3': new.get('kind3') if new.get('kind3') in ('현안', '반복', '문서', '연혁', '현황') else '현안', 'reflected': '', 'summary': '', 'todo': str(new.get('todo', '')).strip()[:160], 'todo_by': '사람',
@@ -522,12 +589,18 @@ class H(BaseHTTPRequestHandler):
                            'overview': STATE.get('overview') or {}, 'assets': STATE.get('assets') or {}, 'keyfiles': STATE.get('keyfiles') or [], 'areas': STATE.get('areas') or core.DEFAULT_AREAS,
                            'handover_from': STATE.get('handover_from', ''), 'handover_to': STATE.get('handover_to', ''), 'witness': STATE.get('witness', ''), 'handover_date': STATE.get('handover_date', ''),
                            'org': STATE.get('org', ''), 'months': STATE.get('months', 12), 'info': STATE.get('info') or {}}
-            stem = '인수인계서_' + datetime.datetime.now().strftime('%Y%m%d_%H%M')
+            stem = '인수인계서_' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            base, k = stem, 2
+            while os.path.exists(os.path.join(WORK, stem + '.md')):   # 같은 초에 두 번 눌러도 앞 파일을 덮어쓰지 않게
+                stem = '%s_%d' % (base, k); k += 1
+            recheck_originals()   # 내보내는 지금 원본을 다시 재어 「처리 후」 지문을 채운다(읽은 뒤 바뀐 파일도 잡힌다)
+            session['fingerprints'] = STATE['fingerprints']
             paths = export.write_all(session, WORK, stem)
+            safe = lambda v: ("'" + v) if v[:1] in ('=', '+', '-', '@', '\t', '\r') else v   # 엑셀에서 열 때 수식으로 실행되지 않게
             with open(os.path.join(WORK, stem + '_원본지문.csv'), 'w', encoding='utf-8-sig', newline='') as f:
-                f.write('파일,바이트,처리 전 SHA-256,처리 후 SHA-256,변경 없음\n')
+                f.write('파일,바이트,처리 전 SHA-256,내보낼 때 SHA-256,변경 없음\n')
                 for x in STATE['fingerprints']:
-                    f.write('"%s",%d,%s,%s,%s\n' % (x['file'].replace('"', '""'), x['bytes'], x['sha256_before'], x['sha256_after'], '예' if x['unchanged'] else '아니오'))
+                    f.write('"%s",%d,%s,%s,%s\n' % (safe(x['file']).replace('"', '""'), x['bytes'], x['sha256_before'], x['sha256_after'], '예' if x['unchanged'] else '아니오'))
             with LOCK:
                 STATE['exports'] = [os.path.basename(x) for x in paths] + [stem + '_원본지문.csv']
                 STATE['step'] = 5
@@ -552,8 +625,17 @@ def main():
     WORK = os.path.abspath(a.work)
     os.makedirs(WORK, exist_ok=True)
     load_session()
-    srv = ThreadingHTTPServer(('127.0.0.1', a.port), H)
     url = 'http://127.0.0.1:%d/' % a.port
+    try:
+        srv = ThreadingHTTPServer(('127.0.0.1', a.port), H)
+    except OSError:
+        print('돌다리가 이미 켜져 있습니다(포트 %d 사용 중). 열려 있는 화면을 브라우저로 엽니다: %s' % (a.port, url), flush=True)
+        print('다른 돌다리 검은 창이 없다면, 다른 프로그램이 이 포트를 쓰는 것입니다. 「돌다리_실행.bat --port 8777」처럼 다른 번호로 실행하세요.', flush=True)
+        if not a.no_browser:
+            webbrowser.open(url)
+        sys.exit(2)
+    if MISSING:
+        print('주의: 부품이 없어 읽지 못하는 형식이 있습니다: %s. 휴대용 묶음을 쓰거나 「python -m pip install -r requirements.txt」.' % ', '.join('%s(%s)' % (m['what'], m['module']) for m in MISSING), flush=True)
     print('돌다리 v%s · %s (이 PC 안에서만 열립니다. 끝내려면 이 창을 닫거나 Ctrl+C)' % (VERSION, url), flush=True)
     print('작업 폴더: %s' % WORK, flush=True)
     if not a.no_browser:

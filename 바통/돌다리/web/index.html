@@ -17,6 +17,9 @@ a{color:var(--info)}
 .top{background:var(--card);border-bottom:1px solid var(--line);padding:10px 22px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:5;flex-wrap:wrap}
 .mark{width:42px;height:42px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:800;font-size:1.2rem;flex:none}
 .top h1{font-size:1.25rem;letter-spacing:-.02em}.top .sub{color:var(--ink2);font-size:.86rem}
+#subline{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw}
+.docview{font-size:.84rem;background:var(--tint);border:1px solid var(--line2);border-radius:8px;padding:8px 10px;margin-top:6px;max-height:320px;overflow:auto}.docview .hot{background:var(--warn-bg);border-radius:6px;padding:4px 8px;margin-bottom:6px}.docview div{word-break:break-all}
+tr.docview td{background:var(--tint)}
 .top .prog{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:.9rem;color:var(--ink2);flex-wrap:wrap}
 .bar{height:10px;background:var(--line2);border-radius:5px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .3s}
 .top .bar{width:160px}
@@ -103,13 +106,13 @@ table.tri td{padding:4px 6px}table.tri input.text{width:100%;border:1px solid tr
 #log{font-family:Consolas,monospace;font-size:.8rem;color:var(--ink2);white-space:pre-wrap;max-height:260px;overflow:auto;background:var(--tint);padding:8px;border-radius:8px}
 #printView{display:none}
 @page{margin:15mm}
-#printView{font:11pt/1.45 "Malgun Gothic","맑은 고딕",sans-serif;color:#000}
-#printView h2{font-size:18pt;margin:0 0 6pt;text-align:center;letter-spacing:.1em}#printView h3{font-size:14pt;margin:14pt 0 5pt;border-bottom:2px solid #333;padding-bottom:2pt;break-after:avoid}#printView h4{font-size:12.5pt;margin:10pt 0 4pt;break-after:avoid}#printView h5{font-size:11pt;margin:8pt 0 3pt;color:#333;break-after:avoid}
-#printView p{margin:3pt 0}#printView .meta{color:#555;font-size:9.5pt}#printView .pi{padding:2pt 0 2pt 8pt}#printView .pi.sub{color:#444;padding-left:18pt}
-#printView table{border-collapse:collapse;width:100%;table-layout:fixed;margin:3pt 0 8pt;font-size:10pt}#printView table.f th{background:#eef1f5;font-weight:700;border:1px solid #777;padding:3pt 4pt;text-align:left}#printView table.f td{border:1px solid #777;padding:3pt 4pt;vertical-align:top;word-break:break-all}#printView tr{break-inside:avoid}#printView thead{display:table-header-group}
-#printView table.hdr th{background:#eef1f5;border:1px solid #777;padding:3pt 5pt;width:9%;white-space:nowrap}#printView table.hdr td{border:1px solid #777;padding:3pt 5pt}
+#printView,.pvDoc{font:11pt/1.45 "Malgun Gothic","맑은 고딕",sans-serif;color:#000}
+:is(#printView,.pvDoc) h2{font-size:18pt;margin:0 0 6pt;text-align:center;letter-spacing:.1em}:is(#printView,.pvDoc) h3{font-size:14pt;margin:14pt 0 5pt;border-bottom:2px solid #333;padding-bottom:2pt;break-after:avoid}:is(#printView,.pvDoc) h4{font-size:12.5pt;margin:10pt 0 4pt;break-after:avoid}:is(#printView,.pvDoc) h5{font-size:11pt;margin:8pt 0 3pt;color:#333;break-after:avoid}
+:is(#printView,.pvDoc) p{margin:3pt 0}:is(#printView,.pvDoc) .meta{color:#555;font-size:9.5pt}:is(#printView,.pvDoc) .pi{padding:2pt 0 2pt 8pt}:is(#printView,.pvDoc) .pi.sub{color:#444;padding-left:18pt}
+:is(#printView,.pvDoc) table{border-collapse:collapse;width:100%;table-layout:fixed;margin:3pt 0 8pt;font-size:10pt}:is(#printView,.pvDoc) table.f th{background:#eef1f5;font-weight:700;border:1px solid #777;padding:3pt 4pt;text-align:left}:is(#printView,.pvDoc) table.f td{border:1px solid #777;padding:3pt 4pt;vertical-align:top;word-break:break-all}:is(#printView,.pvDoc) tr{break-inside:avoid}:is(#printView,.pvDoc) thead{display:table-header-group}
+:is(#printView,.pvDoc) table.hdr th{background:#eef1f5;border:1px solid #777;padding:3pt 5pt;width:9%;white-space:nowrap}:is(#printView,.pvDoc) table.hdr td{border:1px solid #777;padding:3pt 5pt}
 .previewWrap{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18mm 16mm;max-width:210mm;margin:0 auto;box-shadow:var(--shadow)}
-@media print{.top,nav,aside,main{display:none !important} #printView{display:block;padding:0} .layout{display:block}}
+@media print{.top,nav,aside,main,.layout,#downBand,#missBand{display:none !important} #printView{display:block;padding:0}}
 @media (max-width:1300px){.layout{grid-template-columns:240px minmax(0,1fr)} aside{display:none}}
 @media (max-width:860px){.layout{grid-template-columns:1fr} nav{position:static;height:auto} .cal{grid-template-columns:repeat(2,1fr)}}
 </style>
@@ -117,11 +120,13 @@ table.tri td{padding:4px 6px}table.tri input.text{width:100%;border:1px solid tr
 <body>
 <div class="top">
   <div class="mark">돌</div>
-  <div><h1>돌다리 · 업무인계·인수서 <span id="ver" class="sub" style="font-size:.78rem"></span></h1><div class="sub" id="subline">업무 폴더의 최근 문서를 한 건씩 정리해 법정 서식(별지 제12호)으로 채웁니다 · 이 PC 안에서만 작동</div></div>
+  <div style="min-width:0;flex:1 1 300px"><h1>돌다리 · 업무인계·인수서 <span id="ver" class="sub" style="font-size:.78rem"></span> <span id="saved" class="sub" style="font-size:.78rem"></span></h1><div class="sub" id="subline">업무 폴더의 최근 문서를 한 건씩 정리해 법정 서식(별지 제12호)으로 채웁니다 · 이 PC 안에서만 작동</div></div>
   <div class="prog"><span id="progLbl">완성도 —</span><div class="bar"><i id="progBar"></i></div>
     <div class="seg" id="modeSeg" title="넘기는 사람은 넣고 고치고, 받는 사람은 확인합니다"><button data-m="give" class="on">넘기는 사람</button><button data-m="take">받는 사람</button></div>
     <button class="ghost sm" id="fsdn" title="글자 작게">가−</button><button class="ghost sm" id="fsup" title="글자 크게">가＋</button><button class="ghost sm" id="thm" title="밝기">◐</button><button class="ghost sm" id="btnPreview" title="인쇄될 모양을 화면에서 먼저 봅니다">미리보기</button><button class="ghost sm" id="btnPrint">인쇄</button><button class="btn" id="btnExport">인계·인수서 내려받기</button></div>
 </div>
+<div class="bad" id="downBand" hidden style="margin:0;border-radius:0">돌다리 검은 창(서버)이 닫혔습니다. 지금 고친 내용은 저장되지 않습니다. 돌다리_실행.bat을 다시 누른 뒤 이 화면을 새로 고치세요(F5).</div>
+<div class="bad" id="missBand" hidden style="margin:0;border-radius:0"></div>
 <div class="layout">
 <nav id="nav"></nav>
 <main id="main"></main>

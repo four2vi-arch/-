@@ -25,6 +25,7 @@ DUE_PATS = [re.compile(r'(20\d{2})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?' + WD + r'\s*�
             re.compile(r'(\d{1,2})월\s*(\d{1,2})일' + WD + r'\s*까지'),
             re.compile(r'[~∼～]\s*(?:(20\d{2})\.\s*)?(\d{1,2})\.\s*(\d{1,2})\.?' + WD)]
 ISSUE = core.ISSUE
+HOT_LINE = re.compile(r'까지|기한|미결|보류|미납|지연|후임|요청|회신|협의 중|확인 필요|반려|재제출|못 받|안 됨|예정')   # 원문 보기·발췌에서 먼저 보여 줄 줄
 CONTACT_LINE = re.compile(r'문의|담당|☎|☏|연락|주무관|팀장|과장|실장')
 SYS3 = ('너는 공공기관 업무 인수인계 도우미다. 전임자의 문서 하나(공문·메일·보고서)를 읽고 후임자에게 필요한 것만 JSON 객체 하나로 답하라.\n'
         '형식: {"요지":"이 문서가 무엇을 요구하거나 알리는지 한 문장","할 일":"우리 부서(전임자 자리)가 해야 하는 일 한 문장, 없으면 빈 문자열","기한":"YYYY-MM-DD 또는 빈 문자열","담당":"문의할 사람·부서와 전화, 없으면 빈 문자열","상태":"진행 중|끝남|모름"}\n'
@@ -44,7 +45,15 @@ def text_of(f):
 
 
 def base_name(f):
-    return os.path.basename(str(f.get('file', '')).split(' ▸ ')[0])
+    """파일 이름. 압축 안 파일(「묶음.zip ▸ 안/파일.txt」)은 안쪽 파일 이름."""
+    return os.path.basename(str(f.get('file', '')).split(' ▸ ')[-1].replace('\\', '/'))
+
+
+def outer_name(f):
+    return os.path.basename(str(f.get('file', '')).split(' ▸ ')[0].replace('\\', '/'))
+
+
+TITLE_YEAR = re.compile(r'(?<!\d)(20\d{2})\s*(?:년|년도|_|\s|$)')
 
 
 def iso(y, m, d):
@@ -56,13 +65,13 @@ def iso(y, m, d):
 
 def doc_date(f, text):
     """문서 날짜: 파일 이름 YYYYMMDD → 이름 YYYYMM → 본문 「시행」 근처 날짜 → 본문 첫 날짜 → 파일 수정일."""
-    name = base_name(f)
-    m = FNAME_DATE.search(name)
-    if m and iso(*m.groups()):
-        return iso(*m.groups()), '파일 이름'
-    m = FNAME_YM.search(name)
-    if m:
-        return iso(m.group(1), m.group(2), 1), '파일 이름(월)'
+    for name in dict.fromkeys([base_name(f), outer_name(f)]):   # 안쪽 이름 → 압축 파일 이름
+        m = FNAME_DATE.search(name)
+        if m and iso(*m.groups()):
+            return iso(*m.groups()), '파일 이름'
+        m = FNAME_YM.search(name)
+        if m:
+            return iso(m.group(1), m.group(2), 1), '파일 이름(월)'
     i = text.find('시행 ')
     if i >= 0:
         win = text[max(0, i - 300):i + 200]
@@ -74,6 +83,10 @@ def doc_date(f, text):
         d = iso(*x.groups())
         if d:
             return d, '본문'
+    # 날짜가 없고 이름에 연도만 있으면(「인수인계서_2024_전전임자」) 그 해로 둔다. 수정일(복사·내려받기 날짜)보다 낫다
+    m = TITLE_YEAR.search(os.path.splitext(base_name(f))[0] + ' ' + text[:300])
+    if m and (not f.get('mtime') or m.group(1) != f['mtime'][:4]):
+        return '%s-01-01' % m.group(1), '연도만'
     if f.get('mtime'):
         return f['mtime'], '수정일'
     return '', ''
@@ -133,19 +146,26 @@ def classify(f, text):
     return '기타'
 
 
-def due_dates(text, base):
-    """기한: 「○. ○.까지」「○월 ○일까지」「2026. 3. 13.까지」「~ 9. 11.」. 연도는 문서 연도, 문서 달보다 두 달 넘게 이르면 이듬해."""
+def due_dates(text, base, base_src=''):
+    """기한: 「○. ○.까지」「○월 ○일까지」「2026. 3. 13.까지」「~ 9. 11.」. 연도는 문서 연도, 문서 달보다 두 달 넘게 이르면 이듬해.
+    문서 날짜가 확실하지 않으면(파일 수정일·연도만) 이듬해로 넘기지 않는다(복사한 날짜를 기준으로 미래 기한을 지어내지 않게)."""
     try:
         by, bm = int(base[:4]), int(base[5:7])
     except Exception:
         by, bm = datetime.date.today().year, datetime.date.today().month
+    if base_src in ('수정일', '연도만', ''):
+        bm = 1
     out, seen = [], set()
     for line in text.split('\n'):
         s = line.strip()
         if not s or len(s) > 400:
             continue
+        spans = []   # 앞 꼴이 이미 잡은 자리(「2025. 12. 30.까지」의 「12. 30.까지」)는 다시 잡지 않는다
         for pat in DUE_PATS:
             for m in pat.finditer(s):
+                if any(m.start() < b and a < m.end() for a, b in spans):
+                    continue
+                spans.append((m.start(), m.end()))
                 g = m.groups()
                 if len(g) == 3:
                     y, mo, d = g
@@ -305,7 +325,7 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
         cls = classify(f, text)
         title = doc_title(f, text)
         d = {'file': f['file'], 'kind': f.get('kind', ''), 'cls': cls, 'date': date, 'date_src': date_src, 'docno': doc_no(text), 'title': title,
-             'area': area_of(title, text, areas, f['file']), 'due': due_dates(text, date) if cls in CLS_ISSUE | {'붙임'} else [],
+             'area': area_of(title, text, areas, f['file']), 'due': due_dates(text, date, date_src) if cls in CLS_ISSUE | {'붙임'} else [],
              'contacts': contacts_of(text) if (cls != '표·대장' and not HR_NAME.search(title)) else [],   # 인사·임용·경력 자료의 번호는 개인정보 → 연락처로 쓰지 않는다
              'issue_words': bool(ISSUE.search(text[:6000])) if cls in CLS_ISSUE else False, 'chars': f.get('chars', 0), 'recur': None, 'attachments': []}
         docs.append(d)
@@ -362,17 +382,17 @@ def plan_docs(files, areas, months=12, model_scope='issues', today=None, recur_m
             continue
         g2 = sorted(g, key=lambda d: (RANK.get(d['kind'], 9), -d['chars']))
         for d in g2[1:]:   # 형식이 다른 같은 문서(docx와 그 pdf·md)만 중복. 이름만 같은 같은 형식 파일은 각각 다른 문서로 둔다
-            if d['kind'] in RANK and d['kind'] != g2[0]['kind'] and abs(g2[0]['chars'] - d['chars']) <= 0.5 * max(g2[0]['chars'], d['chars'], 1):
+            same_doc = d['date'] == g2[0]['date'] or os.path.splitext(base_name(d))[0] == os.path.splitext(base_name(g2[0]))[0]   # 같은 회차(날짜) 또는 같은 파일 이름일 때만
+            if d['kind'] in RANK and d['kind'] != g2[0]['kind'] and same_doc and abs(g2[0]['chars'] - d['chars']) <= 0.5 * max(g2[0]['chars'], d['chars'], 1):
                 d['dup'] = True
     for d in docs:
         am = area_months.get(d['area'], months)
         lim = (today - datetime.timedelta(days=30 * am)).isoformat()
         in_window = bool(d['date']) and d['date'] >= lim
         d['in_window'] = in_window
-        due_next = ''
-        for x in d['due']:
-            if x['date'] >= (today - datetime.timedelta(days=60)).isoformat():
-                due_next = x['date']; break
+        future = [x['date'] for x in d['due'] if x['date'] >= today.isoformat()]
+        recent_past = [x['date'] for x in d['due'] if (today - datetime.timedelta(days=60)).isoformat() <= x['date'] < today.isoformat()]
+        due_next = future[0] if future else (recent_past[-1] if recent_past else '')   # 다가올 기한 먼저, 없으면 최근 두 달 안에 지난 기한(지남 표시)
         d['due_next'] = due_next
         recent = d['date_src'] != '수정일' and d['date'] >= (today - datetime.timedelta(days=120)).isoformat()
         if d.get('parent'):
@@ -454,12 +474,23 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
     n = 0
     for d in cand:
         n += 1
-        it = {'id': n, 'file': d['file'], 'kind': d['kind'], 'cls': d['cls'], 'date': d['date'], 'docno': d['docno'], 'title': d['title'], 'area': d['area'],
+        it = {'id': n, 'file': d['file'], 'kind': d['kind'], 'cls': d['cls'], 'date': d['date'], 'date_src': d.get('date_src', ''), 'docno': d['docno'], 'title': d['title'], 'area': d['area'],
               'due': d['due'], 'due_next': d['due_next'], 'contacts': d['contacts'], 'recur': d['recur'], 'attachments': d['attachments'], 'kind3': d['kind3'],
               'reflected': reflected(d, nos, line_grams) if manual is not None else '', 'hist': d.get('hist', False), 'is_status': d.get('is_status', False), 'summary': '', 'todo': '', 'owner': '', 'model_status': '',
               'src': '규칙', 'keep': True, 'decided': False, 'status': '진행', 'next': '', 'note': '', 'seen': False, 'quote': ''}
         if manual is not None and it['reflected'] and d['kind3'] == '연혁':
             it['hist'] = True
+        if d['kind3'] in ('현안', '반복'):   # 규칙 발췌: 기한·미결·후임 같은 말이 든 원문 줄(글자 그대로, 고치지 않음). 모델 없이도 무엇을 넣고 버릴지 볼 수 있게
+            f0 = by_file.get(d['file'])
+            if f0:
+                seen_q, qs = set(), []
+                for l in text_of(f0).split('\n'):
+                    l = re.sub(r'\s+', ' ', l).strip()
+                    if 8 <= len(l) <= 160 and HOT_LINE.search(l) and core.norm(l) != core.norm(d['title']) and l not in seen_q:
+                        seen_q.add(l); qs.append(l if len(l) <= 110 else l[:108] + '…')
+                        if len(qs) >= 2:
+                            break
+                it['quote'] = ' / '.join(qs)
         if d['to_model'] and model != 'none' and not stopped and not (should_stop and should_stop()):
             f = by_file.get(d['file'])
             chunk = ('제목: %s\n' % d['title']) + text_of(f)[:max_chars]
@@ -513,8 +544,9 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                 it['area'] = p.get('area', it['area']); it['area_by'] = '사람'
             if p.get('title_by') == '사람':
                 it['title'] = p.get('title', it['title']); it['title_by'] = '사람'
-            if p.get('todo_by') == '사람':
-                it['todo'] = p.get('todo', ''); it['todo_by'] = '사람'
+            for k in ('todo', 'due_next', 'summary', 'when', 'kind3'):
+                if p.get(k + '_by') == '사람':
+                    it[k] = p.get(k, it.get(k, '')); it[k + '_by'] = '사람'
         items.append(it)
         report(d)
     for p in (prev_items or []):   # 전임자가 직접 적은 항목은 파일이 없으니 그대로 이어 간다
@@ -531,7 +563,8 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
             'n_doc': sum(1 for i in items if i['kind3'] == '문서'), 'n_old': sum(1 for d in docs if d['kind3'] == '기간 밖'), 'n_attach': sum(1 for d in docs if d['kind3'] == '붙임'),
             'n_unreflected': sum(1 for i in items if manual is not None and not i['reflected'] and i['cls'] == '공문'), 'sec': round(time.time() - t_all, 1), 'stopped': stopped,
             'n_hist': sum(1 for i in items if i['kind3'] == '연혁'), 'n_status': sum(1 for i in items if i['kind3'] == '현황'),
-            'docs_old': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'cls': d['cls']} for d in docs if d['kind3'] == '기간 밖'][:5000]}
+            'docs_old': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'cls': d['cls']} for d in docs if d['kind3'] == '기간 밖'][:5000],
+            'docs_other': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'why': '업무 매뉴얼' if d['kind3'] == '매뉴얼' else '같은 문서의 다른 형식(중복본)'} for d in docs if d['kind3'] in ('매뉴얼', '중복')][:2000]}
     return items, calls, errors, info
 
 

@@ -501,15 +501,24 @@ NON_DOC = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tif', '.tiff', '.webp', '.
 MAX_BYTES = 200 * 1024 * 1024
 
 
+CTRL_BREAK = re.compile(r'[\x0b\x0c\x1c-\x1e\x85\u2028\u2029]')   # 한글·워드의 강제 줄바꿈·쪽 나눔 → 줄바꿈
+CTRL_DROP = re.compile(r'[\x00-\x08\x0e-\x1b\x1f\x7f\ufffe\uffff]')    # XML(docx)에 들어갈 수 없는 제어 문자 → 지움
+
+
 def clean_text(s):
-    """PDF(UniKS-UTF16 대체 디코딩)·깨진 파일에서 나온 서러게이트 문자를 정리한다. 짝이 맞는 것은 합치고, 홀로 남은 것은 �로. 그대로 두면 JSON 저장(utf-8)에서 죽는다."""
+    """PDF(UniKS-UTF16 대체 디코딩)·깨진 파일에서 나온 서러게이트 문자를 정리한다. 짝이 맞는 것은 합치고, 홀로 남은 것은 �로. 그대로 두면 JSON 저장(utf-8)에서 죽는다.
+    제어 문자(\x0b 강제 줄바꿈·\x0c 쪽 나눔 등)도 정리한다. 남겨 두면 내보낸 .docx가 열리지 않는다."""
     if not s or not isinstance(s, str):
         return s or ''
     try:
         s.encode('utf-8')
-        return s
     except UnicodeEncodeError:
-        return s.encode('utf-16', 'surrogatepass').decode('utf-16', 'replace')
+        s = s.encode('utf-16', 'surrogatepass').decode('utf-16', 'replace')
+    if CTRL_BREAK.search(s):
+        s = CTRL_BREAK.sub('\n', s)
+    if CTRL_DROP.search(s):
+        s = CTRL_DROP.sub('', s)
+    return s
 
 
 def extract_file(path, rel, results, failures, depth=0):
@@ -558,46 +567,58 @@ def extract_file(path, rel, results, failures, depth=0):
         pass
     try:
         units = fn(path)
-        if not units:
-            failures.append({'file': rel, 'reason': '글자가 없음'})
-            return
-        for u in units:
+        for u in units or []:
             u['text'] = clean_text(u.get('text', '')); u['loc'] = clean_text(str(u.get('loc', '')))
+        if not units or not any(u['text'].strip() for u in units):
+            failures.append({'file': clean_text(rel), 'reason': '글자가 없음(빈 파일이거나 그림만 있음)'})
+            return
         try:
             mtime = datetime.date.fromtimestamp(os.path.getmtime(path)).isoformat()
         except Exception:
             mtime = ''
         results.append({'file': clean_text(rel), 'kind': ext[1:], 'chars': sum(len(u['text']) for u in units), 'mtime': mtime,
                         'mchars': sum(len(u['loc']) + len(u['text']) + 3 for u in units) + max(0, len(units) - 1), 'units': units})
+    except ImportError as e:   # 부품(pypdf·olefile·openpyxl)이 없을 때: 파일이 손상된 것으로 보이지 않게
+        failures.append({'file': clean_text(rel), 'reason': '읽는 데 필요한 부품(%s)이 설치되지 않음 — 휴대용 묶음을 쓰거나 「python -m pip install -r requirements.txt」' % (getattr(e, 'name', '') or str(e)[:40])})
     except ValueError as e:
         failures.append({'file': clean_text(rel), 'reason': clean_text(str(e)[:160])})
     except Exception as e:
         failures.append({'file': clean_text(rel), 'reason': '%s(파일 손상 가능: %s)' % ({'.hwp': '한글 5.0 구조를 읽지 못함', '.hwpx': 'hwpx 구조를 읽지 못함', '.pdf': 'PDF 구조를 읽지 못함', '.xlsx': '엑셀 구조를 읽지 못함', '.docx': '워드 구조를 읽지 못함', '.odt': 'ODT 구조를 읽지 못함'}.get(ext, '읽지 못함'), (str(e)[:80] or type(e).__name__))})
 
 
-def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=False, progress=None):
-    """skip_dirs: 건너뛸 폴더 이름(어느 깊이든 같은 이름). skip_names: 건너뛸 파일 이름 정규식. 숨김 폴더(.으로 시작)는 늘 건너뛴다.
+def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=False, progress=None, skip_paths=None):
+    """skip_dirs: 건너뛸 폴더 이름(어느 깊이든 같은 이름). skip_names: 건너뛸 파일 이름 정규식(건너뛴 파일은 failures에 skip으로 남긴다).
+    skip_paths: 건너뛸 폴더의 실제 경로(돌다리 작업 폴더). 숨김 폴더(.으로 시작)는 늘 건너뛴다.
     progress(dict): 파일마다 {'index','total','file'}로 불린다(화면 진행 표시용)."""
     results, failures, fps = [], [], []
     skip = set(skip_dirs or ())
+    skip_real = {os.path.normcase(os.path.realpath(x)) for x in (skip_paths or ())}
+    def keep_dir(root, d):
+        return d not in skip and not d.startswith('.') and os.path.normcase(os.path.realpath(os.path.join(root, d))) not in skip_real
     total = 0
     if progress:
         for root, dirs, files in os.walk(folder):
-            dirs[:] = [d for d in dirs if d not in skip and not d.startswith('.')]
+            dirs[:] = [d for d in dirs if keep_dir(root, d)]
             total += len(files)
     done = 0
     walk_root = folder
     if os.name == 'nt' and not str(folder).startswith('\\\\?\\'):
         walk_root = '\\\\?\\' + os.path.abspath(folder)   # 260자 넘는 경로도 열리게(윈도 긴 경로 접두)
-    for root, dirs, files in os.walk(walk_root):
-        dirs[:] = sorted(d for d in dirs if d not in skip and not d.startswith('.'))
+    def walk_err(e):   # 권한 없는 하위 폴더: 조용히 빠지지 않게 못 읽음에 남긴다
+        try:
+            failures.append({'file': clean_text(os.path.relpath(getattr(e, 'filename', '') or folder, walk_root)), 'reason': '폴더를 열 권한이 없음(%s)' % type(e).__name__})
+        except Exception:
+            pass
+    for root, dirs, files in os.walk(walk_root, onerror=walk_err):
+        dirs[:] = sorted(d for d in dirs if keep_dir(root, d))
         if skip_root_files and os.path.normcase(os.path.abspath(root)) == os.path.normcase(os.path.abspath(walk_root)):
             continue   # 프로그램 폴더를 골랐을 때: 최상위의 README·설정 파일은 업무 문서가 아니다
         for name in sorted(files):
-            if skip_names and re.search(skip_names, name):
-                continue
             p = os.path.join(root, name)
             rel = os.path.relpath(p, walk_root)
+            if skip_names and re.search(skip_names, name):
+                failures.append({'file': clean_text(rel), 'reason': '돌다리가 만든 파일과 이름이 같아 읽지 않음(업무 문서라면 이름을 바꿔 다시 읽기)', 'skip': True})
+                continue
             done += 1
             if progress and (done % 5 == 0 or done == total):
                 progress({'index': done, 'total': total, 'file': clean_text(rel)})

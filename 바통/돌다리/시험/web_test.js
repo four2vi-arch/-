@@ -29,13 +29,13 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     await page.goto(`http://127.0.0.1:${PORT}/`); await sleep(600);
     ok('첫 화면은 준비(폴더 읽기)', await page.$eval('#nav a.cur', a => a.dataset.s) === 'prep');
     ok('OCR 설정 줄', !!(await page.$('#ocr')) && (await page.textContent('#main')).includes('OCR'));
-    await page.selectOption('#ocr', 'off'); await sleep(500); ok('OCR 끄기 저장', (await state()).ocr === 'off');
+    await page.click('summary:has-text("고급 설정")'); await page.selectOption('#ocr', 'off'); await sleep(500); ok('OCR 끄기 저장', (await state()).ocr === 'off');
     await page.click('#fsup'); await page.click('#fsdn'); await page.click('#thm'); const dark = await page.evaluate(() => document.documentElement.dataset.theme); await page.click('#thm'); ok('글자 크기·밝기', dark === 'dark');
     await page.click('#btnPick'); await page.waitForSelector('#picker:not([hidden])'); const nd = await page.$$eval('#pkList .d', d => d.length); await page.click('#pkList .d'); await sleep(200); await page.click('#pkUp'); await sleep(200); await page.click('#pkClose'); ok('찾기 창', nd > 0 && await page.$eval('#picker', el => el.hidden));
     await page.fill('#folder', MOCK); await page.click('#btnExtract'); await page.waitForSelector('.pills', {timeout: 40000}); await sleep(500);
     const st1 = await state(); ok('읽기', st1.files.length > 30, `읽음 ${st1.files.length} · 못 읽음 ${st1.n_fail} · 읽지 않음 ${st1.n_skip}`);
     ok('문서 단위 계획(현안·반복·기간 밖)', st1.plan && st1.plan.n_issue > 0 && st1.plan.n_recur > 0 && st1.plan.n_old >= 0, JSON.stringify({n_items: st1.plan.n_items, n_issue: st1.plan.n_issue, n_recur: st1.plan.n_recur, n_old: st1.plan.n_old}));
-    await page.click('details summary'); await page.click('#subNone'); await page.click('#subAll'); await page.click('#btnReread'); await page.waitForSelector('.pills', {timeout: 40000}); await sleep(800); ok('하위 폴더 모두·해제·다시 읽기', (await state()).files.length === st1.files.length);
+    await page.click('summary:has-text("읽을 하위 폴더")'); await page.click('#subNone'); await page.click('#subAll'); await page.click('#btnReread'); await page.waitForSelector('.pills', {timeout: 40000}); await sleep(800); ok('하위 폴더 모두·해제·다시 읽기', (await state()).files.length === st1.files.length);
     // 기간 바꾸기
     await page.selectOption('#months', '36'); await sleep(500); const p36 = (await state()).plan; await page.selectOption('#months', '12'); await sleep(500); const p12 = (await state()).plan;
     ok('기간 36개월이 12개월보다 문서가 많거나 같음', p36.n_items >= p12.n_items, `${p36.n_items} ≥ ${p12.n_items}`);
@@ -61,9 +61,9 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     ok('업무 설명·조심할 것 저장', ((await state()).overview[firstArea] || {}).desc === '설명 한 줄' && ((await state()).overview[firstArea] || {}).tip === '조심할 것');
     await page.screenshot({path: path.join(shots, 'v3_2_담당업무.png')});
     // 1-나 반복
-    await nav('s1b'); ok('반복 업무 달력 12칸', (await page.$$eval('#main .cal .m', x => x.length)) === 12);
+    await nav('s1b'); ok('반복 업무: 넣기 전에는 빈 달력 대신 제안 카드부터', (await page.$$eval('#main .cal .m', x => x.length)) === 0 && (await page.$$eval('#main .sug', x => x.length)) >= 1);
     const inB = await page.$('#main .sug button[data-act="in"]'); if (inB) { await inB.click(); await sleep(700); }
-    ok('반복 업무 넣기 → 달력에 듦', (await page.$$eval('#main .cal .m:not(.empty)', x => x.length)) >= 1);
+    ok('반복 업무 넣기 → 달력 12칸에 듦', (await page.$$eval('#main .cal .m', x => x.length)) === 12 && (await page.$$eval('#main .cal .m:not(.empty)', x => x.length)) >= 1);
     // 1-다 현안
     await nav('s1c'); const nSug = (await items()).filter(i => i.kind3 === '현안' && i.decided !== true).length;
     const inC = await page.$('#main [data-id] button[data-act="in"]'); await inC.click(); await sleep(700);
