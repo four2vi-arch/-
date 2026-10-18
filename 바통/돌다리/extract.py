@@ -579,7 +579,7 @@ def extract_file(path, rel, results, failures, depth=0):
         results.append({'file': clean_text(rel), 'kind': ext[1:], 'chars': sum(len(u['text']) for u in units), 'mtime': mtime,
                         'mchars': sum(len(u['loc']) + len(u['text']) + 3 for u in units) + max(0, len(units) - 1), 'units': units})
     except ImportError as e:   # 부품(pypdf·olefile·openpyxl)이 없을 때: 파일이 손상된 것으로 보이지 않게
-        failures.append({'file': clean_text(rel), 'reason': '읽는 데 필요한 부품(%s)이 설치되지 않음 · 휴대용 묶음을 쓰거나 「python -m pip install -r requirements.txt」' % (getattr(e, 'name', '') or str(e)[:40])})
+        failures.append({'file': clean_text(rel), 'reason': '읽는 데 필요한 부품(%s)이 설치되지 않음 · 휴대용 묶음을 쓰거나 「python -m pip install -r 부품목록.txt」' % (getattr(e, 'name', '') or str(e)[:40])})
     except ValueError as e:
         failures.append({'file': clean_text(rel), 'reason': clean_text(str(e)[:160])})
     except Exception as e:

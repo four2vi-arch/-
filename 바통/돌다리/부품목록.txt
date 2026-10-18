@@ -5,4 +5,4 @@ pypdfium2>=4.30        # 스캔 PDF OCR: 쪽을 그림으로(외부 프로그램
 # --- OCR 엔진(하나만 있으면 됨, 선택) ---
 # winocr                 # 윈도 10·11 내장 OCR(한국어 언어 팩 필요, 모델 내려받기 없음) · 권장
 # rapidocr-onnxruntime   # 어느 OS든. 한국어는 korean_PP-OCRv3_rec_infer.onnx를 도구/ocr_models/에
-# (tesseract.exe + kor 자료가 설치돼 있으면 자동으로 씀)
+# (테서랙트와 한국어 자료가 설치돼 있으면 자동으로 씀)

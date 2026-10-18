@@ -40,7 +40,7 @@ async function refresh() {
   setTimeout(fitTop, 0);
   $('#subline').textContent = (ST.folder ? ST.folder + ' · ' : '') + (ST.handover_from || ST.handover_to ? `인계자 ${ST.handover_from || '?'} → 인수자 ${ST.handover_to || '?'} · ` : '') + '이 PC 안에서만 작동';
   renderNav(); renderAside();
-  const mb = $('#missBand'); if (mb) { mb.hidden = !(ST.missing && ST.missing.length); mb.textContent = (ST.missing || []).length ? `읽는 데 필요한 부품이 없습니다: ${(ST.missing || []).map(x => x.what + '(' + x.module + ')').join(', ')}. 이 형식은 「못 읽은 문서」로 남습니다. 휴대용 묶음(돌다리_실행.bat)을 쓰거나 「python -m pip install -r requirements.txt」를 실행하세요.` : ''; }
+  const mb = $('#missBand'); if (mb) { mb.hidden = !(ST.missing && ST.missing.length); mb.textContent = (ST.missing || []).length ? `읽는 데 필요한 부품이 없습니다: ${(ST.missing || []).map(x => x.what + '(' + x.module + ')').join(', ')}. 이 형식은 「못 읽은 문서」로 남습니다. 휴대용 묶음(돌다리_실행.bat)을 쓰거나 「python -m pip install -r 부품목록.txt」를 실행하세요.` : ''; }
   const pr = ST.progress;
   const el = document.activeElement;
   const busy = el && $('#main') && $('#main').contains(el) && ['SELECT', 'INPUT', 'TEXTAREA'].includes(el.tagName);   // 사용자가 고르는 중이면 화면을 다시 그리지 않는다(모델 목록이 닫히던 것)

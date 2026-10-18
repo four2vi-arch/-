@@ -5,7 +5,7 @@
 구성(압축 안 이름은 모두 영문: 윈도 기본 압축 풀기에서 한글 이름이 깨지는 일을 피한다)
   doldari/run.bat            ← 실행(같은 내용의 「돌다리_실행.bat」도 함께 둔다)
   doldari/python/            ← CPython 3.12 윈도 x64(NuGet 공식 패키지 python, 저자 Python Software Foundation)
-  doldari/python/Lib/site-packages/  ← requirements.txt의 바퀴(win_amd64)를 풀어 넣은 것
+  doldari/python/Lib/site-packages/  ← 부품목록.txt의 바퀴(win_amd64)를 풀어 넣은 것
   doldari/app/               ← 돌다리 소스(server.py 등 + web/)
   doldari/README.txt         ← 읽어보기
 
@@ -18,7 +18,7 @@ import argparse, hashlib, os, re, sys, zipfile, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-APP_FILES = ['server.py', 'core.py', 'docs.py', 'export.py', 'extract.py', 'ocr.py', 'requirements.txt']
+APP_FILES = ['server.py', 'core.py', 'docs.py', 'export.py', 'extract.py', 'ocr.py', '부품목록.txt']
 APP_DIRS = ['web']
 # 파이썬 표준 라이브러리 중 돌다리가 쓰지 않는 큰 묶음(빼도 동작에 영향 없음)
 DROP = re.compile(r'^tools/(Lib/(ensurepip|idlelib|turtledemo|tkinter|test|lib2to3|venv|pydoc_data|sqlite3)/|Lib/site-packages/pip|Scripts/|tcl/|include/|libs/'
