@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.9 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.10 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function () {
   "use strict";
 
@@ -4072,13 +4072,18 @@
     if (!a.seenPrivacy) {
       var privacyDlgEl = qs("#privacyDlg");
       S.privacyPending = true;
-      setTimeout(function () {
+      // 어르신 화면(#kiosk)으로 열렸으면 직원용 개인정보 안내는 어르신 화면을 닫을 때까지 미룬다(어르신 화면을 덮던 것, 2026-10-18)
+      (function showPrivacy() {
+        if (document.documentElement.classList.contains("k-on") || /kiosk/.test(location.hash) && !S.kioskSeen) {
+          S.kioskSeen = S.kioskSeen || document.documentElement.classList.contains("k-on");
+          return setTimeout(showPrivacy, 1500);
+        }
         if (privacyDlgEl.showModal) {
           privacyDlgEl.showModal();
         } else {
           privacyDlgEl.setAttribute("open", "");
         }
-      }, 500);
+      })();
       qs("#btnPrivacyOk").onclick = function () {
         settings.set({
           seenPrivacy: 1

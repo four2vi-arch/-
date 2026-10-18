@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.9 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.10 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 /* 민원실에서 어르신이 직접 쓰는 대화형 주소 입력.
    - 말(인터넷 PC)·글자로 받은 주소를 정리해 엔진에 묻고, 빠진 부분만 되묻는다.
    - 우편번호는 언제나 엔진(우편번호 고시 DB)이 확정한다. AI는 주소 조각을 뽑는 보조 역할만 한다.
@@ -95,6 +95,26 @@
     if (r.grade === '유사') { return r.conf === '상' ? 4 : r.conf === '중' ? 3 : 2; }
     return 0;
   }
+  // 「동은 맞고 번지가 없음 → 후보 n개 중 구간이 가장 넓은 번호」는 추정이다: 화면·스티커에 우편번호로 쓰지 않는다(v1.10, 어르신 모의 심사에서 틀린 번호가 확정되던 것)
+  function isGuess(r) { var n = (r && r.note) || ''; return !!r && r.grade !== '정확' && /구간이 가장 넓은|가까운 구간|번지 없음|번호 없음/.test(n) && !/우편번호는 1개/.test(n); }
+  // 건물 이름으로 다시 찾기: 「대치동 은마아파트」처럼 동 이름이 같이 있으면 일반 검색이 비므로 건물명 판정과 「동 이름 줄기+단지명」을 써 본다
+  function byBuilding(q) {
+    var e = E(), o = regionOpts(), b = null;
+    try { b = e._lookupBuilding(q, o); } catch (x) { b = null; }
+    if (b && rank(b) >= 3) { return { r: b }; }
+    var list = [];
+    try { list = (e.search(q, 12) || []).filter(function (x) { return x.range === '건물명'; }); } catch (x) { list = []; }
+    var m = q.match(/([가-힣]{1,4})동\s+([가-힣A-Za-z0-9]+)/);
+    if (!list.length && m && BLD.test(m[2])) {   // 「시기동 주공아파트」 → 「시기주공아파트」
+      var q3 = clean(q.replace(m[0], m[1] + m[2]).replace(/(\d{1,4}\s*동\s*)?\d{1,4}\s*호|\d{1,3}\s*층/g, ' '));
+      try { list = (e.search(q3, 12) || []).filter(function (x) { return x.range === '건물명'; }); } catch (x) { list = []; }
+    }
+    if (!list.length) {
+      var q2 = clean(q.replace(/[가-힣]{1,4}동(?=\s)/, ' ').replace(/(\d{1,4}\s*동\s*)?\d{1,4}\s*호|\d{1,3}\s*층/g, ' '));   // 동 낱말을 빼고
+      try { list = (e.search(q2, 12) || []).filter(function (x) { return x.range === '건물명'; }); } catch (x) { list = []; }
+    }
+    return list.length ? { list: list } : null;
+  }
   function regionOpts() {
     var r = clean(cfg().region || mainRegion());
     var e = E();
@@ -190,7 +210,7 @@
     } catch (e) { return String(Math.floor(Math.random() * 900) + 100); }
   }
   function fresh() {
-    st = { entries: [], sender: null, cur: null, no: nextNo(), trail: [] };
+    st = { entries: [], sender: null, cur: null, no: '', trail: [] };
     hist = [];
   }
   function newCur(kind) {
@@ -235,9 +255,9 @@
     '@media (min-width:900px){.k-padwrap{flex-wrap:nowrap}.k-padl{flex:0 1 540px}.k-padr{flex:1 1 260px}.k-padr .k-row{flex-direction:column}.k-padr .k-btn{flex:0 0 auto;width:100%}}' +
     '@media (max-width:899px){.k-keys button{min-height:66px}.k-num{min-height:1.15em}.k-padr .k-row{margin-top:10px}}' +
     '@media (max-width:760px){.k-brand{font-size:1.02em}.k-tools button{padding:6px 10px}}' +
-    '@media (max-height:820px){.k-trail{display:none}.k-main{padding-top:12px}.k-keys{gap:8px;margin-top:6px}.k-keys button{min-height:50px;font-size:1.2em}.k-num{font-size:1.4em;padding:2px 0}.k-bubble{padding:10px 16px;margin:2px 0 8px;font-size:1.12em}.k-btn{min-height:64px}.k-foot{padding:6px 22px}}' +
+    '@media (max-height:820px){.k-trail{font-size:.66em;max-height:1.6em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.k-foot>span{display:none}.k-foot{padding:4px 22px !important;justify-content:flex-end}.k-main{padding-top:12px}.k-keys{gap:8px;margin-top:6px}.k-keys button{min-height:50px;font-size:1.2em}.k-num{font-size:1.4em;padding:2px 0}.k-bubble{padding:10px 16px;margin:2px 0 8px;font-size:1.12em}.k-btn{min-height:64px}.k-foot{padding:6px 22px}}' +
     '.k-cam{position:relative;background:#111;border-radius:18px;overflow:hidden;margin:6px 0 4px;min-height:220px}.k-cam video,.k-cam canvas{display:block;width:100%;max-height:min(36vh,400px);object-fit:contain;background:#111}' +
-    '.k-guide{position:absolute;inset:7% 10%;border:4px dashed rgba(255,255,255,.85);border-radius:20px;pointer-events:none;display:flex;align-items:flex-end;justify-content:center}.k-guide span{background:rgba(0,0,0,.55);color:#fff;font-size:.62em;font-weight:700;padding:4px 12px;border-radius:10px 10px 0 0}' +
+    '.k-guide{position:absolute;inset:7% 10%;border:4px dashed rgba(255,255,255,.85);border-radius:20px;pointer-events:none;display:flex;align-items:flex-end;justify-content:center}.k-guide span{background:rgba(0,0,0,.65);color:#fff;font-size:1em;font-weight:700;padding:4px 12px;border-radius:10px 10px 0 0}' +
     '.k-prog{height:16px;background:#eee;border-radius:10px;overflow:hidden;margin:12px 0}.k-prog i{display:block;height:100%;width:6%;background:#c8102e;transition:width .4s}' +
     '.k-chip{display:inline-block;margin:8px 8px 0 0;font-size:.78em;padding:8px 12px;border-radius:12px;background:#f1f1f1;color:#444}' +
     '.k-big{font-size:2em;font-weight:900;color:#1b7f3b;margin:10px 0}' +
@@ -260,7 +280,7 @@
     '#kPrint .p-lbl:last-child{break-after:auto;page-break-after:auto}' +
     '#kPrint .p-lbl .l-top{display:flex;align-items:baseline;justify-content:space-between;gap:3mm}#kPrint .p-lbl .l-zip{font-size:2.1em;font-weight:900;letter-spacing:.06em;line-height:1}' +
     '#kPrint .p-lbl .l-name{font-size:1.3em;font-weight:800;text-align:right}#kPrint .p-lbl .l-addr{font-size:1.05em;word-break:keep-all}' +
-    '#kPrint .p-lbl .l-tel{font-size:.85em;font-weight:600}#kPrint .p-lbl .l-from{font-size:.62em;font-weight:400;color:#000;border-top:.2mm solid #000;padding-top:.8mm}#kPrint .p-lbl .l-chk{font-size:.7em;font-weight:800}' +
+    '#kPrint .p-lbl .l-tel{font-size:.85em;font-weight:600}#kPrint .p-lbl .l-from{font-size:.62em;font-weight:400;color:#000;border-top:.2mm solid #000;padding-top:.8mm}#kPrint .p-lbl .l-chk{font-size:1em;font-weight:900}#kPrint .p-lbl .l-name{white-space:nowrap}' +
     '#kPrint .p-lbl.l-test{border:.3mm solid #000}#kPrint .p-lbl .l-ruler{font-size:.6em;font-weight:400}' +
     '.k-chk{display:flex;gap:10px;align-items:center;font-size:16px;margin:10px 0}.k-chk input{width:22px;height:22px}' +
     '#kPrint.p-th .p-qr{text-align:center;margin-top:4pt}#kPrint.p-th .p-qr svg{width:36mm;height:36mm}#kPrint.p-th.p-58 .p-qr svg{width:34mm;height:34mm}' +
@@ -406,18 +426,19 @@
     var c = st.cur;
     var who = c.kind === 'send' ? '보내시는 분(어르신) 주소를 말씀해 주세요.' : (st.entries.length ? '다음 분은 어디로 보내세요?' : '어디로 보내세요?');
     var sub = again || '동네 이름, 길 이름과 번호, 아파트 이름 중 아시는 대로 적어 주세요.';
-    var mic = SR ? '<button type="button" class="k-btn" id="kMic">말로 하기</button>' : '';
-    var cam = camOk() ? '<button type="button" class="k-btn ok" id="kCam">📷 휴대폰 문자를 사진으로 찍기</button>' : '';
+    var mic = SR && !micOff() ? '<button type="button" class="k-btn" id="kMic">말로 하기</button>' : '';
+    var cam = camOk() ? '<button type="button" class="k-btn ok" id="kCam">📷 휴대폰에 온 주소 문자 보여 주기</button>' : '';
+    var city = clean(cfg().region || mainRegion()).split(' ').slice(-1)[0] || '정읍시';
     frame(esc(who), esc(sub),
       '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 정읍시 수성동 현대아파트 102동" value="' + esc(prefill || '') + '" style="margin-top:4px">' +
-      '<div class="k-sub" style="margin-top:6px">이렇게 적으시면 돼요(누르면 칸에 들어가요):</div><div><button type="button" class="k-chip">전주시 완산구 효자로 225</button><button type="button" class="k-chip">기장군 기장읍 시랑리 408-1</button><button type="button" class="k-chip">서산 힐스테이트서산 405동</button></div>' +
+      '<div class="k-sub" style="margin-top:6px">이렇게 적으시면 돼요: 「' + esc(city) + ' ○○동 ○○아파트 101동」 · 「○○로 12」 · 「○○면 ○○리 123」</div>' +
       '<div class="k-row">' + mic + '<button type="button" class="k-btn pri" id="kGo">다 적었어요</button></div>' +
       (cam ? '<div class="k-row">' + cam + '</div>' : '') +
       '<div class="k-row"><button type="button" class="k-btn sub sm" id="kRegion">지역부터 고르기</button>' +
-      (hist.length > 1 ? '<button type="button" class="k-btn sub sm" id="kBack">이전으로</button>' : '') + '</div>');
+      (hist.length > 1 ? '<button type="button" class="k-btn sub sm" id="kBack">이전으로</button>' : '') + '<button type="button" class="k-btn sub sm" id="kHelp">직원 도움 받기(창구에서 할게요)</button></div>');
     var inp = $('#kIn', main);
     setTimeout(function () { inp.focus(); }, 50);
-    Array.prototype.forEach.call(main.querySelectorAll('.k-chip'), function (el) { el.onclick = function () { inp.value = el.textContent; inp.focus(); }; });
+    $('#kHelp', main).onclick = function () { var v = clean(inp.value); if (v) { st.cur.raw = v; } if (c.kind === 'send') { st.trail.push(['보내는 분 주소', '창구에서']); return screen(finish); } screen(giveUp); };
     if ($('#kCam', main)) { $('#kCam', main).onclick = function () { screen(camScreen); }; }
     function go() {
       var v = clean(inp.value);
@@ -428,7 +449,7 @@
     inp.onkeydown = function (e) { if (e.key === 'Enter') { go(); } };
     $('#kRegion', main).onclick = function () { st.cur.raw = clean(inp.value); st.cur.text = normalize(inp.value); screen(pickSido); };
     if ($('#kBack', main)) { $('#kBack', main).onclick = back; }
-    if (SR) {
+    if ($('#kMic', main)) {
       $('#kMic', main).onclick = function () {
         listen(function (t) { inp.value = t; toast('이렇게 들었어요: ' + t); setTimeout(go, 900); });
       };
@@ -440,18 +461,20 @@
       rec.lang = 'ko-KR'; rec.interimResults = false; rec.maxAlternatives = 1;
       rec.onresult = function (e) { onText(e.results[0][0].transcript); };
       rec.onerror = function (e) {
-        toast(e.error === 'network' || e.error === 'not-allowed' || e.error === 'service-not-allowed'
-          ? '이 기기에서는 말로 하기가 안 돼요. 글자로 적어 주세요.' : '잘 못 들었어요. 다시 눌러 주세요.');
+        var off = e.error === 'network' || e.error === 'not-allowed' || e.error === 'service-not-allowed';
+        if (off) { try { sessionStorage.setItem('zipfinder.kiosk.micoff', '1'); } catch (x) { } Array.prototype.forEach.call(document.querySelectorAll('#kMic'), function (b) { b.remove(); }); }   // 인터넷 없는 민원실: 한 번 안 되면 단추를 숨긴다
+        toast(off ? '이 기기에서는 말로 하기가 안 돼요. 글자로 적어 주세요.' : '잘 못 들었어요. 다시 눌러 주세요.');
       };
       rec.start();
       toast('말씀해 주세요. 듣고 있어요.');
     } catch (e) { toast('이 기기에서는 말로 하기가 안 돼요. 글자로 적어 주세요.'); }
   }
+  function micOff() { try { return sessionStorage.getItem('zipfinder.kiosk.micoff') === '1' || !!cfg().noMic; } catch (e) { return false; } }
   function onAddress(v) {
     var c = st.cur;
     c.raw = v;
     c.text = normalize(v);
-    c.region = ''; c.regionToks = []; c.triedAI = false; c.tries = 0; c.ai = false;
+    c.region = ''; c.regionToks = []; c.triedAI = false; c.ai = false;   // tries는 새 주소(newCur)에서만 0으로: 같은 주소를 몇 번 다시 적었는지 세어 막다른 반복을 끊는다
     st.trail.push(['주소', v]);
     resolve();
   }
@@ -465,7 +488,7 @@
     var c = st.cur;
     var q = withRegion(c.text);
     var r = look(q);
-    if (rank(r) >= 4) { return screen(confirmAddr, [r, false]); }
+    if (rank(r) >= 4 && !/건물번호 없음|번지 없음|번호 없음/.test(r.note || '')) { return screen(confirmAddr, [r, false]); }   // 번호 없이 찾은 것은 번호를 한 번 묻는다
     if (aiCfg() && !c.triedAI) {
       c.triedAI = true;
       c.aiSkip = false;
@@ -491,13 +514,13 @@
     var note = r.note || '';
     if (!rank(r) && /시·도와 시·군·구/.test(note) && !c.region) { return screen(pickRegion); }
     if (rank(r) < 4 && BLD.test(c.text) && c.tries <= 3) {
-      var bl = [];
-      try { bl = (E().search(q, 12) || []).filter(function (x) { return x.range === '건물명'; }); } catch (e) { bl = []; }
-      if (!bl.length) {                       // 「현대아파트」처럼 흔한 꼬리말을 떼고 이름만으로 한 번 더
+      var hb = byBuilding(q);
+      if (!hb) {                       // 「현대아파트」처럼 흔한 꼬리말을 떼고 이름만으로 한 번 더
         var q2 = clean(q.replace(/(\d{1,4}\s*동\s*)?\d{1,4}\s*호|\d{1,3}\s*층/g, ' ').replace(/(아파트|빌라|맨션|오피스텔)(?=\s|$)/g, ' '));
-        if (q2 && q2 !== q) { try { bl = (E().search(q2, 12) || []).filter(function (x) { return x.range === '건물명'; }); } catch (e) { bl = []; } }
+        if (q2 && q2 !== q) { hb = byBuilding(q2); }
       }
-      if (bl.length) { return screen(chooseCand, [bl.slice(0, 8)]); }
+      if (hb && hb.r) { return screen(confirmAddr, [hb.r, hb.r.conf !== '상']); }
+      if (hb && hb.list) { return screen(chooseCand, [hb.list.slice(0, 8)]); }
     }
     if (rank(r) >= 2 && /번지 없음|건물번호 없음|번호 없음|번호가 없|가까운|구간이 가장 넓은/.test(note)) { return screen(askNumber, [r]); }
     if (rank(r) >= 2) { return screen(confirmAddr, [r, true]); }
@@ -507,7 +530,7 @@
     if (c.tries > 3) {
       return screen(giveUp);
     }
-    screen(askAddress, ['찾기 어려워요. 시·군 이름부터 천천히 적어 주세요. 예) 정읍시 수성동, 전주시 효자로 225']);
+    screen(askAddress, [c.tries >= 2 ? '여전히 찾기 어려워요. 받는 분 휴대폰 문자에 온 주소를 그대로 적거나, 아래 「직원 도움 받기」를 눌러 주세요.' : '찾기 어려워요. 시·군 이름부터 천천히 적어 주세요. 예) 정읍시 수성동, 전주시 효자로 225']);
   }
 
   // ------------------------------------------------------------------ 3. 지역 고르기
@@ -580,9 +603,12 @@
       el.onclick = function () {
         var x = list[Number(el.getAttribute('data-c'))];
         st.trail.push(['고른 곳', x.addr]);
+        if (x.range === '건물명' && x.zip) {   // 건물을 골랐으면 그 건물의 우편번호 그대로(다시 찾으면 동 전체 추정 번호로 바뀌던 것)
+          return screen(confirmAddr, [{ grade: '유사', conf: '상', zip: x.zip, addr1: x.addr, addr2: '', note: '건물명 일치(목록에서 고름)' }, false]);
+        }
         var r = look(x.addr);
-        if (rank(r) >= 4) { return screen(confirmAddr, [r, false]); }
         if (rank(r) >= 2 && /번지 없음|건물번호 없음|번호 없음|가까운|구간이 가장 넓은/.test(r.note || '')) { st.cur.text = x.addr; st.cur.region = ''; return screen(askNumber, [r]); }
+        if (rank(r) >= 4) { return screen(confirmAddr, [r, false]); }
         if (rank(r) >= 2) { return screen(confirmAddr, [r, true]); }
         screen(confirmAddr, [{ grade: '유사', conf: '중', zip: x.zip, addr1: x.addr, addr2: '', note: '목록에서 고름' }, true]);
       };
@@ -594,7 +620,7 @@
       sub: '찾은 곳: ' + (r.addr1 || '') + '. 아시면 눌러 주시고, 모르시면 「몰라요」를 눌러 주세요.',
       dash: true,
       done: function (v) {
-        if (!v) { return; }
+        if (!v) { toast('번호를 모르시면 「몰라요」를 눌러 주세요.'); speak('번호를 모르시면 몰라요를 눌러 주세요.'); return; }
         st.trail.push(['번호', v]);
         var c = st.cur, prev = c.text;
         c.text = clean(c.text + ' ' + v);
@@ -609,7 +635,7 @@
   function numMiss(r, v, prev) {
     var b = [btn('번호 다시 누르기', 'pri', function () { st.cur.text = prev; back(); }),
       btn('번호 없이 갈게요', 'sub', function () { st.cur.text = prev; st.trail.push(['번호', '모름']); screen(confirmAddr, [r, true]); })];
-    frame('「' + esc(v) + '」번은 이 길에서 찾지 못했어요.', '번호를 한 번 더 확인해 주세요. 모르시면 번호 없이 가고, 창구에서 확인해 드릴게요.', row(b));
+    frame('「' + esc(v) + '」번은 ' + (/[로길]\s*$/.test(clean(prev)) || /[로길](\s|$)/.test(prev) ? '이 길' : '이 동네') + '에서 찾지 못했어요.', '번호를 한 번 더 확인해 주세요. 모르시면 번호 없이 가고, 창구에서 확인해 드릴게요.', row(b));
     bindRow(b);
   }
   function giveUp() {
@@ -642,21 +668,24 @@
     var sp = splitAddr(r);
     var detail = clean(c.aiDetail || sp.detail || tailDetail(c.text) || '');
     c.base = sp.base;
-    var body = '<div class="k-card"><div class="k-zip">' + esc(r.zip || '-') + '</div><div class="k-addr">' + esc(sp.base) + (detail ? ' ' + esc(detail) : '') + '</div>' +
+    var guess = isGuess(r);
+    if (guess) { check = true; }
+    var body = '<div class="k-card">' + (guess ? '<div class="k-warn" style="font-size:1.15em">우편번호는 창구에서 정해 드려요</div><div class="k-sub">동네까지는 찾았는데 번지가 없어 우편번호를 하나로 정할 수 없어요.</div>' : '<div class="k-zip">' + esc(r.zip || '-') + '</div>') + '<div class="k-addr">' + esc(sp.base) + (detail ? ' ' + esc(detail) : '') + '</div>' +
       (c.ai ? '<div class="k-sub k-ai">AI 도움으로 말씀을 정리한 뒤, 우편번호는 정부 고시 자료로 확인했어요.</div>' : '') +
-      (check ? '<div class="k-sub k-warn">비슷한 주소로 찾았어요. 창구에서 한 번 더 확인해 드릴게요.</div>' : '') + '</div>';
+      (check && !guess ? '<div class="k-sub k-warn">비슷한 주소로 찾았어요. 창구에서 한 번 더 확인해 드릴게요.</div>' : '') + '</div>';
     var b = [btn('네, 맞아요', 'ok', function () {
-      c.res = r; c.check = !!check; c.detail = detail;
-      st.trail.push(['확인', (r.zip || '') + ' ' + sp.base]);
+      c.res = guess ? Object.assign({}, r, { zip: '', zipGuess: r.zip }) : r; c.check = !!check; c.detail = detail;
+      c.why = guess ? '번지 없음: 동 안 우편번호 여러 개' : (check ? '비슷한 주소로 찾음' : '');
+      st.trail.push(['확인', (guess ? '우편번호 창구 확인' : (r.zip || '')) + ' ' + sp.base]);
       screen(askDetail);
     }), btn('아니요, 다시 할게요', 'sub', function () { newCurKeep(); screen(askAddress, ['다시 적어 주세요. 길 이름과 번호, 또는 동네와 번지를 적으면 정확해요.']); })];
-    frame('이 주소가 맞으세요?', '우편번호 ' + esc(r.zip || '') + '. ' + esc(sp.base), body + row(b));
+    frame('이 주소가 맞으세요?', (guess ? '' : '우편번호 ' + esc(r.zip || '') + '. ') + esc(sp.base), body + row(b));
     bindRow(b);
   }
   function askDetail() {
     var c = st.cur;
     var b = [btn('다음', 'pri', function () { c.detail = clean($('#kIn', main).value); st.trail.push(['나머지 주소', c.detail || '없음']); afterDetail(); }),
-      btn('더 적을 게 없어요', 'sub', function () { c.detail = ''; st.trail.push(['나머지 주소', '없음']); afterDetail(); })];
+      btn('더 적을 게 없어요', 'sub', function () { c.detail = ''; st.trail.push(['나머지 주소', '없음']); afterDetail(); }), btn('이전으로', 'sub', back)];
     frame('동·호수나 층처럼 더 적을 게 있으세요?', '예) 102동 304호, 2층. 없으면 「더 적을 게 없어요」를 눌러 주세요.',
       '<input class="k-input" id="kIn" autocomplete="off" value="' + esc(c.detail) + '" placeholder="예) 102동 304호">' + row(b));
     bindRow(b);
@@ -678,18 +707,20 @@
   // ------------------------------------------------------------------ 6. 이름·전화
   function askName() {
     var c = st.cur, send = c.kind === 'send';
-    var mic = SR ? btn('말로 하기', '', function () { listen(function (t) { $('#kIn', main).value = clean(t); }); }) : null;
+    var mic = SR && !micOff() ? btn('말로 하기', '', function () { listen(function (t) { $('#kIn', main).value = clean(t); }); }) : null;
     var b = [btn('다음', 'pri', function () {
       var v = clean($('#kIn', main).value);
-      if (!v) { toast('성함을 적어 주세요.'); return; }
+      if (!v) { toast('성함을 적어 주세요. 모르시면 「아들」처럼 적으셔도 돼요.'); return; }
       if (v.length > 15) { toast('성함은 15자 안으로 적어 주세요.'); return; }
+      v = clean(v.replace(/\s*(할머니|할아버지|어머님|아버님|님|씨|선생님|여사님?)$/, '')) || v;   // 스티커에 「할머니 귀하」가 찍히지 않게 호칭은 뗀다
+      if (/^(아들|딸|손주|손자|손녀|며느리|사위|동생|언니|오빠|형|누나|큰아들|작은아들|큰딸|작은딸|아들네|딸네)$/.test(v)) { c.check = true; c.why = clean((c.why || '') + ' · 받는 분 성함 창구 확인'); }
       st.trail.push([send ? '보내시는 분' : '받으실 분', v]);
       if (send) { st.sender = st.sender || {}; st.sender.name = v; } else { c.name = v; }
       screen(askPhone);
     })];
     if (mic) { b.unshift(mic); }
     b.push(btn('이전으로', 'sub', back));
-    frame(send ? '보내시는 분(어르신) 성함은요?' : '받으실 분 성함은요?', send ? '택배·소포에 보내는 분으로 적혀요.' : (c.ocr && c.ocr.name ? '사진에서 읽은 이름이에요. 맞는지 확인해 주세요.' : ''), '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 홍길동" value="' + esc(!send && c.ocr && c.ocr.name || '') + '">' + row(b));
+    frame(send ? '보내시는 분(어르신) 성함은요?' : '받으실 분 성함은요?', send ? '택배·소포에 보내는 분으로 적혀요.' : (c.ocr && c.ocr.name ? '사진에서 읽은 이름이에요. 맞는지 확인해 주세요.' : ''), '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 홍길동" value="' + esc(send ? (st.sender && st.sender.name || '') : (c.name || (c.ocr && c.ocr.name) || '')) + '">' + row(b));
     bindRow(b);
     var inp = $('#kIn', main);
     inp.onkeydown = function (e) { if (e.key === 'Enter') { b[mic ? 1 : 0].fn(); } };
@@ -699,12 +730,12 @@
     var c = st.cur, send = c.kind === 'send';
     keypad({
       q: send ? '보내시는 분 전화번호를 눌러 주세요.' : '받으실 분 전화번호를 아세요?',
-      sub: send ? '배달 소식을 알려 드릴 때 써요.' : (c.ocr && c.ocr.phone ? '사진에서 읽은 번호예요. 맞는지 꼭 확인해 주세요. 다르면 「지우기」로 지우고 다시 눌러 주세요.' : '배달할 때 연락드려요. 모르시면 「건너뛰기」를 눌러 주세요.'),
+      sub: send ? '배달 소식을 알려 드릴 때 써요. 모르시면 「건너뛰기」를 눌러 주세요.' : (c.ocr && c.ocr.phone ? '사진에서 읽은 번호예요. 맞는지 꼭 확인해 주세요. 다르면 「지우기」로 지우고 다시 눌러 주세요.' : '배달할 때 연락드려요. 모르시면 「건너뛰기」를 눌러 주세요.'),
       phone: true,
       init: send ? '' : (c.ocr && c.ocr.phone || ''),
       done: function (v) {
         v = phoneFmt(v);
-        if (v && !/^0\d{1,2}-\d{3,4}-\d{4}$/.test(v)) { toast('전화번호를 다시 확인해 주세요.'); return; }
+        if (v && !/^0\d{1,2}-\d{3,4}-\d{4}$/.test(v)) { toast('번호가 ' + String(v).replace(/\D/g, '').length + '자리예요. 다 아시면 고쳐 주시고, 모르시면 「건너뛰기」를 눌러 주세요.'); return; }
         st.trail.push(['전화', v || '없음']);
         if (send) { st.sender.phone = v; return screen(askSenderAddr); }
         c.phone = v;
@@ -719,7 +750,8 @@
   }
   function saveEntry() {
     var c = st.cur, r = c.res || {};
-    st.entries.push({ name: c.name, phone: c.phone, zip: r.zip || '', addr1: c.base || r.addr1 || '', addr2: c.detail, check: c.check, note: c.ai ? 'AI 정리' : '' });
+    if (!st.no) { st.no = nextNo(); }   // 접수 번호는 첫 받는 곳을 저장할 때 받는다(지울 때마다 번호가 건너뛰던 것)
+    st.entries.push({ name: c.name, phone: c.phone, zip: r.zip || '', zipGuess: r.zipGuess || '', addr1: c.base || r.addr1 || '', addr2: c.detail, check: c.check, why: c.why || '', note: [c.ai ? 'AI 정리' : '', c.why || ''].filter(Boolean).join(' · ') });
     log('어르신 직접 입력', 1, '접수번호 ' + st.no + ' · ' + st.entries.length + '번째');
     screen(listView);
   }
@@ -730,7 +762,7 @@
     var b = [btn('사진 찍기', 'pri', null, 'kShot'), btn('글자로 적을게요', 'sub', back)];
     var switchBtn = '<div class="k-row" style="margin-top:8px"><button type="button" class="k-btn sub sm" id="kFlip" hidden>앞·뒤 카메라 바꾸기</button></div>';
     frame('휴대폰 문자 화면을 카메라에 보여 주세요', '받은 주소가 보이게 화면을 켜고, 글자가 크게 보이도록 선 안에 가득 차게 대 주세요. 화면은 밝게!',
-      '<div class="k-cam" id="kCamBox"><video id="kVid" playsinline muted></video><div class="k-guide"><span>이 선 안에 휴대폰 화면</span></div></div>' + switchBtn + row(b));
+      '<div class="k-cam" id="kCamBox"><video id="kVid" playsinline muted></video><div class="k-guide"><span>이 선 안에 휴대폰 화면</span></div></div><div class="k-sub">태블릿이면 <b>뒤쪽 동그란 카메라</b> 앞에, 노트북이면 <b>화면 위 작은 카메라</b> 앞에 휴대폰을 대 주세요.</div>' + switchBtn + row(b));
     bindRow(b);
     var vid = $('#kVid', main), shot = $('#kShot', main), box = $('#kCamBox', main);
     shot.disabled = true;
@@ -793,6 +825,7 @@
         '<small>' + (det ? esc(det) + ' · ' : '') + (x.grade === '정확' ? '주소가 정확히 맞아요' : '비슷한 주소예요. 창구에서 한 번 더 확인해요') + '</small></button>';
     }).join('') + '</div>';
     var b = [again, typed];
+    if (res.cands.length === 1) { b.unshift(btn('네, 이 주소예요', 'ok', function () { var el = main.querySelector('[data-c="0"]'); if (el) { el.click(); } })); }
     frame(res.cands.length > 1 ? '이 중에 맞는 주소를 눌러 주세요' : '이 주소가 맞으면 눌러 주세요', '사진에서 읽은 주소를 우편번호 자료로 다시 확인했어요.', who + list + row(b));
     bindRow(b);
     Array.prototype.forEach.call(main.querySelectorAll('[data-c]'), function (el) {
@@ -837,17 +870,19 @@
   function finish() {
     hist = [];
     var s = st.sender || {};
-    var list = st.entries.map(function (x) { return '<div class="k-card"><b>' + esc(x.zip || '확인 필요') + '</b> ' + esc(x.addr1) + ' ' + esc(x.addr2) + '<div class="k-sub">' + esc(x.name) + (x.phone ? ' · ' + esc(x.phone) : '') + '</div></div>'; }).join('');
-    main.innerHTML = '<div class="k-bubble" style="text-align:center">다 됐어요!<div class="k-big">접수 메모 ' + esc(st.no) + '번</div>' +
-      '<small>' + (paper() === 'lbl' ? '스티커를 뽑아 창구 직원에게 보여 주세요.' : '종이로 뽑아 창구 직원에게 보여 주세요.') + ' 뽑지 못하셨으면 직원을 불러 「' + esc(st.no) + '번」이라고 말씀해 주세요. 이 화면은 10분 동안 남아 있어요.</small></div>' +
-      '<div class="k-sub">보내시는 분: ' + esc(s.name || '') + (s.phone ? ' · ' + esc(s.phone) : '') + (s.addr1 ? ' · ' + esc(s.zip) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' + list +
-      '<div class="k-row"><button type="button" class="k-btn pri" id="kPrintBtn">' + (paper() === 'lbl' ? '주소 스티커 뽑기' : '종이로 뽑기') + '</button><button type="button" class="k-btn sub" id="kDone">처음 화면으로</button></div>';
+    if (!st.no) { st.no = nextNo(); }
+    var what = paper() === 'lbl' ? '주소 스티커' : '접수 메모';
+    var list = st.entries.map(function (x) { return '<div class="k-card"><b>' + esc(x.zip || '우편번호 창구 확인') + '</b> ' + esc(x.addr1) + ' ' + esc(x.addr2) + '<div class="k-sub">' + esc(x.name) + (x.phone ? ' · ' + esc(x.phone) : '') + (x.check ? ' · <span class="k-warn">창구에서 한 번 더 확인</span>' : '') + '</div></div>'; }).join('');
+    main.innerHTML = '<div class="k-bubble" style="text-align:center">다 됐어요! 아래 빨간 단추를 눌러 ' + what + '를 뽑아 주세요.<div class="k-big">' + esc(st.no) + '번</div>' +
+      '<small>소포 상자와 뽑은 ' + what + '를 들고 창구로 오세요. 뽑지 못하셨으면 직원을 불러 「' + esc(st.no) + '번」이라고 말씀해 주세요(이 화면은 10분 동안 남아 있어요).</small></div>' +
+      '<div class="k-row" style="margin-top:4px"><button type="button" class="k-btn pri" id="kPrintBtn">' + what + ' 뽑기</button><button type="button" class="k-btn sub" id="kDone">처음 화면으로</button></div>' +
+      '<div class="k-sub">보내시는 분: ' + esc(s.name || '') + (s.phone ? ' · ' + esc(s.phone) : '') + (s.addr1 ? ' · ' + esc(s.zip) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' + list;   // 뽑기 단추를 맨 위에(화면 아래로 밀려 안 보이던 것)
     st.finished = true;   // 직원이 「접수 화면으로 넘기기」(직원 설정)를 할 수 있게 자동 지우기를 늦춘다
-    speak('다 됐어요. 접수 메모 ' + st.no + '번입니다. 창구 직원에게 말씀해 주세요.');
-    $('#kPrintBtn', main).onclick = printSlip;
+    speak('다 됐어요. 빨간 단추를 눌러 ' + what + '를 뽑아 주세요. ' + st.no + '번입니다.');
+    $('#kPrintBtn', main).onclick = function () { st.printed = true; printSlip(); };
     $('#kDone', main).onclick = function () {
-      modal('<div class="k-bubble">적으신 내용을 지우고 처음으로 갈까요?<small>창구에 넘기거나 종이로 뽑으셨다면 지워도 괜찮아요.</small></div>',
-        [['지우고 처음으로', function () { closeModal(); wipe(); }, 'pri'], ['아니요', closeModal, 'sub']]);
+      modal('<div class="k-bubble">적으신 내용을 지우고 처음으로 갈까요?<small>' + (st.printed ? '뽑으셨으면 지워도 괜찮아요.' : '아직 ' + what + '를 뽑지 않으셨어요. 먼저 「' + what + ' 뽑기」를 눌러 주세요.') + '</small></div>',
+        [['아니요, 돌아갈게요', closeModal, 'pri'], ['지우고 처음으로', function () { closeModal(); wipe(); }, 'sub']]);   // 실수로 지우지 않게 「아니요」가 주 단추
     };
     touch();
     log('어르신 입력 완료', st.entries.length, '접수번호 ' + st.no);
@@ -928,7 +963,7 @@
       (s.addr1 ? ' · ' + esc(s.zip || '') + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' +
       st.entries.map(function (x, i) {
         return '<div class="p-it"><div class="p-zip">' + esc(x.zip || '우편번호 확인 필요') + '</div><div>' + esc(x.addr1) + ' ' + esc(x.addr2) + '</div>' +
-          '<div class="p-s">' + (i + 1) + '. 받는 분 ' + esc(x.name || '(미입력)') + (x.phone ? ' · ' + esc(x.phone) : '') + (x.check ? ' · 창구 확인 필요' : '') + '</div></div>';
+          '<div class="p-s">' + (i + 1) + '. 받는 분 ' + esc(x.name || '(미입력)') + (x.phone ? ' · ' + esc(x.phone) : '') + (x.check ? ' · 창구 확인 필요' + (x.why ? '(' + esc(x.why.replace(/^ · /, '')) + ')' : '') : '') + '</div></div>';
       }).join('') + (qr ? '<div class="p-qr">' + qr + '<div class="p-s">창구에서 이 QR을 찍으면 주소가 바로 들어갑니다</div></div>' : '') +
       '<div class="p-foot">개인정보가 담긴 메모입니다. 접수가 끝나면 창구에서 파기합니다.</div>';
   }
@@ -943,7 +978,7 @@
   function labelHtml(x, i, test) {
     var s = st.sender || {};
     var from = s.name ? '보내는 분 ' + esc(s.name) + (s.phone ? ' ' + esc(s.phone) : '') + (s.addr1 ? ' · ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') : '';
-    return '<div class="p-lbl' + (test ? ' l-test' : '') + '"><div class="l-top"><span class="l-zip">' + esc(x.zip || '확인필요') + '</span><span class="l-name">' + esc(x.name || '') + (x.name ? ' 귀하' : '') + '</span></div>' +
+    return '<div class="p-lbl' + (test ? ' l-test' : '') + '"><div class="l-top"><span class="l-zip">' + esc(x.zip || '우편번호 확인필요') + '</span><span class="l-name">' + esc(x.name || '') + (x.name ? ' 귀하' : '') + '</span></div>' +
       '<div class="l-addr">' + esc(x.addr1) + ' ' + esc(x.addr2 || '') + '</div>' +
       (x.phone ? '<div class="l-tel">☎ ' + esc(x.phone) + '</div>' : '') +
       (test ? '<div class="l-ruler">' + test + '</div>' : '<div class="l-from">' + (from || '') + (from ? ' · ' : '') + '접수 ' + esc(st.no) + '번' + (x.check ? ' <span class="l-chk">· 창구 확인</span>' : '') + '</div>') + '</div>';
@@ -1148,14 +1183,18 @@
     if (!root || root.hidden) { return; }
     clearTimeout(idleT);
     var sec = Number(cfg().idle) || 120;
+    if (st && st.entries && st.entries.length) { sec = Math.max(sec, 300); }   // 저장한 받는 곳이 있으면 5분(휴대폰에서 번호를 찾는 동안 지워지던 것)
     if (st && st.finished) { sec = Math.max(sec, 600); }
     idleT = setTimeout(idleWarn, sec * 1000);
   }
   function idleWarn() {
     if (!root || root.hidden) { return; }
     if (!hasData()) { welcome(); return; }
-    modal('<div class="k-bubble">계속하시겠어요?<small>20초 뒤에 적으신 내용을 지웁니다.</small></div>', [['계속할게요', function () { clearTimeout(warnT); closeModal(); touch(); }, 'pri']]);
-    warnT = setTimeout(function () { closeModal(); wipe(); }, 20000);
+    var left = 30;
+    var m = modal('<div class="k-bubble">계속하시겠어요?<small><b id="kLeft">30</b>초 뒤에 적으신 내용을 지웁니다. 화면 아무 곳이나 누르면 계속해요.</small></div>', [['계속할게요', function () { clearTimeout(warnT); closeModal(); touch(); }, 'pri']]);
+    speak('계속하시려면 화면을 눌러 주세요.');
+    m.addEventListener('pointerdown', function () { clearTimeout(warnT); closeModal(); touch(); });
+    (function tick() { var el = document.getElementById('kLeft'); if (!el) { return; } if (left <= 0) { closeModal(); wipe(); return; } el.textContent = left; left--; warnT = setTimeout(tick, 1000); })();
   }
   function wipe(silent) {
     clearTimeout(warnT);
