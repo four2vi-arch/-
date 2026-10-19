@@ -1,9 +1,10 @@
 @echo off
+chcp 65001 >nul
 cd /d %~dp0
 if "%~1"=="" goto usage
 set M=%~1
 set N=%M::=_%
-python measure.py "°¡¿Â¿ìÃ¼±¹_¸ğÀÇ¾÷¹«Æú´õ" "Á¤´äÇ¥.xlsx" "°á°ú_%N%" --model %M% --label "%~2"
+python measure.py "ê°€ì˜¨ìš°ì²´êµ­_ëª¨ì˜ì—…ë¬´í´ë”" "ì •ë‹µí‘œ.xlsx" "ê²°ê³¼_%N%" --model %M% --label "%~2"
 pause
 exit /b
 :usage
