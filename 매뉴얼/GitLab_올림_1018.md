@@ -58,3 +58,29 @@
 패키지 레지스트리로 올리는 법(3-②): 「설정 → 액세스 토큰」에서 `write_package_registry` 권한 토큰을 만든 뒤 PC 명령 프롬프트에서
 `curl --header "PRIVATE-TOKEN: <토큰>" --upload-file doldari_v3.7.1_portable_win64.zip "https://gitlab.aigov.go.kr/api/v4/projects/1305/packages/generic/doldari/3.7.1/doldari_v3.7.1_portable_win64.zip"`
 → 저장소 왼쪽 「배포 → 패키지 레지스트리」에 보인다. README 「접속 주소」에 그 링크를 적는다. 토큰은 올린 뒤 바로 지운다(저장소·문서에 적지 않음).
+
+## 10.19. 낮에 확인한 실제 규칙과 zip 묶음 순서(최종)
+
+웹 화면 「파일 업로드」로 하나씩 올려 본 결과(사용자 실기). 실패 문구는 늘 「파일 업로드에 실패하였습니다」.
+
+| 올린 것 | 결과 | 뜻 |
+|---|---|---|
+| `돌다리_실행.bat`, cp949 bat, 모의 폴더 zip, 휴대용 zip(python.exe 든 15MB), 암호 PDF, 손상 hwp, eml, 괄호 든 폴더 | 통과 | 실행 파일·압축 안 실행 파일·압축 안 압축·인코딩·의심 문서는 규칙이 아님 |
+| `requirements.txt` | 실패 | 의존성 목록 이름을 막음 → `부품목록.txt` |
+| `core.py`(36KB, 셔뱅 빼도, 인증 줄 바꿔도) | 실패 3/3 | `.py`일 때만 내용을 검사(같은 내용 `.txt`는 통과, 한 줄짜리 `.py`는 통과) |
+| core.py 앞 절반을 2~3KB 8조각으로 | 모두 통과 | 특정 줄이 걸리는 게 아님 |
+| 조각을 이어 붙인 것(5KB·9.7KB·13KB) | 5KB 실패, 9.7KB는 한 번 통과·같은 내용 다시 올리니 실패 | 크기·서버 부하에 따라 흔들리는 검사(시간 초과 꼴). 4KB 넘는 `.py`는 못 믿음 |
+
+결론: **파이썬 소스는 zip으로, 읽기용은 `.py.txt`로** 올린다. zip 안의 `.py`는 검사하지 않는다(휴대용 zip 안에 소스 전부가 들어 있는데 통과).
+
+### zip 묶음(`GitLab올림_돌다리_v3.7.1_zip묶음.zip`, 26개) 구성
+- `README.md`, `.gitattributes`, `.gitignore`
+- `실행물/doldari_v3.7.1_portable_win64.zip`, `읽어보기.txt`
+- `모의데이터/가온우체국_모의업무폴더.zip`, `정답표.xlsx`, `README.md`
+- `소스/돌다리_소스_v3.7.1.zip`(py 9·web·시험·도구·bat·부품목록·README, 30개), `소스/읽기용/*.py.txt` 9개, `소스/web/app.js`·`index.html`, `소스/돌다리_실행.bat`, `소스/실측.bat`, `소스/부품목록.txt`, `소스/README.md`, `소스/실측결과.zip`, `소스/모의데이터_v1_한빛군청.zip`
+
+### 올리는 순서
+1. **Web IDE에서 한 번에**: zip 묶음을 풀어 항목 전부(`.gitattributes`·`.gitignore`·`README.md`·`모의데이터`·`소스`·`실행물`)를 목록 아래 빈 곳에 놓고(같은 이름은 Replace) 커밋 메시지 `v3.7.1 소스 zip·휴대용 실행물·모의데이터 등록`. 지금까지 막힌 원인(.py 낱개)이 없으니 통과가 기대된다.
+2. 막히면 웹 화면 「파일 업로드」로 하나씩(폴더는 「새 디렉터리」로 먼저). 26개 가운데 어느 것이 막히는지 이름을 적어 둔다.
+3. **정리 커밋**(Web IDE, 지우기만 하므로 통과): 시험하며 올라간 파일을 지운다. 맨 위의 `GitLab올림…zip`·`가온우체국_모의업무폴더.zip`·휴대용 zip(실행물 밖에 있는 것)·`*.eml`·`*.hwp`·`*.pdf`·`실측_원본_cp949.bat`·`실측.bat`·폴더 `시험·괄호(테스트)`, 이름이 `시험`으로 시작하는 `.py`·`.txt` 전부(`시험2_빈.py`, `시험3_core.py.txt`, `시험5_뒷반.py`, `시험6_00~07.py`, `시험8_인증줄만.py`, `시험9_앞2~5조각.py`, `시험11_빈2.py`, `시험11_06다시.py`), `소스/` 바로 아래의 `app.js`·`index.html`·`점검결과_v1.1.md`·`.gitkeep`, `소스/모의데이터/`(`.gitkeep`·`README.md`).
+4. 확인: README 머리 v3.7.1, 휴대용 zip 내려받아 `certutil -hashfile … SHA256` = `cbb6b9571634275780f971a9b02d06e8fd46afe0f1b90d3018a006c7d4e79a4f`, 소스 zip을 풀어 `python server.py`가 뜨는지(파이썬 있는 PC) 또는 휴대용 zip으로 실행.
