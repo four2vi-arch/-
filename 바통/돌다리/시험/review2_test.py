@@ -108,5 +108,29 @@ many = [F('d%d/보고서_%d_v%d.txt' % (i % 50, i, i % 3), '보고서 %d 내용'
 t0 = time.time(); docs.plan_docs(many, core.DEFAULT_AREAS, today=TODAY); sec_ = time.time() - t0
 ok('파일 6,000개 계획이 10초 안(판 묶기가 제곱으로 느려지지 않음)', sec_ < 10, '%.1fs' % sec_)
 
+# 11. 3차 검토(10.19): 네트워크 공유 경로 접두, 날짜 꼴 정규화, 잘못된 요청 몸체
+import extract as EX, server as SV
+_os = EX.os.name
+try:
+    EX.os.name = 'nt'
+    EX.os.path = __import__('ntpath')
+    ok('윈도 긴 경로 접두: 로컬은 \\\\?\\C:…, 공유 폴더는 \\\\?\\UNC\\…', EX.long_path('C:\\업무\\폴더') == '\\\\?\\C:\\업무\\폴더' and EX.long_path('\\\\파일서버\\공유\\영업과') == '\\\\?\\UNC\\파일서버\\공유\\영업과', (EX.long_path('\\\\파일서버\\공유\\영업과'),))
+finally:
+    EX.os.name = _os; EX.os.path = __import__('posixpath')
+ok('기한 칸 「2026.11.3」「2026. 11. 20.」 → ISO', SV.iso_date('2026.11.3') == '2026-11-03' and SV.iso_date('2026. 11. 20.') == '2026-11-20' and SV.iso_date('11월 말') == '11월 말')
+import threading, urllib.request, json as _json, socket
+_port = 8831
+_srv = SV.ExclusiveServer(('127.0.0.1', _port), SV.H); _t = threading.Thread(target=_srv.serve_forever, daemon=True); _t.start()
+try:
+    req = urllib.request.Request('http://127.0.0.1:%d/api/items' % _port, data=_json.dumps({'changes': 'x'}).encode(), headers={'Content-Type': 'application/json'})
+    try:
+        urllib.request.urlopen(req, timeout=5); code = 200
+    except urllib.error.HTTPError as e:
+        code = e.code
+    ok('잘못된 요청 몸체는 400(파이썬 오류 문구 대신)', code == 400, code)
+    ok('켜진 돌다리를 연결로 알아봄(두 번 실행 방지)', SV.port_open(_port) and SV.is_doldari(_port))
+finally:
+    _srv.shutdown(); _srv.server_close()
+
 print('\n통과 %d · 실패 %d' % (P, F_))
 sys.exit(1 if F_ else 0)

@@ -125,9 +125,7 @@ def recheck_originals():
     """내보내기 때 원본을 다시 SHA-256으로 재어 지문표의 「처리 후」를 지금 값으로 바꾼다. 없어진 파일은 「없어짐」."""
     folder = STATE.get('folder') or ''
     for x in STATE['fingerprints']:
-        p = os.path.join(folder, *x['file'].split('/'))
-        if os.name == 'nt' and not p.startswith('\\\\?\\'):
-            p = '\\\\?\\' + os.path.abspath(p)
+        p = EX.long_path(os.path.join(folder, *x['file'].split('/')))
         try:
             x['sha256_after'] = EX.sha256(p)
         except Exception:
@@ -559,12 +557,19 @@ class H(BaseHTTPRequestHandler):
             STATE['stop'] = True
             return self._send(200, {'ok': True})
         if p == '/api/items':
+            if not isinstance(body, dict) or not isinstance(body.get('changes', []), list) or not isinstance(body.get('bulk', []), list):
+                return self._send(400, {'error': '잘못된 요청 꼴'})
             with LOCK:
                 by_id = {it['id']: it for it in STATE['items']}
                 for ch in body.get('changes', []):
+                    if not isinstance(ch, dict):
+                        continue
                     it = by_id.get(ch.get('id'))
                     if not it:
                         continue
+                    for k in ('due_next', 'date'):   # 「2026.11.3」「2026. 11. 3.」도 ISO로(정렬·「(지남)」 판정이 어긋나던 것)
+                        if k in ch:
+                            ch[k] = iso_date(ch[k])
                     for k in ('keep', 'decided', 'status', 'next', 'note', 'seen', 'question', 'answer'):
                         if k in ch:
                             it[k] = ch[k]
@@ -594,7 +599,7 @@ class H(BaseHTTPRequestHandler):
                         w_in, d_in = (w_in or d_in), ''
                     new = dict(new, date=d_in, when=w_in)
                     rec = {'id': nid, 'file': '', 'kind': '', 'cls': '직접 입력', 'date': str(new.get('date', '')).strip()[:10], 'docno': '', 'title': str(new.get('title', '')).strip()[:160],
-                           'area': str(new.get('area') or '기타'), 'area_by': '사람', 'due': [], 'due_next': str(new.get('due_next', '')).strip()[:10], 'contacts': [], 'recur': None, 'attachments': [],
+                           'area': str(new.get('area') or '기타'), 'area_by': '사람', 'due': [], 'due_next': iso_date(new.get('due_next', '')), 'contacts': [], 'recur': None, 'attachments': [],
                            'kind3': new.get('kind3') if new.get('kind3') in ('현안', '반복', '문서', '연혁', '현황') else '현안', 'reflected': '', 'summary': '', 'todo': str(new.get('todo', '')).strip()[:160], 'todo_by': '사람',
                            'owner': '', 'model_status': '', 'src': '직접 입력', 'keep': True, 'decided': True, 'status': '진행', 'next': '', 'note': str(new.get('note', '')).strip(), 'seen': False, 'quote': '',
                            'when': str(new.get('when', '')).strip()[:40]}
@@ -631,6 +636,49 @@ class H(BaseHTTPRequestHandler):
         return self._send(404, {'error': '없는 주소'})
 
 
+def iso_date(v):
+    """'2026.11.3' / '2026. 11. 3.' / '2026-11-03' → '2026-11-03'. 날짜가 아니면 앞 10자 그대로."""
+    s = str(v or '').strip()
+    m = re.match(r'^(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})', s)
+    if m:
+        try:
+            return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
+        except ValueError:
+            pass
+    return s[:10]
+
+
+def port_open(port):
+    import socket
+    try:
+        with socket.create_connection(('127.0.0.1', port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def is_doldari(port):
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:%d/api/state' % port, timeout=2) as r:
+            return '"version"' in r.read(4000).decode('utf-8', 'replace')
+    except Exception:
+        return False
+
+
+class ExclusiveServer(ThreadingHTTPServer):
+    """윈도: 이미 듣고 있는 포트에 두 번째 서버가 또 묶이지 않게(SO_EXCLUSIVEADDRUSE). 리눅스·맥: 껐다 바로 켤 때 TIME_WAIT 포트를 다시 쓰게(기본값)."""
+    allow_reuse_address = os.name != 'nt'
+
+    def server_bind(self):
+        if os.name == 'nt':
+            import socket
+            try:
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            except Exception:
+                pass
+        super().server_bind()
+
+
 def main():
     global WORK
     for stream in (sys.stdout, sys.stderr):   # 윈도 콘솔(cp949)에서 한글·특수문자 출력으로 죽지 않게
@@ -644,16 +692,28 @@ def main():
     ap.add_argument('--no-browser', action='store_true')
     a = ap.parse_args()
     WORK = os.path.abspath(a.work)
-    os.makedirs(WORK, exist_ok=True)
+    try:
+        os.makedirs(WORK, exist_ok=True)
+        open(os.path.join(WORK, '.쓰기확인'), 'w').close(); os.remove(os.path.join(WORK, '.쓰기확인'))
+    except OSError:   # 읽기 전용 위치(Program Files 등)에 풀었을 때: 사용자 폴더로 대신(파이썬 오류 화면 대신 한 줄 안내)
+        alt = os.path.join(os.environ.get('LOCALAPPDATA') or os.path.expanduser('~'), 'doldari', '작업')
+        print('작업 폴더에 쓸 수 없어 %s 를 대신 씁니다(압축을 바탕화면 같은 곳에 풀면 그 안에 남습니다).' % alt, flush=True)
+        WORK = alt; os.makedirs(WORK, exist_ok=True)
     load_session()
     url = 'http://127.0.0.1:%d/' % a.port
+    if port_open(a.port):   # 윈도는 SO_REUSEADDR 때문에 같은 포트에 두 번째 서버가 떠 버릴 수 있어, 묶기 전에 연결로 먼저 확인한다
+        if is_doldari(a.port):
+            print('돌다리가 이미 켜져 있습니다(포트 %d). 열려 있는 화면을 브라우저로 엽니다: %s' % (a.port, url), flush=True)
+            if not a.no_browser:
+                webbrowser.open(url)
+            sys.exit(2)
+        for cand in range(a.port + 1, a.port + 11):   # 다른 프로그램이 쓰는 포트: 다음 번호로(두 번 눌러 쓰는 사람은 인자를 줄 수 없다)
+            if not port_open(cand):
+                print('포트 %d는 다른 프로그램이 써서 %d로 엽니다.' % (a.port, cand), flush=True); a.port = cand; url = 'http://127.0.0.1:%d/' % a.port; break
     try:
-        srv = ThreadingHTTPServer(('127.0.0.1', a.port), H)
+        srv = ExclusiveServer(('127.0.0.1', a.port), H)
     except OSError:
-        print('돌다리가 이미 켜져 있습니다(포트 %d 사용 중). 열려 있는 화면을 브라우저로 엽니다: %s' % (a.port, url), flush=True)
-        print('다른 돌다리 검은 창이 없다면, 다른 프로그램이 이 포트를 쓰는 것입니다. 「돌다리_실행.bat --port 8777」처럼 다른 번호로 실행하세요.', flush=True)
-        if not a.no_browser:
-            webbrowser.open(url)
+        print('포트 %d를 열지 못했습니다. 다른 돌다리 창을 닫고 다시 실행하세요.' % a.port, flush=True)
         sys.exit(2)
     if MISSING:
         print('주의: 부품이 없어 읽지 못하는 형식이 있습니다: %s. 휴대용 묶음을 쓰거나 「python -m pip install -r 부품목록.txt」.' % ', '.join('%s(%s)' % (m['what'], m['module']) for m in MISSING), flush=True)

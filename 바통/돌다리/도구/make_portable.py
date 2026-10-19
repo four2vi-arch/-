@@ -34,7 +34,7 @@ echo.
 echo  돌다리 업무 인수인계 도우미를 시작합니다. 잠시 뒤 브라우저가 열립니다.
 echo  이 검은 창을 닫으면 돌다리가 끝납니다.
 echo.
-"%~dp0python\python.exe" "%~dp0app\server.py" %*
+"%~dp0python\python.exe" -I -X utf8 "%~dp0app\server.py" %*
 if errorlevel 1 (
   echo.
   echo  시작하지 못했습니다. 위의 오류 문장을 사진으로 찍어 담당자에게 보내 주세요.

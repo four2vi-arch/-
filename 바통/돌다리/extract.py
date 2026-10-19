@@ -23,6 +23,14 @@ HWP_NS = {'hp': 'http://www.hancom.co.kr/hwpml/2011/paragraph'}
 W_NS = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
 
+def long_path(p):
+    """윈도 긴 경로 접두(\\\\?\\). 네트워크 공유(\\\\서버\\공유)는 \\\\?\\UNC\\ 꼴이어야 열린다(10.19. 3차 검토: 부서 공유 폴더를 고르면 0건이던 것)."""
+    p = os.path.abspath(p)
+    if os.name != 'nt' or p.startswith('\\\\?\\'):
+        return p
+    return ('\\\\?\\UNC\\' + p[2:]) if p.startswith('\\\\') else ('\\\\?\\' + p)
+
+
 def sha256(path):
     h = hashlib.sha256()
     with open(path, 'rb') as f:
@@ -601,9 +609,7 @@ def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=Fals
             dirs[:] = [d for d in dirs if keep_dir(root, d)]
             total += len(files)
     done = 0
-    walk_root = folder
-    if os.name == 'nt' and not str(folder).startswith('\\\\?\\'):
-        walk_root = '\\\\?\\' + os.path.abspath(folder)   # 260자 넘는 경로도 열리게(윈도 긴 경로 접두)
+    walk_root = long_path(folder)   # 260자 넘는 경로·네트워크 공유도 열리게(윈도 긴 경로 접두)
     def walk_err(e):   # 권한 없는 하위 폴더: 조용히 빠지지 않게 못 읽음에 남긴다
         try:
             failures.append({'file': clean_text(os.path.relpath(getattr(e, 'filename', '') or folder, walk_root)), 'reason': '폴더를 열 권한이 없음(%s)' % type(e).__name__})

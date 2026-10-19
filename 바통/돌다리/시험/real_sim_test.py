@@ -27,7 +27,7 @@ for f in FOLDERS:
 random.seed(11)
 def gongmun(folder, date, seq, no, title, due_line, extra=None, to_pdf=False):
     body = ['1. 관련 : 우편영업과-%d(%s)' % (random.randint(100, 4000), date), '', '2. %s을 다음과 같이 알려드리니 협조하여 주시기 바랍니다.' % title,
-            ' 가. ' + due_line, ' 나. 담당 : 영업과 홍길순(☎ 063-530-7771)', ' 다. 보기 : 담당자 02-123-4567 / 관련 000-0000-0000'] + (extra or []) + ['', '붙임  관련 자료 1부.  끝.', '', '정읍우체국장', '시행 %s (%s)  접수' % (no, date)]
+            ' 가. ' + due_line, ' 나. 담당 : 영업과 홍길순(☎ 063-000-7771)', ' 다. 보기 : 담당자 02-123-4567 / 관련 000-0000-0000'] + (extra or []) + ['', '붙임  관련 자료 1부.  끝.', '', '가온우체국장', '시행 %s (%s)  접수' % (no, date)]
     y, m, dd = [int(x) for x in re.findall(r'\d+', date)]
     fn = '%04d%02d%02d_%02d_%s' % (y, m, dd, seq, re.sub(r'[/\\:*?"<>|]', '_', title))
     path = os.path.join(SRC, folder, fn + '.odt')
@@ -86,7 +86,7 @@ try:
     _font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 56)
 except Exception:
     _font = ImageFont.load_default()
-for _i, _l in enumerate(['JEONGEUP POST OFFICE', 'Subject: KCSI banner notice 2026', 'Submit by 2026-10-31. Contact 063-530-7771']):
+for _i, _l in enumerate(['GAON POST OFFICE', 'Subject: KCSI banner notice 2026', 'Submit by 2026-10-31. Contact 063-000-7771']):
     _d.text((200, 300 + _i * 120), _l, font=_font, fill=0)
 _img.rotate(0.8, expand=False, fillcolor=255).save(os.path.join(SRC, '05_고객만족CS·전광판', '20260922_19_2026년 한국산업의 고객만족도 1위 달성 현수막.pdf'), 'PDF', resolution=300.0)
 Image.new('RGB', (600, 800), 'white').save(os.path.join(SRC, '07_민원·손해배상', '20260930_09_빈 스캔.pdf'))
@@ -146,7 +146,7 @@ try:
     check('긴 이름 xlsx가 현황 자료로', any('과오취급' in i['title'] and i['kind3'] == '현황' for i in items))
     check('경영평가 수지율 xlsx는 최신판 하나만 현황', sum(1 for i in items if '수지율' in i['title'] and i['kind3'] == '현황') == 1)
     check('공문은 폴더 이름 업무로 분류(소포 섞임 없음)', all(docs_area_ok for docs_area_ok in [i['area'] == re.sub(r'^\d+_', '', i['file'].split('/')[0]) for i in items if i['cls'] == '공문' and not i['file'].startswith(('00_', '99_'))]))
-    check('보기 번호(123-4567·000-0000-0000) 제외, 실제 번호는 실림', not any(c['phone'] in ('02-123-4567', '000-0000-0000') for i in items for c in i['contacts']) and any(c['phone'] == '063-530-7771' for i in items for c in i['contacts']))
+    check('보기 번호(123-4567·000-0000-0000) 제외, 실제 번호는 실림', not any(c['phone'] in ('02-123-4567', '000-0000-0000') for i in items for c in i['contacts']) and any(c['phone'] == '063-000-7771' for i in items for c in i['contacts']))
     check('기간 안 공문에 연혁 꼬리표 남발 없음(센 말만)', sum(1 for i in items if i['hist'] and i['kind3'] != '연혁') <= 6, str(sum(1 for i in items if i['hist'] and i['kind3'] != '연혁')))
     check('기간 밖 전환점 문서가 연혁으로', sum(1 for i in items if i['kind3'] == '연혁') >= 2, str(sum(1 for i in items if i['kind3'] == '연혁')))
     check('해마다 오는 공문 2묶음(추석·목표 배정) 찾음', len({tuple(i['recur']['years']) + (i['recur']['month'],) for i in items if i.get('recur') and i['recur'].get('cycle') == '매년'}) >= 2)

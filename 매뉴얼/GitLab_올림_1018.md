@@ -19,7 +19,7 @@
 - 올린 뒤: 저장소에서 HTML을 내려받아 `certutil -hashfile 우편번호_자동검색기_v1.10_출품본.html SHA256` → 위 값과 같은지, 열어서 맨 아래 「원본 확인됨」.
 
 ## 돌다리(handover-doldari)
-- 처음 올리는 본 묶음: `README.md`, `.gitattributes`, `.gitignore`, `실행물/doldari_v3.7.1_portable_win64.zip`(SHA-256 `64e5d622f2c6019095c215bd0e973d593dff6ccb6aba94ac34d8a872fc2d7cf3`)·`읽어보기.txt`, `모의데이터/`(업무폴더 zip·정답표·README), `소스/`.
+- 처음 올리는 본 묶음: `README.md`, `.gitattributes`, `.gitignore`, `실행물/doldari_v3.7.1_portable_win64.zip`(SHA-256 `cbb6b9571634275780f971a9b02d06e8fd46afe0f1b90d3018a006c7d4e79a4f`)·`읽어보기.txt`, `모의데이터/`(업무폴더 zip·정답표·README), `소스/`.
 - 커밋 메시지: `v3.7.1 휴대용 실행물·모의데이터·소스 등록`. v3.6 묶음을 이미 올렸으면 `실행물/doldari_v3.6_portable_win64.zip`은 지운다.
 - 23MB 압축이 Web IDE에서 실패하면 그 파일만 빼고 커밋한 뒤 파일 목록 화면 「+ ▼ → 파일 업로드」로 따로 올린다(매뉴얼 10절).
 
@@ -53,7 +53,7 @@
 2. `모의데이터` 폴더(없으면 새 디렉터리)에 `가온우체국_모의업무폴더.zip` 올려 보기 → 막히면 폴더째 대비.
 3. `실행물` 폴더에 `doldari_v3.7.1_portable_win64.zip`(15MB) 올려 보기 → 막히면 `.zip.txt` 대비, 그것도 막히면 패키지 레지스트리.
 4. 셋 다 통과하면 후보가 틀린 것이니 그 자리에서 멈추고 알릴 것. 하나라도 막히면 그 대비를 적용한 묶음(`GitLab올림_돌다리_v3.7.1_대비.zip`)으로 Web IDE에서 한 번에 올린다(시험하며 `소스` 바로 아래 들어간 `app.js`·`index.html`·`점검결과_v1.1.md`·`.gitkeep`은 지운다).
-5. 올린 뒤: README 머리 v3.7.1, 휴대용 zip 내려받아 SHA-256 `64e5d622f2c6019095c215bd0e973d593dff6ccb6aba94ac34d8a872fc2d7cf3`(`.txt`를 지운 뒤 잰다), 깨끗한 윈도 PC에서 `돌다리_실행.bat` 실행.
+5. 올린 뒤: README 머리 v3.7.1, 휴대용 zip 내려받아 SHA-256 `cbb6b9571634275780f971a9b02d06e8fd46afe0f1b90d3018a006c7d4e79a4f`(`.txt`를 지운 뒤 잰다), 깨끗한 윈도 PC에서 `돌다리_실행.bat` 실행.
 
 패키지 레지스트리로 올리는 법(3-②): 「설정 → 액세스 토큰」에서 `write_package_registry` 권한 토큰을 만든 뒤 PC 명령 프롬프트에서
 `curl --header "PRIVATE-TOKEN: <토큰>" --upload-file doldari_v3.7.1_portable_win64.zip "https://gitlab.aigov.go.kr/api/v4/projects/1305/packages/generic/doldari/3.7.1/doldari_v3.7.1_portable_win64.zip"`

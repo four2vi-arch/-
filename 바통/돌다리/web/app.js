@@ -79,7 +79,7 @@ function overall() {
 function renderNav() {
   const nav = $('#nav');
   const prepSt = ST.running || ST.extracting ? '<span class="st ai">진행 중</span>' : ST.step >= 4 ? '<span class="st ok">완료</span>' : ST.step >= 2 ? '<span class="st todo">초안 전</span>' : '<span class="st todo">폴더 전</span>';
-  let h = `<div class="lbl">준 비</div><a data-s="prep" class="${sec === 'prep' ? 'cur' : ''}">폴더 읽기 · 초안 ${prepSt}</a><div class="lbl">업무인계·인수서(별지 제12호)</div>`;
+  let h = `<div class="lbl">준 비</div><a data-s="prep" href="#prep" class="${sec === 'prep' ? 'cur' : ''}">폴더 읽기 · 초안 ${prepSt}</a><div class="lbl">업무인계·인수서(별지 제12호)</div>`;
   const badge = id => {
     if (!ITEMS.length) return '';
     const sugN = r => r.filter(isSug).length;
@@ -92,10 +92,11 @@ function renderNav() {
     if (id === 's4') { return `<span class="st">${contactsAll().length}명</span>`; }
     return '';
   };
-  for (const [id, name] of SECS) h += `<a data-s="${id}" class="${sec === id ? 'cur' : ''}">${name} ${badge(id)}</a>`;
-  h += `<div class="lbl">기 타</div><a data-s="log" class="${sec === 'log' ? 'cur' : ''}">작업 기록</a>`;
+  for (const [id, name] of SECS) h += `<a data-s="${id}" href="#${id}" class="${sec === id ? 'cur' : ''}">${name} ${badge(id)}</a>`;
+  h += `<div class="lbl">기 타</div><a data-s="log" href="#log" class="${sec === 'log' ? 'cur' : ''}">작업 기록</a>`;
   nav.innerHTML = h;
-  $$('#nav a').forEach(el => el.onclick = () => { sec = el.dataset.s; ls('sec', sec); ORD = null; renderNav(); renderMain(); renderAside(); window.scrollTo(0, 0); });
+  $$('#nav a').forEach(el => el.onclick = (e) => { e.preventDefault(); sec = el.dataset.s; ls('sec', sec); ORD = null; renderNav(); renderMain(); renderAside(); window.scrollTo(0, 0); });   // href로 Tab 이동·Enter 가능(키보드만으로 목차를 못 가던 것)
+  fitTop();   // 상단 띠 높이가 바뀌어도(인계자↔인수자) 목차·오른쪽 패널 위치를 다시 잰다
   const o = overall(); $('#progLbl').textContent = o.label; $('#progBar').style.width = o.pct + '%';
   ['#btnExport', '#btnPrint', '#btnPreview'].forEach(s => { const b = $(s); if (b) { b.disabled = !ITEMS.length; b.title = ITEMS.length ? '' : '초안을 만든 뒤 쓸 수 있습니다'; } });
 }

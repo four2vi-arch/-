@@ -75,7 +75,7 @@ def fake_model(f):
     if k == 2: return ''
     if k == 3: raise TimeoutError('timed out')
     if k == 4: return '{"요지": ["목록"]}'
-    if k == 5: return '{"요지": "소포 접수 마감 변경", "할 일": "각 국 제출", "기한": "2099-01-01", "담당": "홍길동 010-9999-9999", "상태": "진행 중"}'   # 문서에 없는 기한·담당 → 걸러야
+    if k == 5: return '{"요지": "소포 접수 마감 변경", "할 일": "각 국 제출", "기한": "2099-01-01", "담당": "홍길동 010-0000-9999", "상태": "진행 중"}'   # 문서에 없는 기한·담당 → 걸러야
     return json.dumps({'요지': '소포 접수 마감 변경 안내', '할 일': '기한까지 각 국 제출', '기한': '', '담당': '박세진 010-0000-0303', '상태': '진행 중'}, ensure_ascii=False)
 t0 = time.time()
 items, calls, errors, info = docs.build_docs(files, AREAS, months=12, model='fake', fake=fake_model, model_scope='all', today=__import__('datetime').date(2026, 4, 1))
