@@ -12,6 +12,7 @@
 
 - AI 모델(선택): Ollama 설치 후 `ollama pull exaone3.5:7.8b` 또는 `ollama pull gemma3:4b` → ②에서 「AI 모델도 사용」. 모델은 현안 후보마다 「요지·할 일」 한 줄을 보탭니다(문서 한 건에 약 40초).
 - 파이썬이 이미 있는 PC에서 소스로 실행: 이 폴더에서 한 번만 `python -m pip install -r 부품목록.txt` → `돌다리_실행.bat`. 필요한 부품이 없으면 화면 맨 위에 빨간 띠로 알립니다.
+- 공공 GitLab에 올리기 전 걸러 보기(개발자): `python 도구/gitlab_hook_sim.py <올릴 폴더>` (서버 훅 흉내: 의존성 목록 이름·실행 파일·압축 안 실행 파일을 적어 줌. 10.18. 실제 서버가 `requirements.txt`를 거절한 뒤 만듦).
 - 휴대용 묶음 만들기(개발자): `python 도구/make_portable.py --nupkg python.3.12.10.nupkg --wheels <바퀴 폴더>`(도구 파일 머리 설명 참고).
 - 작업 기록·내보낸 파일은 `작업\`(휴대용은 `doldari\app\작업\`)에 남고, 브라우저를 닫았다 열어도 이어집니다.
 
