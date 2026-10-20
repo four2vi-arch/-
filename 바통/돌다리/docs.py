@@ -633,6 +633,9 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                     td = [l for l in cand_l if TODO_LINE.search(l) and (re.search(r'후임|지시|해야|할\s*것', l) or DUE_PATS[2].search(l) or DUE_PATS[1].search(l))]
                     if td:
                         it['todo'] = mask_secret(td[0][:110]); it['todo_src'] = '원문'
+                        td_due = [x['date'] for x in d['due'] if x.get('line') and core.norm(x['line']) in core.norm(td[0])]   # 할 일 줄의 「9월 11일까지」가 있으면 그 날이 기한(기간 끝 날짜보다)
+                        if td_due and it['due_next'] and it['due_next'] not in td_due:
+                            it['due_next'] = td_due[0]
         if d['to_model'] and model != 'none' and not stopped and not (should_stop and should_stop()):
             f = by_file.get(d['file'])
             chunk = ('제목: %s\n' % d['title']) + text_of(f)[:max_chars]

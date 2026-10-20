@@ -17,6 +17,9 @@ SENTENCE_KINDS = {'hwp', 'hwpx', 'docx', 'pdf', 'eml', 'txt', 'md'}   # 문장 �
 TABLE_KINDS = {'xlsx', 'xlsm', 'csv'}                                  # 표 파일: 기본은 규칙층만
 
 
+NOPROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 로컬 모델 호출이 PC의 프록시 설정을 타지 않게(10.20.)
+
+
 def is_local_url(url):
     try:
         h = urllib.parse.urlsplit(url).hostname or ''
@@ -44,7 +47,7 @@ DATE_FULL = re.compile(r'(20\d{2})[-.]\s?(\d{1,2})[-.]\s?(\d{1,2})')
 REL_DUE = re.compile(r'\d+\s*(?:개월|주|일)\s*전')
 ACTION = re.compile(r'합니다|한다|할 것|제출|수립|실시|협의|조치|이관|정리|보완|결정|검토|점검|제출일|기한|마감|통보|안내|채용|납부|독촉|배정|정산|회신|보고|작성|접수|발송|게시|확인|신청|제출|갱신|이동|교환')
 ISSUE = re.compile(r'미조치|미결|미완료|미이행|미납|미확정|미해결|반려|보류 중|보류됨|보류하|지연되|지연 중|지연됨|끝나지 않|결론 못|안 됨|못 냄|재협의|협의 중|이견|고장|누수')
-REFERENCE_NAME = re.compile(r'지침|매뉴얼|길라잡이|규정|서식|편람|가이드|안내서|업무처리|FAQ', re.I)   # 절차를 설명하는 참고 문서: 현안 규칙을 적용하지 않는다
+REFERENCE_NAME = re.compile(r'지침|매뉴얼|길라잡이|규정|서식|편람|가이드|안내서|업무처리|FAQ|readme|read\s*me|읽어보기', re.I)   # 절차를 설명하는 참고 문서: 현안 규칙을 적용하지 않는다
 TITLE = re.compile(r'([가-힣]{2,4})\s+(?:담당|주무관|과장|팀장|실장|계장|대리|주임|사원)')
 TITLE2 = re.compile(r'(?:담당|주무관|과장|팀장|실장|계장|대리|주임|사원|국장)\s+([가-힣]{2,4})(?![가-힣])')
 NOT_NAME = re.compile(r'과$|팀$|실$|부$|처$|국$|군청|시청|도청|구청|사무소|소방서|담당|요청|업체|연락|전화|번호|협의|문의|총괄|업무|서무|예산|보안|청사|관리|기록|감사|계약|현안|회의|참석|발견|보수')
@@ -193,7 +196,7 @@ def call_model(url, model, key, text, timeout=600, json_mode=True, system=None):
         headers['Authorization'] = 'Bearer ' + key
     req = urllib.request.Request(url, data=json.dumps(body).encode('utf-8'), headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with NOPROXY.open(req, timeout=timeout) as r:
             j = json.loads(r.read().decode('utf-8'))
     except urllib.error.HTTPError as e:
         if json_mode and e.code >= 500:  # 젬마 2차에서 HTTP 500 2건: JSON 강제 없이 한 번 더

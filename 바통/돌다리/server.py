@@ -17,7 +17,7 @@ import ocr
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '3.7.1 (2026-10-18)'
+VERSION = '3.7.2 (2026-10-20)'
 MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '$RECYCLE.BIN', 'System Volume Information'}   # 돌다리 작업 폴더는 이름이 아니라 실제 경로(WORK)로 뺀다(업무 폴더 안 「작업」 폴더는 읽는다)
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4,6}(_\d+)?(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
@@ -291,7 +291,7 @@ def ollama_models(url):
     if not core.is_local_url(url):
         return []
     try:
-        with urllib.request.urlopen('%s://%s/api/tags' % (base.scheme, base.netloc), timeout=3) as r:
+        with NOPROXY.open('%s://%s/api/tags' % (base.scheme, base.netloc), timeout=3) as r:
             j = json.loads(r.read().decode('utf-8'))
         return [m['name'] for m in j.get('models', [])]
     except Exception:
@@ -401,6 +401,8 @@ class H(BaseHTTPRequestHandler):
         if p.path == '/app.js':
             with open(os.path.join(HERE, 'web', 'app.js'), 'rb') as f:
                 return self._send(200, f.read(), 'text/javascript; charset=utf-8')
+        if p.path == '/api/ping':   # 두 번째 실행이 「켜져 있음」을 알아보는 작은 응답(state는 파일 목록이 들어 커질 수 있다)
+            return self._send(200, {'app': 'doldari', 'version': VERSION})
         if p.path == '/api/state':
             with LOCK:
                 st = {k: v for k, v in STATE.items() if k not in ('items', 'dropped', 'fingerprints')}
@@ -648,6 +650,9 @@ def iso_date(v):
     return s[:10]
 
 
+NOPROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 127.0.0.1 요청이 PC의 프록시 설정(사무실 PC)을 타지 않게
+
+
 def port_open(port):
     import socket
     try:
@@ -658,11 +663,15 @@ def port_open(port):
 
 
 def is_doldari(port):
-    try:
-        with urllib.request.urlopen('http://127.0.0.1:%d/api/state' % port, timeout=2) as r:
-            return '"version"' in r.read(4000).decode('utf-8', 'replace')
-    except Exception:
-        return False
+    """그 포트가 돌다리인지. 작은 /api/ping으로 묻고(옛 판은 없으므로) 안 되면 /api/state 전체를 읽는다. 10.20. 실측: state가 4KB를 넘어 앞 4KB만 읽던 검사가 놓쳐 8766에 두 번째 서버가 떴음."""
+    for path, limit in (('/api/ping', 4000), ('/api/state', 4_000_000)):
+        try:
+            with NOPROXY.open('http://127.0.0.1:%d%s' % (port, path), timeout=3) as r:
+                if r.status == 200 and '"version"' in r.read(limit).decode('utf-8', 'replace'):
+                    return True
+        except Exception:
+            pass
+    return False
 
 
 class ExclusiveServer(ThreadingHTTPServer):

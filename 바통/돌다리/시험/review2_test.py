@@ -1,4 +1,4 @@
-# 돌다리 v3.7.1 회귀 시험: 10.18. 2차 검토(고친 뒤 새로 생긴 결함)에서 잡은 것. 가상 자료만.
+# 돌다리 v3.7.2 회귀 시험: 10.18. 2차 검토(고친 뒤 새로 생긴 결함)에서 잡은 것. 가상 자료만.
 # 사용: python 시험/review2_test.py
 import os, sys, re, datetime, hashlib, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -129,8 +129,28 @@ try:
         code = e.code
     ok('잘못된 요청 몸체는 400(파이썬 오류 문구 대신)', code == 400, code)
     ok('켜진 돌다리를 연결로 알아봄(두 번 실행 방지)', SV.port_open(_port) and SV.is_doldari(_port))
+    # 12. 10.20. 실제 윈도 실측: 이어서 연 상태(파일 42개)에서 두 번째 실행이 8766으로 떠 버림(state 앞 4KB에 version이 없었음)
+    with SV.LOCK:
+        SV.STATE['big_test'] = 'z' * 20000
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:%d/api/ping' % _port, timeout=5) as r:
+            ping = _json.loads(r.read().decode('utf-8'))
+        ok('/api/ping이 작게 판을 알림', ping.get('app') == 'doldari' and ping.get('version') == SV.VERSION, ping)
+        ok('상태가 4KB를 훨씬 넘어도 켜진 돌다리로 알아봄', SV.is_doldari(_port))
+    finally:
+        with SV.LOCK:
+            SV.STATE.pop('big_test', None)
 finally:
     _srv.shutdown(); _srv.server_close()
+
+# 13. 10.20. 실측: 폴더 설명 README.md가 현안으로 올라옴, 기간 끝 날짜가 할 일 줄의 기한을 덮음
+f_rd = F('모의데이터/README.md', '# 가온우체국 모의 업무폴더(2판)\n가상 총괄국 영업과 1년치.\n정답표.xlsx: 후임자가 알아야 할 항목 33개(월별 할 일·협의할 사람·진행 중 현안)와 출처 파일·원문 발췌.', mtime='2026-10-10')
+items, _, _, _ = build([f_rd])
+ok('README.md(폴더 설명)는 현안으로 올리지 않음', not any(i['kind3'] == '현안' and i['file'].endswith('README.md') for i in items), [(i['file'], i['kind3']) for i in items])
+f_due = F('08_연도별_공문/20260813_추석_특별소통_대책.txt', '수신 내부결재\n제목 2026년 추석 명절 소포우편물 특별소통 대책 추진\n가. 특별소통기간 : 9. 22.(월) ~ 10. 8.(수)\n다. 계약소포 : 요금후납 계약업체에 발송 예정 물량을 9월 11일까지 통보하도록 안내\n시행 영업과-1510 (2026. 8. 13.)', mtime='2026-08-13')
+items, _, _, _ = build([f_due])
+it_ = [i for i in items if i.get('todo')]
+ok('할 일 줄의 「9월 11일까지」가 항목 기한(기간 끝 10. 8.보다)', it_ and it_[0]['due_next'] == '2026-09-11', [(i.get('todo'), i.get('due_next')) for i in items])
 
 print('\n통과 %d · 실패 %d' % (P, F_))
 sys.exit(1 if F_ else 0)
