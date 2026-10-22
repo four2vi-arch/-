@@ -95,3 +95,13 @@
 - 같은 커밋에서 지우는 것: `실행물/doldari_v3.7.1_portable_win64.zip`, `소스/돌다리_소스_v3.7.1.zip`
 
 확인: README 머리 v3.7.2, 휴대용 zip SHA-256 `9a8448ca8e559a5926f129db3f4f25aa6787fe38cabba5c2a146209ca9092afe`, bat 두 번째 실행에서 「돌다리가 이미 켜져 있습니다」가 나오고 브라우저만 다시 열리는지.
+
+## 10.22. v3.7.3 교체(돌다리 전체)와 물어물어 문서 2개
+
+돌다리(handover-doldari): `GitLab교체_돌다리_v3.7.3.zip`을 풀어 항목 전부(.gitattributes·.gitignore·README.md·모의데이터·소스·실행물·예시결과)를 Web IDE 목록 아래 빈 곳에 놓고(같은 이름은 Replace) 같은 커밋에서 옛 판 파일을 지운다.
+- 지울 것: `실행물/doldari_v3.7.1_portable_win64.zip`, `실행물/doldari_v3.7.2_portable_win64.zip`, `소스/돌다리_소스_v3.7.1.zip`, `소스/돌다리_소스_v3.7.2.zip`(있는 것만)
+- 커밋 메시지: `v3.7.3 실행 결함·AI 심사 대비 문서·예시결과`
+- 새로 생기는 폴더: `예시결과/`(화면 그림 png 4장 포함). png가 막히면 웹 「파일 업로드」로 한 장씩 올려 본다.
+- 확인: 첫 화면 README 머리 v3.7.3과 그림 2장, 휴대용 zip SHA-256 `54e5754ce0ba77b6a7becda1faed079dc5844f7511afcde5cd1eaba4e3f84307`, 소스 zip을 윈도 기본 「압축 풀기」로 풀어 `돌다리_실행.bat`·`부품목록.txt` 이름이 깨지지 않는지.
+
+물어물어(postcode-helper): `GitLab교체_물어물어_문서_1022.zip`의 `README.md`(맨 위)와 `소스/README.md`만 바꾼다(HTML은 그대로, SHA-256 6447728b…c5f5e4).
