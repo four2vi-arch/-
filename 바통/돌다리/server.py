@@ -17,7 +17,7 @@ import ocr
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '3.7.2 (2026-10-20)'
+VERSION = '3.7.3 (2026-10-22)'
 MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '$RECYCLE.BIN', 'System Volume Information'}   # 돌다리 작업 폴더는 이름이 아니라 실제 경로(WORK)로 뺀다(업무 폴더 안 「작업」 폴더는 읽는다)
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4,6}(_\d+)?(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
@@ -402,7 +402,7 @@ class H(BaseHTTPRequestHandler):
             with open(os.path.join(HERE, 'web', 'app.js'), 'rb') as f:
                 return self._send(200, f.read(), 'text/javascript; charset=utf-8')
         if p.path == '/api/ping':   # 두 번째 실행이 「켜져 있음」을 알아보는 작은 응답(state는 파일 목록이 들어 커질 수 있다)
-            return self._send(200, {'app': 'doldari', 'version': VERSION})
+            return self._send(200, {'app': 'doldari', 'version': VERSION, 'work': WORK})
         if p.path == '/api/state':
             with LOCK:
                 st = {k: v for k, v in STATE.items() if k not in ('items', 'dropped', 'fingerprints')}
@@ -662,16 +662,80 @@ def port_open(port):
         return False
 
 
-def is_doldari(port):
-    """그 포트가 돌다리인지. 작은 /api/ping으로 묻고(옛 판은 없으므로) 안 되면 /api/state 전체를 읽는다. 10.20. 실측: state가 4KB를 넘어 앞 4KB만 읽던 검사가 놓쳐 8766에 두 번째 서버가 떴음."""
+def doldari_at(port):
+    """그 포트에 켜진 돌다리의 {'version','work'}, 돌다리가 아니면 None. 작은 /api/ping으로 묻고(옛 판은 없으므로) 안 되면 /api/state 전체를 읽는다.
+    10.20. 실측: state 앞 4KB만 읽던 검사가 이어서 연 상태(파일 42개)를 놓쳐 8766에 두 번째 서버가 떴음."""
     for path, limit in (('/api/ping', 4000), ('/api/state', 4_000_000)):
         try:
             with NOPROXY.open('http://127.0.0.1:%d%s' % (port, path), timeout=3) as r:
-                if r.status == 200 and '"version"' in r.read(limit).decode('utf-8', 'replace'):
-                    return True
+                if r.status != 200:
+                    continue
+                j = json.loads(r.read(limit).decode('utf-8', 'replace'))
+            if isinstance(j, dict) and 'version' in j and (j.get('app') == 'doldari' or 'step' in j):
+                return {'version': str(j.get('version') or ''), 'work': str(j.get('work') or '')}
         except Exception:
             pass
-    return False
+    return None
+
+
+def is_doldari(port):
+    return doldari_at(port) is not None
+
+
+def same_work(a, b):
+    try:
+        return bool(a) and bool(b) and os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+    except Exception:
+        return False
+
+
+PORT_FILE = '실행중_포트.txt'
+
+
+def pick_port(start, work, span=10):
+    """(포트, 이미 켜진 돌다리 정보 또는 None, 알림 문장 목록).
+    같은 작업 폴더의 돌다리가 켜져 있으면 그 포트를 돌려준다(두 번 눌러도 서버는 하나).
+    먼저 이 작업 폴더에 남긴 포트(지난번에 8766 등으로 열었을 때)를 보고, 그다음 start부터 차례로 본다.
+    다른 프로그램이나 다른 위치의 돌다리가 쓰는 포트는 건너뛰고 처음 빈 포트를 고른다."""
+    notes = []
+    try:
+        with open(os.path.join(work, PORT_FILE), encoding='utf-8') as f:
+            last = int(f.read().strip() or 0)
+    except Exception:
+        last = 0
+    if last and port_open(last):   # 범위 안(8766 등)이어도 먼저 본다: 그새 8765가 비었으면 차례로만 보다가 두 번째 서버를 띄운다
+        info = doldari_at(last)
+        if info and same_work(info['work'], work):
+            return last, info, notes
+    for p in range(start, start + span + 1):
+        if not port_open(p):
+            return p, None, notes
+        info = doldari_at(p)
+        if info and (same_work(info['work'], work) or not info['work']):   # 작업 폴더를 알려 주지 않는 옛 판은 같은 것으로 본다(두 서버가 한 세션을 나눠 쓰지 않게)
+            return p, info, notes
+        if info:
+            notes.append('포트 %d에는 다른 위치의 돌다리(v%s, 작업 폴더 %s)가 켜져 있어 건너뜁니다.' % (p, info['version'], info['work']))
+        else:
+            notes.append('포트 %d는 다른 프로그램이 쓰고 있어 건너뜁니다.' % p)
+    return None, None, notes
+
+
+def write_port_file(port):
+    try:
+        with open(os.path.join(WORK, PORT_FILE), 'w', encoding='utf-8') as f:
+            f.write(str(port))
+    except OSError:
+        pass
+
+
+def remove_port_file(port):
+    p = os.path.join(WORK, PORT_FILE)
+    try:
+        with open(p, encoding='utf-8') as f:
+            if f.read().strip() == str(port):
+                os.remove(p)
+    except OSError:
+        pass
 
 
 class ExclusiveServer(ThreadingHTTPServer):
@@ -708,17 +772,26 @@ def main():
         alt = os.path.join(os.environ.get('LOCALAPPDATA') or os.path.expanduser('~'), 'doldari', '작업')
         print('작업 폴더에 쓸 수 없어 %s 를 대신 씁니다(압축을 바탕화면 같은 곳에 풀면 그 안에 남습니다).' % alt, flush=True)
         WORK = alt; os.makedirs(WORK, exist_ok=True)
-    load_session()
+    port, running, notes = pick_port(a.port, WORK)   # 세션을 읽기 전에 본다: 두 번째 실행이 큰 폴더를 다시 읽지 않게
+    for n in notes:
+        print(n, flush=True)
+    if running:
+        url = 'http://127.0.0.1:%d/' % port
+        print('돌다리가 이미 켜져 있습니다(포트 %d). 먼저 연 화면을 브라우저로 다시 엽니다: %s' % (port, url), flush=True)
+        if running['version'] and running['version'] != VERSION:
+            print('켜져 있는 것은 v%s입니다. 이 판(v%s)으로 바꾸려면 먼저 연 검은 창을 닫고 다시 실행하세요.' % (running['version'], VERSION), flush=True)
+        print('이 창은 닫아도 됩니다. 돌다리는 먼저 연 검은 창에서 계속 돌아갑니다.', flush=True)
+        if not a.no_browser:
+            webbrowser.open(url)
+        sys.exit(0)   # 실패가 아니다(실행 bat이 「시작하지 못했습니다」를 띄우지 않게)
+    if port is None:
+        print('포트 %d~%d를 모두 다른 프로그램이 쓰고 있습니다. 「돌다리_실행.bat --port 9000」처럼 다른 번호로 실행하세요.' % (a.port, a.port + 10), flush=True)
+        sys.exit(2)
+    if port != a.port:
+        print('포트 %d 대신 %d번으로 엽니다.' % (a.port, port), flush=True)
+    a.port = port
     url = 'http://127.0.0.1:%d/' % a.port
-    if port_open(a.port):   # 윈도는 SO_REUSEADDR 때문에 같은 포트에 두 번째 서버가 떠 버릴 수 있어, 묶기 전에 연결로 먼저 확인한다
-        if is_doldari(a.port):
-            print('돌다리가 이미 켜져 있습니다(포트 %d). 열려 있는 화면을 브라우저로 엽니다: %s' % (a.port, url), flush=True)
-            if not a.no_browser:
-                webbrowser.open(url)
-            sys.exit(2)
-        for cand in range(a.port + 1, a.port + 11):   # 다른 프로그램이 쓰는 포트: 다음 번호로(두 번 눌러 쓰는 사람은 인자를 줄 수 없다)
-            if not port_open(cand):
-                print('포트 %d는 다른 프로그램이 써서 %d로 엽니다.' % (a.port, cand), flush=True); a.port = cand; url = 'http://127.0.0.1:%d/' % a.port; break
+    load_session()
     try:
         srv = ExclusiveServer(('127.0.0.1', a.port), H)
     except OSError:
@@ -728,12 +801,15 @@ def main():
         print('주의: 부품이 없어 읽지 못하는 형식이 있습니다: %s. 휴대용 묶음을 쓰거나 「python -m pip install -r 부품목록.txt」.' % ', '.join('%s(%s)' % (m['what'], m['module']) for m in MISSING), flush=True)
     print('돌다리 v%s · %s (이 PC 안에서만 열립니다. 끝내려면 이 창을 닫거나 Ctrl+C)' % (VERSION, url), flush=True)
     print('작업 폴더: %s' % WORK, flush=True)
+    write_port_file(a.port)
     if not a.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        remove_port_file(a.port)
 
 
 if __name__ == '__main__':

@@ -37,10 +37,12 @@ echo.
 "%~dp0python\python.exe" -I -X utf8 "%~dp0app\server.py" %*
 if errorlevel 1 (
   echo.
-  echo  시작하지 못했습니다. 위의 오류 문장을 사진으로 찍어 담당자에게 보내 주세요.
-  echo  흔한 원인: 압축을 풀지 않고 압축 파일 안에서 바로 실행함 / 다른 돌다리 창이 이미 열려 있음
+  echo  시작하지 못했습니다. 위의 문장을 사진으로 찍어 담당자에게 보내 주세요.
+  echo  흔한 원인: 압축을 풀지 않고 압축 파일 안에서 바로 실행함
 )
-pause
+echo.
+echo  아무 키나 누르면 이 창이 닫힙니다.
+pause >nul
 '''
 
 README = '''돌다리 v{ver} 휴대용 묶음(윈도 10·11, 64비트)

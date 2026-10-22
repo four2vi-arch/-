@@ -1,4 +1,4 @@
-# 돌다리 v3.7.2 회귀 시험: 10.18. 2차 검토(고친 뒤 새로 생긴 결함)에서 잡은 것. 가상 자료만.
+# 돌다리 v3.7.3 회귀 시험: 10.18. 2차 검토(고친 뒤 새로 생긴 결함)에서 잡은 것. 가상 자료만.
 # 사용: python 시험/review2_test.py
 import os, sys, re, datetime, hashlib, time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

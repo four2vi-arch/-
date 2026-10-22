@@ -11,7 +11,7 @@
   뺀 규칙: 실행 파일 확장자(.bat 통과), 압축 안 실행 파일(python.exe 든 휴대용 zip 통과), 압축 안 압축(모의 폴더 zip 통과),
      cp949 텍스트(통과), 셔뱅 줄(물어물어 build.py 통과), 비밀 값·전화·카드 꼴(물어물어 묶음 통과),
      암호 PDF·손상 hwp·eml·괄호 든 폴더 이름(모두 통과)
-  대비: .py는 소스 zip(소스/돌다리_소스_v3.7.2.zip)에 넣고, 읽기용 사본은 .py.txt로 올린다(소스/읽기용/)
+  대비: .py는 소스 zip(소스/돌다리_소스_v3.7.3.zip)에 넣고, 읽기용 사본은 .py.txt로 올린다(소스/읽기용/)
 """
 import os, re, sys, io, zipfile, subprocess, tempfile, shutil, stat
 
