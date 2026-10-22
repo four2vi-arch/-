@@ -152,5 +152,13 @@ items, _, _, _ = build([f_due])
 it_ = [i for i in items if i.get('todo')]
 ok('할 일 줄의 「9월 11일까지」가 항목 기한(기간 끝 10. 8.보다)', it_ and it_[0]['due_next'] == '2026-09-11', [(i.get('todo'), i.get('due_next')) for i in items])
 
+# 14. 10.22. 예시 결과에서: 인계 일자를 적었는데 「(지남)」을 오늘 날짜로 판정(인계서는 인계 일자 기준 문서)
+f_h = F('01_공문/목표_배정_알림.txt', '수신 내부결재\n제목 2026년도 목표 배정 알림\n세부추진계획을 수립하여 3월 13일까지 제출하여 주시기 바랍니다.\n시행 영업과-658 (2026. 2. 15.)', mtime='2026-02-15')
+items_h, _, _, info_h = docs.build_docs([f_h], core.DEFAULT_AREAS, 12, 'none', today=datetime.date(2026, 3, 2))
+s_ho = session(items_h, info_h, handover_date='2026-03-02'); s_no = session(items_h, info_h)
+md_ho = export.to_markdown(s_ho); md_no = export.to_markdown(s_no)
+ok('인계 일자가 있으면 그날 기준으로 「(지남)」(3.2. 인계 → 3.13. 기한은 지나지 않음)', '2026-03-13 (지남)' not in md_ho and '2026-03-13' in md_ho, [l for l in md_ho.split('\n') if '03-13' in l][:2])
+ok('인계 일자가 없으면 오늘 기준(오늘이 3.13. 뒤면 「(지남)」)', ('2026-03-13 (지남)' in md_no) == (datetime.date.today().isoformat() > '2026-03-13'))
+
 print('\n통과 %d · 실패 %d' % (P, F_))
 sys.exit(1 if F_ else 0)

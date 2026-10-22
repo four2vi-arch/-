@@ -18,8 +18,22 @@ def escape(s):
     return _xesc(s)
 
 
+_REF = None   # 「(지남)」을 가르는 날: 인계 일자를 적었으면 그날(인계서는 그날 기준 문서), 아니면 오늘
+
+
+def _set_ref(session):
+    global _REF
+    _REF = None
+    m = re.search(r'(20\d{2})\D{1,3}(\d{1,2})\D{1,3}(\d{1,2})', str((session or {}).get('handover_date') or ''))
+    if m:
+        try:
+            _REF = datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
+        except ValueError:
+            _REF = None
+
+
 def today_iso():
-    return datetime.date.today().isoformat()
+    return _REF or datetime.date.today().isoformat()
 
 
 def dshow(it, n=10):
@@ -355,6 +369,7 @@ def doc_title_line(session):
 
 
 def to_markdown(session):
+    _set_ref(session)
     h = lambda v: _html.escape(str(v), quote=False)   # 글 속 <script> 같은 것이 미리보기에서 실행되지 않게
     out = [h(FORM_LABEL), '', '# ' + h(doc_title_line(session)), '']
     out += ['- ' + h(l) for l in head_block(session)] + ['']
@@ -402,6 +417,7 @@ def onnara_sections(session):
 
 
 def to_onnara_txt(session):
+    _set_ref(session)
     out = [doc_title_line(session) + ' · 온나라 붙여넣기용', head_block(session)[0], '']
     for name, body in onnara_sections(session):
         out += ['=' * 8 + ' ' + name + ' ' + '=' * 8, body, '']
@@ -449,6 +465,7 @@ def _tbl(cols, rows, w=None):
 
 def to_html(session):
     """인쇄·미리보기용 HTML 조각(서식 표). 화면의 「인쇄」가 이것을 쓴다."""
+    _set_ref(session)
     h = ['<p class="meta">%s</p><h2>%s</h2>' % (escape(FORM_LABEL), escape(doc_title_line(session)))]
     hb = [('인계자', session.get('handover_from')), ('인수자', session.get('handover_to')), ('입회자', session.get('witness')), ('일자', session.get('handover_date')), ('소속', session.get('org'))]
     h.append('<table class="hdr"><tr>' + ''.join('<th>%s</th><td>%s</td>' % (k, escape(str(v or ''))) for k, v in hb) + '</tr></table>')
@@ -470,6 +487,7 @@ def to_html(session):
 
 
 def to_docx(session, path):
+    _set_ref(session)
     body = [_p(FORM_LABEL, size=8.5, color='666666'), _p(doc_title_line(session), style='Title')]
     body.append(_tbl(['인계자', '인수자', '입회자', '일자', '소속'], [[session.get('handover_from') or '', session.get('handover_to') or '', session.get('witness') or '', session.get('handover_date') or '', session.get('org') or '']], [18, 18, 18, 16, 30]))
     for kind, text in chapters(session):

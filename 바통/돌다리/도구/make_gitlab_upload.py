@@ -8,6 +8,7 @@
   소스/실측결과.zip, 소스/모의데이터_v1_한빛군청.zip
   실행물/doldari_v<판>_portable_win64.zip, 실행물/읽어보기.txt
   모의데이터/가온우체국_모의업무폴더.zip, 모의데이터/정답표.xlsx, 모의데이터/README.md
+  예시결과/(모의 폴더로 만든 인수인계서 .docx·.md·온나라 글·원본지문 .csv와 화면 4장)
   README.md(저장소 첫 화면), .gitattributes, .gitignore
 로 둔다. 압축은 모두 파이썬 zipfile로 만든다: 한글 이름에 UTF-8 표시(0x800)가 붙어 윈도 기본 「압축 풀기」에서도 이름이 깨지지 않는다
 (리눅스 zip 명령으로 만든 압축은 표시가 없어 cp949로 읽히며 깨졌다, 10.22. 검토).
@@ -17,8 +18,8 @@
 import argparse, datetime, os, re, shutil, sys, zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIRS = ('실측결과', '모의데이터', '모의데이터_v1_한빛군청')
-SKIP = re.compile(r'(^|/)(__pycache__|\.git)(/|$)|\.pyc$|(^|/)점검결과_v1\.1\.md$|(^|/)작업(/|$)|(^|/)배포(/|$)')
+DATA_DIRS = ('실측결과', '모의데이터', '모의데이터_v1_한빛군청', '예시결과')
+SKIP = re.compile(r'(^|/)(__pycache__|\.git)(/|$)|\.pyc$|(^|/)점검결과_v1\.1\.md$|(^|/)작업(/|$)|(^|/)배포(/|$)|^개발기록\.md$')   # 개발기록(개발 일지)은 GitHub에만 둔다
 READ_COPIES = ('core', 'docs', 'export', 'extract', 'make_mock', 'make_mock_v1', 'measure', 'ocr', 'server')
 GITATTR = '# 모든 파일의 바이트를 그대로 지킨다(모의데이터·결과 파일 SHA-256 유지)\n* -text\n*.zip binary\n*.xlsx binary\n*.docx binary\n*.hwp binary\n*.hwpx binary\n*.odt binary\n*.pdf binary\n*.png binary\n*.mp4 binary\n'
 
@@ -90,6 +91,10 @@ def main():
     zip_files(os.path.join(out, '모의데이터', '가온우체국_모의업무폴더.zip'), mock, files_under(mock, '가온우체국_모의업무폴더'))
     for f in ('정답표.xlsx', 'README.md'):
         shutil.copyfile(os.path.join(ROOT, '모의데이터', f), os.path.join(out, '모의데이터', f))
+    # 예시결과(저장소 맨 위): 모의 폴더로 만든 인수인계서·화면(도구/make_example_outputs.py)
+    ex = os.path.join(ROOT, '예시결과')
+    if os.path.isdir(ex):
+        shutil.copytree(ex, os.path.join(out, '예시결과'), ignore=shutil.ignore_patterns('__pycache__'))
     # 소스
     src = [r for r in files_under(ROOT) if r.split('/')[0] not in DATA_DIRS]
     zip_files(os.path.join(out, '소스', '돌다리_소스_v%s.zip' % ver), ROOT, src)
