@@ -73,7 +73,7 @@ def header_lines(session):
             '읽은 파일 %d개 · 못 읽은 문서 %d개 · 읽지 않는 형식(그림·프로그램 등) %d개 · 원본 변경 %d개(처리 전후 SHA-256 대조)' % (len(files), sum(1 for x in failures if not x.get('skip')), sum(1 for x in failures if x.get('skip')), changed),
             '모델: %s · 문서 항목 %d(규칙만 %d · 모델 요지 %d · 직접 적음 %d)' % (
                 session.get('model', '없음'), len(kept_items(session)),
-                sum(1 for it in kept_items(session) if it.get('src') == '규칙'),
+                sum(1 for it in kept_items(session) if str(it.get('src', '')).startswith('규칙')),   # 「규칙(반복 문장)」도 규칙(10.23. 사용자 결과에서 27≠23+0+0)
                 sum(1 for it in kept_items(session) if str(it.get('src', '')).startswith('모델')),
                 sum(1 for it in kept_items(session) if it.get('src') == '직접 입력'))]
 
@@ -227,7 +227,7 @@ def chapters(session):
         for it in sorted(recur, key=lambda it: (0 if (it.get('recur') or {}).get('cycle') == '매월' else 1, (it.get('recur') or {}).get('month') or month_of(it.get('date') or ''), it.get('date') or '')):
             r = it.get('recur') or {}
             ev = (' · %s년' % '·'.join(r['years'])) if r.get('years') and r.get('cycle') != '매월' else ((' · %d개월 %d회' % (len(r['months']), r['n'])) if r.get('months') else '')
-            rows.append([cycle_label(it), it.get('area') or '기타', (it.get('todo') or it.get('summary') or (('원문: ' + it['quote']) if it.get('quote') else '')) + ((' / 메모: ' + it['note']) if it.get('note') else ''), '%s%s%s' % (it.get('title', '') if it.get('src') != '규칙(반복 문장)' else fname(it), ev, und(it))])
+            rows.append([cycle_label(it), it.get('area') or '기타', (it.get('todo') or it.get('summary') or (('원문: ' + it['quote']) if it.get('quote') else '') or '(할 일 적지 않음)') + ((' / 메모: ' + it['note']) if it.get('note') else ''), '%s%s%s' % (it.get('title', '') if it.get('src') != '규칙(반복 문장)' else fname(it), ev, und(it))])
         out.append(T(['시기', '업무', '할 일', '근거 문서'], rows, [9, 16, 40, 35]))
     else:
         out.append(('p', '(없음)'))

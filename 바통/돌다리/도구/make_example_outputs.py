@@ -2,7 +2,7 @@
 """예시 결과 만들기(10.22.): 모의 업무 폴더를 인계 일자 2026-03-02로 고정해 규칙만으로 초안을 만들고, 전임자가 아직 손대지 않은 상태 그대로 내보낸다.
 심사·설명용 「예시결과/」 폴더(인수인계서 .docx·.md·온나라 붙여넣기 .txt·원본지문 .csv)를 만든다. 날짜를 고정하므로 언제 돌려도 같은 차례·기한이 나온다.
 
-사용: python 도구/make_example_outputs.py <모의 업무 폴더> <출력 폴더> [--port 8790]
+사용: python 도구/make_example_outputs.py <모의 업무 폴더> <출력 폴더> [--port 8790] [--date 2026-03-02]
 """
 import json, os, shutil, subprocess, sys, tempfile, time, urllib.request
 
@@ -14,6 +14,7 @@ def main():
         raise SystemExit(__doc__)
     folder, out = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
     port = int(sys.argv[sys.argv.index('--port') + 1]) if '--port' in sys.argv else 8790
+    date = sys.argv[sys.argv.index('--date') + 1] if '--date' in sys.argv else '2026-03-02'
     work = tempfile.mkdtemp(prefix='doldari_example_')
     srv = subprocess.Popen([sys.executable, '-B', os.path.join(HERE, 'server.py'), '--port', str(port), '--work', work, '--no-browser'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
@@ -26,7 +27,7 @@ def main():
                 api('/api/state'); break
             except Exception:
                 time.sleep(0.25)
-        api('/api/settings', {'model': '', 'org': '가온우체국 영업과 우편영업실', 'handover_from': '김전임(가상)', 'handover_to': '이신규(가상)', 'witness': '우편영업과장', 'handover_date': '2026-03-02'})
+        api('/api/settings', {'model': '', 'org': '가온우체국 영업과 우편영업실', 'handover_from': '김전임(가상)', 'handover_to': '이신규(가상)', 'witness': '우편영업과장', 'handover_date': date})
         api('/api/extract', {'folder': folder})
         while api('/api/state').get('extracting') or not api('/api/state')['files']:
             time.sleep(0.3)

@@ -160,5 +160,20 @@ md_ho = export.to_markdown(s_ho); md_no = export.to_markdown(s_no)
 ok('인계 일자가 있으면 그날 기준으로 「(지남)」(3.2. 인계 → 3.13. 기한은 지나지 않음)', '2026-03-13 (지남)' not in md_ho and '2026-03-13' in md_ho, [l for l in md_ho.split('\n') if '03-13' in l][:2])
 ok('인계 일자가 없으면 오늘 기준(오늘이 3.13. 뒤면 「(지남)」)', ('2026-03-13 (지남)' in md_no) == (datetime.date.today().isoformat() > '2026-03-13'))
 
+# 15. 10.23. 사용자 결과: 「문서 항목 27(규칙만 23 …)」 합이 안 맞음(반복 문장 항목 누락), 손으로 반복 업무로 옮긴 항목의 할 일 빈칸
+f_r = F('04_매뉴얼/업무매뉴얼_초안.txt', '업무매뉴얼 초안\n매월 5일까지 전월 실적을 집계하여 과장에게 보고한다.\n매주 금요일 재고를 점검한다.', mtime='2026-02-01')
+f_d = F('01_공문/점검_결과_보고.txt', '수신 내부결재\n제목 요금후납 점검 결과 보고\n시행 영업과-1612 (2025. 9. 10.)', mtime='2025-09-10')
+items_r, _, _, info_r = build([f_r, f_d])
+md_r = export.to_markdown(session(items_r, info_r))
+items_b = [dict(i) for i in items_r]
+for i in items_b:
+    if i.get('kind3') == '반복':
+        i.update(todo='', summary='', quote='')   # 전임자가 할 일 칸을 지운 경우(10.23. 사용자 결과의 「9월」 줄과 같은 꼴)
+md_b = export.to_markdown(session(items_b, info_r))
+foot = [l for l in md_r.split('\n') if '문서 항목' in l][0]
+nums = [int(x) for x in re.findall(r'\d+', foot.split('문서 항목')[1])]
+ok('끝줄 문서 항목 수 = 규칙만 + 모델 요지 + 직접 적음', nums[0] == sum(nums[1:4]), foot)
+ok('할 일이 없는 반복 업무 줄은 「(할 일 적지 않음)」', '(할 일 적지 않음)' in md_b, [l for l in md_b.split('\n') if '매월' in l][:2])
+
 print('\n통과 %d · 실패 %d' % (P, F_))
 sys.exit(1 if F_ else 0)
