@@ -7,6 +7,7 @@
   R5 .py 파일 내용 검사                          ← 확인됨. 같은 내용을 .txt로 올리면 통과, 한 줄짜리 .py는 통과,
      core.py(36KB)는 3번 모두 거절. 2~3KB 조각 8개는 각각 통과했는데 이어 붙이면 거절, 9.7KB 조각은 한 번 통과·한 번 거절,
      5KB 조각도 거절 → 어떤 줄이 걸리는 게 아니라 크기·부하에 따라 흔들리는 검사(시간 초과 꼴). 4KB 넘는 .py는 못 믿는다
+  R6 압축 안 한글 이름의 UTF-8 표시(서버 규칙 아님, 받는 쪽 점검) ← 10.22. 검토: 리눅스 zip 명령으로 묶으면 표시가 없어 윈도 기본 압축 풀기에서 깨짐
   R4 20MB 초과                                  ← 미확인(17.6MB HTML·15MB zip은 통과)
   뺀 규칙: 실행 파일 확장자(.bat 통과), 압축 안 실행 파일(python.exe 든 휴대용 zip 통과), 압축 안 압축(모의 폴더 zip 통과),
      cp949 텍스트(통과), 셔뱅 줄(물어물어 build.py 통과), 비밀 값·전화·카드 꼴(물어물어 묶음 통과),
@@ -30,7 +31,12 @@ def check(path, data):
         hits.append('R5 .py %dKB(4KB 넘는 .py는 거절될 수 있음, 17KB 넘으면 3/3 거절)' % (len(data) // 1024))
     if base.endswith('.zip'):
         try:
-            zipfile.ZipFile(io.BytesIO(data)).namelist()
+            infos = zipfile.ZipFile(io.BytesIO(data)).infolist()
+            noflag = [i.filename for i in infos if not i.filename.isascii() and not (i.flag_bits & 0x800)]
+            if not noflag:
+                noflag = [i.filename for i in infos if not (i.flag_bits & 0x800) and any(b >= 0x80 for b in i.filename.encode('cp437', 'replace'))]
+            if noflag:
+                hits.append('R6 압축 안 한글 이름에 UTF-8 표시 없음 %d개(서버 규칙 아님: 윈도 기본 「압축 풀기」에서 이름이 깨짐. 도구/make_gitlab_upload.py로 다시 묶기)' % len(noflag))
         except Exception:
             hits.append('R3x 압축 열기 실패')
     if len(data) > MAXMB * 1e6:

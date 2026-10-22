@@ -1,4 +1,4 @@
-# 돌다리 v3.7.3 시작·두 번 실행 시험(실제 프로세스). 10.20.~22. 윈도 실측: 두 번째 실행이 8766에 두 번째 서버로 뜸 / 감지 뒤 bat이 「시작하지 못했습니다」.
+# 돌다리 v3.7.3 시작·두 번 실행 시험(실제 프로세스). 10.22. 검토 반영: 동시 실행·답 없는 프로그램·창 안내 문구. 10.20.~22. 윈도 실측: 두 번째 실행이 8766에 두 번째 서버로 뜸 / 감지 뒤 bat이 「시작하지 못했습니다」.
 # 사용: python 시험/start_test.py   (가상 자료만, 127.0.0.1만 씀)
 import os, sys, time, json, socket, signal, shutil, tempfile, subprocess, threading, urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -113,6 +113,8 @@ try:
     ok('두 번째 실행은 세션·폴더를 다시 읽지 않고 곧 끝남', '이전 작업' not in out and dt < 10, (round(dt, 1), out))
     ok('두 번째 서버가 다음 포트에 뜨지 않음', not listening(A + 1))
     ok('같은 판이면 판 다름 안내 없음', '이 판(v' not in out, out)
+    ok('첫 창에는 「이 검은 창을 닫으면 돌다리가 끝납니다」', any('이 검은 창을 닫으면 돌다리가 끝납니다' in l for l in o1), ''.join(o1))
+    ok('두 번째 창에는 그 문장이 없음(앞뒤 다른 안내 없음)', '이 검은 창을 닫으면' not in out, out)
 
     # 2. 다른 위치(다른 작업 폴더)의 돌다리 → 건너뛰고 다음 포트
     W2 = work('w2')
@@ -148,6 +150,56 @@ try:
     ok('포트가 모두 막히면 실패(종료 코드 2)와 「--port」 안내', rc == 2 and '--port' in out, (rc, out))
     for s in ds:
         s.shutdown(); s.server_close()
+
+    # 6b. 연결은 받지만 답하지 않는 프로그램 → 건너뛰고 다음 포트(오래 걸리지 않게)
+    E = free_block(3)
+    sil = socket.socket(); sil.bind(('127.0.0.1', E)); sil.listen(16)
+    held = []
+    def _acc():
+        while True:
+            try:
+                c, _ = sil.accept(); held.append(c)
+            except OSError:
+                return
+    threading.Thread(target=_acc, daemon=True).start()
+    t0 = time.time(); pe, oe = start(E, work('w6b'))
+    up = wait_line(oe, '돌다리 v', sec=25); dt = time.time() - t0
+    ok('답하지 않는 프로그램이 쓰는 포트는 건너뛰고 다음 포트로 뜸(10초 안)', up and any('%d번으로 엽니다' % (E + 1) in l for l in oe) and dt < 10, (round(dt, 1), ''.join(oe)))
+    pe.terminate(); pe.wait(timeout=10); sil.close()
+
+    # 6c. 두 창을 거의 같이 열기(같은 작업 폴더): 하나만 뜨고 다른 하나는 「이미 켜져 있습니다」로 정상 종료
+    race_ok, race_log = 0, []
+    WINLIKE = os.path.join(HERE, '시험', 'winlike_run.py')   # 윈도처럼 닫힌 포트 연결이 늦게 거절되게(이 틈에서 경합이 났다)
+    for trial in range(5):
+        G = free_block(3); WR = work('race%d' % trial)
+        if trial % 2:   # 지난번에 연 포트 파일이 남은 경우(창을 닫아 끝낸 뒤)도 섞는다
+            open(os.path.join(WR, '실행중_포트.txt'), 'w', encoding='utf-8').write(str(G + 2))
+        pa = subprocess.Popen([sys.executable, '-B', WINLIKE, '--port', str(G), '--work', WR, '--no-browser'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
+        time.sleep(0.2 * (trial % 3))
+        pb = subprocess.Popen([sys.executable, '-B', WINLIKE, '--port', str(G), '--work', WR, '--no-browser'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
+        procs.extend([pa, pb])
+        t0 = time.time(); done = None
+        while time.time() - t0 < 25 and done is None:
+            for x in (pa, pb):
+                if x.poll() is not None:
+                    done = x
+            time.sleep(0.1)
+        other = pb if done is pa else pa
+        rc = done.returncode if done else None
+        out_done = done.stdout.read() if done else ''
+        alive = other.poll() is None
+        good = rc == 0 and '이미 켜져 있습니다(포트 %d)' % G in out_done and alive and not listening(G + 1)
+        race_ok += good
+        if not good:
+            race_log.append((trial, rc, out_done[-300:], alive))
+        for x in (pa, pb):
+            if x.poll() is None:
+                x.terminate()
+                try:
+                    x.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    x.kill()
+    ok('동시·0.2·0.4초 간격 실행 5번 모두(윈도처럼 느린 거절): 하나만 뜨고 다른 하나는 종료 코드 0(「시작하지 못했습니다」 없음)', race_ok == 5, race_log)
 
     # 7. Ctrl+C로 끝내면 종료 코드 0, 남긴 포트 지움
     p1.send_signal(signal.SIGINT)

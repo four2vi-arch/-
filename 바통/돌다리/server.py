@@ -9,6 +9,29 @@
 """
 import os, sys, re, json, time, threading, argparse, webbrowser, datetime, subprocess, urllib.request, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+
+
+def _quickedit_off():
+    """윈도 검은 창(conhost)의 「빠른 편집」을 끈다. 켜져 있으면 창을 한 번 클릭하는 것만으로 글자 출력이 멈추고,
+    그 출력을 기다리는 동안 프로그램도 멈춘다(10.22. 검토). 이 창에만 적용되고 끝날 때 되돌린다. 윈도 터미널에서는 아무 일도 하지 않는다."""
+    if os.name != 'nt':
+        return
+    try:
+        import ctypes, atexit
+        k = ctypes.windll.kernel32
+        k.GetStdHandle.restype = ctypes.c_void_p
+        h = ctypes.c_void_p(k.GetStdHandle(-10))   # STD_INPUT_HANDLE
+        m = ctypes.c_uint32()
+        if h.value and k.GetConsoleMode(h, ctypes.byref(m)):
+            old = m.value
+            if k.SetConsoleMode(h, (old & ~0x0040) | 0x0080):   # ENABLE_QUICK_EDIT_MODE 끔, ENABLE_EXTENDED_FLAGS 켬
+                atexit.register(lambda: k.SetConsoleMode(h, old))
+    except Exception:
+        pass
+
+
+if __name__ == '__main__':
+    _quickedit_off()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract as EX
 import core
@@ -53,9 +76,27 @@ def set_ocr_config():
     return eng
 
 
+_LOGQ = None
+
+
+def _log_printer(q):
+    while True:
+        m = q.get()
+        try:
+            print(m, flush=True)
+        except Exception:
+            pass
+
+
 def log(msg):
+    """화면 기록에 남기고 검은 창에 찍는다. 찍기는 따로 도는 스레드가 해서, 창 출력이 막혀도(선택 모드 등) 읽기·초안 작업과 화면 응답은 멈추지 않는다."""
+    global _LOGQ
     STATE['log'] = (STATE['log'] + ['%s %s' % (datetime.datetime.now().strftime('%H:%M:%S'), msg)])[-50:]
-    print(msg, flush=True)
+    if _LOGQ is None:
+        import queue
+        _LOGQ = queue.SimpleQueue()
+        threading.Thread(target=_log_printer, args=(_LOGQ,), daemon=True).start()
+    _LOGQ.put(msg)
 
 
 def save_session():
@@ -692,32 +733,45 @@ def same_work(a, b):
 PORT_FILE = '실행중_포트.txt'
 
 
-def pick_port(start, work, span=10):
-    """(포트, 이미 켜진 돌다리 정보 또는 None, 알림 문장 목록).
-    같은 작업 폴더의 돌다리가 켜져 있으면 그 포트를 돌려준다(두 번 눌러도 서버는 하나).
-    먼저 이 작업 폴더에 남긴 포트(지난번에 8766 등으로 열었을 때)를 보고, 그다음 start부터 차례로 본다.
-    다른 프로그램이나 다른 위치의 돌다리가 쓰는 포트는 건너뛰고 처음 빈 포트를 고른다."""
-    notes = []
+def open_server(start, work, span=10, say=print):
+    """(서버 또는 None, 포트, 이미 켜진 같은 작업 폴더 돌다리 정보 또는 None).
+    빈 포트인지 묻고 나서 잡으면, 두 창을 거의 같이 열 때 둘 다 「비었다」고 보고 하나가 실패한다(10.22. 검토에서 재현).
+    그래서 실제로 자리를 잡아 보고, 못 잡았을 때만 그 포트의 주인이 돌다리인지 묻는다.
+    1) 이 작업 폴더에 남긴 포트(지난번 8766 등)에 같은 작업 폴더의 돌다리가 있으면 그것을 쓴다(그새 8765가 비었어도).
+    2) start부터 차례로 잡아 본다. 같은 작업 폴더의 돌다리(작업 폴더를 알리지 않는 옛 판 포함)면 그것을 쓰고,
+       다른 위치의 돌다리·다른 프로그램·쓸 수 없는 번호는 건너뛴다."""
+    seen = {}
+
+    def probe(q):
+        if q not in seen:
+            seen[q] = doldari_at(q)
+        return seen[q]
+
     try:
         with open(os.path.join(work, PORT_FILE), encoding='utf-8') as f:
-            last = int(f.read().strip() or 0)
+            last = int((f.read(64).split() or ['0'])[0])
     except Exception:
         last = 0
-    if last and port_open(last):   # 범위 안(8766 등)이어도 먼저 본다: 그새 8765가 비었으면 차례로만 보다가 두 번째 서버를 띄운다
-        info = doldari_at(last)
+    if 0 < last < 65536 and port_open(last):
+        info = probe(last)
         if info and same_work(info['work'], work):
-            return last, info, notes
+            return None, last, info
     for p in range(start, start + span + 1):
+        try:
+            return ExclusiveServer(('127.0.0.1', p), H), p, None
+        except OSError:
+            pass
         if not port_open(p):
-            return p, None, notes
-        info = doldari_at(p)
-        if info and (same_work(info['work'], work) or not info['work']):   # 작업 폴더를 알려 주지 않는 옛 판은 같은 것으로 본다(두 서버가 한 세션을 나눠 쓰지 않게)
-            return p, info, notes
+            say('포트 %d는 쓸 수 없어 건너뜁니다.' % p)
+            continue
+        info = probe(p)   # 막 켜지는 돌다리여도 연결은 받아 두므로 응답을 기다린다(최대 3초씩)
+        if info and (same_work(info['work'], work) or not info['work']):   # 작업 폴더를 알리지 않는 옛 판은 같은 것으로 본다(두 서버가 한 세션을 나눠 쓰지 않게)
+            return None, p, info
         if info:
-            notes.append('포트 %d에는 다른 위치의 돌다리(v%s, 작업 폴더 %s)가 켜져 있어 건너뜁니다.' % (p, info['version'], info['work']))
+            say('포트 %d에는 다른 위치의 돌다리(v%s, 작업 폴더 %s)가 켜져 있어 건너뜁니다.' % (p, info['version'], info['work']))
         else:
-            notes.append('포트 %d는 다른 프로그램이 쓰고 있어 건너뜁니다.' % p)
-    return None, None, notes
+            say('포트 %d는 다른 프로그램이 쓰고 있어 건너뜁니다.' % p)
+    return None, None, None
 
 
 def write_port_file(port):
@@ -772,9 +826,7 @@ def main():
         alt = os.path.join(os.environ.get('LOCALAPPDATA') or os.path.expanduser('~'), 'doldari', '작업')
         print('작업 폴더에 쓸 수 없어 %s 를 대신 씁니다(압축을 바탕화면 같은 곳에 풀면 그 안에 남습니다).' % alt, flush=True)
         WORK = alt; os.makedirs(WORK, exist_ok=True)
-    port, running, notes = pick_port(a.port, WORK)   # 세션을 읽기 전에 본다: 두 번째 실행이 큰 폴더를 다시 읽지 않게
-    for n in notes:
-        print(n, flush=True)
+    srv, port, running = open_server(a.port, WORK)   # 세션을 읽기 전에 본다: 두 번째 실행이 큰 폴더를 다시 읽지 않게
     if running:
         url = 'http://127.0.0.1:%d/' % port
         print('돌다리가 이미 켜져 있습니다(포트 %d). 먼저 연 화면을 브라우저로 다시 엽니다: %s' % (port, url), flush=True)
@@ -784,33 +836,36 @@ def main():
         if not a.no_browser:
             webbrowser.open(url)
         sys.exit(0)   # 실패가 아니다(실행 bat이 「시작하지 못했습니다」를 띄우지 않게)
-    if port is None:
-        print('포트 %d~%d를 모두 다른 프로그램이 쓰고 있습니다. 「돌다리_실행.bat --port 9000」처럼 다른 번호로 실행하세요.' % (a.port, a.port + 10), flush=True)
+    if srv is None:
+        print('포트 %d~%d를 열 수 없습니다(다른 프로그램이 쓰거나 윈도가 막아 둔 번호). 「돌다리_실행.bat --port 9000」처럼 다른 번호로 실행하세요.' % (a.port, a.port + 10), flush=True)
         sys.exit(2)
     if port != a.port:
         print('포트 %d 대신 %d번으로 엽니다.' % (a.port, port), flush=True)
     a.port = port
     url = 'http://127.0.0.1:%d/' % a.port
     load_session()
-    try:
-        srv = ExclusiveServer(('127.0.0.1', a.port), H)
-    except OSError:
-        print('포트 %d를 열지 못했습니다. 다른 돌다리 창을 닫고 다시 실행하세요.' % a.port, flush=True)
-        sys.exit(2)
-    if MISSING:
-        print('주의: 부품이 없어 읽지 못하는 형식이 있습니다: %s. 휴대용 묶음을 쓰거나 「python -m pip install -r 부품목록.txt」.' % ', '.join('%s(%s)' % (m['what'], m['module']) for m in MISSING), flush=True)
-    print('돌다리 v%s · %s (이 PC 안에서만 열립니다. 끝내려면 이 창을 닫거나 Ctrl+C)' % (VERSION, url), flush=True)
-    print('작업 폴더: %s' % WORK, flush=True)
     write_port_file(a.port)
+    srv_thread = threading.Thread(target=srv.serve_forever, daemon=True)   # 화면 응답을 먼저 시작한다: 아래 글자 출력이 막혀도 화면·두 번째 실행 확인은 된다
+    srv_thread.start()
     if not a.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
-        srv.serve_forever()
+        if MISSING:
+            print('주의: 부품이 없어 읽지 못하는 형식이 있습니다: %s. 휴대용 묶음을 쓰거나 「python -m pip install -r 부품목록.txt」.' % ', '.join('%s(%s)' % (m['what'], m['module']) for m in MISSING), flush=True)
+        print('돌다리 v%s · %s (이 PC 안에서만 열립니다)' % (VERSION, url), flush=True)
+        print('이 검은 창을 닫으면 돌다리가 끝납니다(또는 Ctrl+C).', flush=True)
+        print('작업 폴더: %s' % WORK, flush=True)
+        while srv_thread.is_alive():
+            srv_thread.join(0.5)   # 짧게 나눠 기다려야 윈도에서도 Ctrl+C가 들어온다
     except KeyboardInterrupt:
         pass
     finally:
+        try:
+            srv.shutdown()
+            srv.server_close()
+        except Exception:
+            pass
         remove_port_file(a.port)
-
 
 if __name__ == '__main__':
     main()

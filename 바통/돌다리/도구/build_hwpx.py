@@ -116,6 +116,44 @@ def patch_header(path):
     open(path, 'w', encoding='utf-8').write(h)
 
 
+def _blank_png(w, h):
+    """흰 회색조 PNG(미리보기 그림 자리). 바깥 부품 없이 zlib으로 만든다."""
+    import struct, zlib
+    raw = b''.join(b'\x00' + b'\xff' * w for _ in range(h))
+    def chunk(k, d):
+        return struct.pack('>I', len(d)) + k + d + struct.pack('>I', zlib.crc32(k + d) & 0xffffffff)
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 0, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw, 9)) + chunk(b'IEND', b'')
+
+
+def sanitize_hwpx(path, preview_text=''):
+    """만든 사람 흔적 지우기(10.22. 검토): 미리보기 글자·그림(서식 틀을 만든 사람의 이름·번호가 남아 있었다),
+    content.hpf의 creator·lastsaveby. 본문(section0.xml)은 건드리지 않는다. 같은 자리에 다시 쓴다."""
+    import struct
+    with zipfile.ZipFile(path) as z:
+        items = [(i, z.read(i.filename)) for i in z.infolist()]
+    out = []
+    for i, data in items:
+        n = i.filename
+        if n == 'Preview/PrvText.txt':
+            data = preview_text.encode('utf-8')
+        elif n == 'Preview/PrvImage.png':
+            w, h = struct.unpack('>II', data[16:24]) if data[:8] == b'\x89PNG\r\n\x1a\n' else (724, 1024)
+            data = _blank_png(w, h)
+        elif n == 'Contents/content.hpf':
+            s = data.decode('utf-8')
+            s = re.sub(r'(<opf:meta name="(?:creator|lastsaveby)" content="text">)[^<]*(</opf:meta>)', r'\1\2', s)
+            data = s.encode('utf-8')
+        out.append((i, data))
+    tmp = path + '.tmp'
+    with zipfile.ZipFile(tmp, 'w') as z:
+        for i, data in out:
+            zi = zipfile.ZipInfo(i.filename, i.date_time)
+            zi.compress_type = i.compress_type
+            zi.external_attr = i.external_attr
+            z.writestr(zi, data)
+    os.replace(tmp, path)
+
+
 def build(template, out, title, body_lines, head=None):
     tmp = tempfile.mkdtemp()
     with zipfile.ZipFile(template) as z:
@@ -198,4 +236,5 @@ def build(template, out, title, body_lines, head=None):
             zf.write(full, rel)
     zf.close()
     shutil.rmtree(tmp)
+    sanitize_hwpx(out, '<>\n<%s>\n' % title)
     return out
