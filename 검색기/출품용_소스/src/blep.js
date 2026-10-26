@@ -39,8 +39,9 @@
       if (my !== gen) { return; }
       if (!dev || !get().keep || get().via !== 'ble') { emit('none'); return; }   // 인쇄 방식을 바꾸면 다시 붙지 않는다
       if (dev.gatt && dev.gatt.connected && ch) { emit('connected'); return; }
-      Promise.resolve(dev.gatt.connect()).then(pickChar).then(function (c) {
-        if (my !== gen || get().via !== 'ble') { dropping = true; try { dev.gatt.disconnect(); } catch (e) { } ch = null; return; }   // 그사이 놓았으면 되살리지 않는다
+      var d0 = dev;
+      gattConnect(d0).then(pickChar).then(function (c) {
+        if (my !== gen || get().via !== 'ble') { drop(d0); return; }   // 그사이 놓았으면 되살리지 않는다
         ch = c; rcN = 0; emit('connected');
       }, function () {
         if (my !== gen) { return; }
@@ -139,42 +140,64 @@
     });
   }
   var POWER = '프린터에 다시 연결하지 못했어요. 프린터 전원이 켜져 있는지, 태블릿 가까이 있는지 확인하고 다시 눌러 주세요.';
+  var NEED_STAFF = '프린터가 아직 연결되지 않았어요. 직원을 불러 주세요(직원: 「직원」 2초 → 「프린터 연결」로 「Bluetooth Printer」를 고르기).';
+  // 우리가 붙인 연결을 놓는다(놓을 때 오는 끊김 알림은 다시 연결로 보지 않음)
+  function drop(device) { if (device && device.gatt && device.gatt.connected) { dropping = true; try { device.gatt.disconnect(); } catch (e) { } } ch = null; }
+  // 연결 한 번(12초 제한). 시간이 지난 뒤 늦게 붙은 연결은, 그사이 다른 시도가 없으면 끊어 크롬이 프린터를 쥐고 있지 않게 한다
+  var tries = 0;
+  function gattConnect(device) {
+    var mine = ++tries, late = false, cp = Promise.resolve().then(function () { return device.gatt.connect(); });
+    cp.then(function () { if (late && mine === tries) { drop(device); } }, function () { });
+    return timeout(cp, 12000, POWER).catch(function (e) { if (e && e.name === 'TimeoutError') { late = true; } throw e; });
+  }
   function attach(device) {
+    var my = gen;
     dev = device; ch = null;
     if (!dev.__zfHook) { dev.__zfHook = true; dev.addEventListener('gattserverdisconnected', onDrop); }
-    return timeout(Promise.resolve(dev.gatt.connect()), 12000, POWER).then(pickChar).then(function (c) {
+    return gattConnect(device).then(pickChar).then(function (c) {
+      // 붙는 사이 놓기·방식 바꾸기가 있었으면 붙은 연결을 버린다
+      if (my !== gen || get().via !== 'ble') { drop(device); var x = new Error('인쇄 방식이 바뀌어 연결을 놓았어요.'); x.code = 'DROPPED'; throw x; }
       ch = c;
       set({ name: dev.name || '' });
       clearTimeout(rcT); rcN = 0; emit('connected');
       return dev;
     });
   }
-  // 사용자가 누른 단추 안에서 불러야 한다(선택 창이 뜬다). opts.pick: 다시 붙지 못하면 선택 창으로(직원이 프린터를 고를 때)
+  function active() { return !(navigator.userActivation && navigator.userActivation.isActive === false); }
+  function choose() { return navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: SERVICES.concat(userUuids()) }).then(attach); }
+  // 사용자가 누른 단추 안에서 불러야 한다(선택 창이 뜬다).
+  // opts.pick: 직원이 프린터를 고를 때. 누른 그 자리에서 선택 창을 연다(이전 프린터를 기다리다 몇 초가 지나 선택 창이 막히던 것. 같은 프린터도 목록에 뜬다)
+  // opts.noPick: 어르신 화면. 고른 프린터가 없으면 선택 창(주변 기기 전부)을 어르신 앞에 띄우지 않고 직원을 부르게 한다
   function connect(opts) {
     lastErr = '';
     opts = opts || {};
-    if (viaUsb()) { return usbConnect(); }
+    if (viaUsb()) { return usbConnect(opts); }
     if (!supported()) { return Promise.reject(new Error(whyNot('블루투스'))); }
     if (connected()) { return Promise.resolve(dev); }
-    // 같은 기기가 이미 허용돼 있으면 선택 창 없이 다시 붙는다
-    var saved = get().name, again = Promise.resolve(null), lost = null;
-    if (dev && dev.gatt) {
-      // 이미 고른 프린터가 안 붙으면 까닭(전원·거리)을 그대로 알린다(「처음이라 골라야 해요」로 잘못 안내하던 것)
-      again = attach(dev).catch(function (e) { lost = e; return null; });
-    } else if (saved && navigator.bluetooth.getDevices) {
-      again = navigator.bluetooth.getDevices().then(function (ds) {
-        var d = ds.filter(function (x) { return x.name === saved; })[0];
-        return d ? attach(d).catch(function () { return null; }) : null;
-      }, function () { return null; });
+    var p;
+    if (opts.pick && active()) { p = choose(); }
+    else {
+      // 같은 기기가 이미 허용돼 있으면 선택 창 없이 다시 붙는다
+      var saved = get().name, again = Promise.resolve(null), lost = null;
+      if (dev && dev.gatt) {
+        // 이미 고른 프린터가 안 붙으면 까닭(전원·거리 등)을 그대로 알린다(「처음이라 골라야 해요」로 잘못 안내하던 것)
+        again = attach(dev).catch(function (e) { lost = e; return null; });
+      } else if (saved && navigator.bluetooth.getDevices) {
+        again = navigator.bluetooth.getDevices().then(function (ds) {
+          var d = ds.filter(function (x) { return x.name === saved; })[0];
+          return d ? attach(d).catch(function (e) { lost = e; return null; }) : null;
+        }, function () { return null; });
+      }
+      p = again.then(function (d) {
+        if (d) { return d; }
+        if (lost && !opts.pick) { throw lost; }
+        if (opts.noPick) { var se = new Error(NEED_STAFF); se.code = 'NEED_STAFF'; throw se; }
+        // 선택 창은 화면을 누른 직후에만 열린다(자동 뽑기 등에서는 크롬이 막는다)
+        if (!active()) { var ne = new Error(NEED_TAP); ne.code = 'NEED_TAP'; throw ne; }
+        return choose();
+      });
     }
-    return again.then(function (d) {
-      if (d) { return d; }
-      if (lost && !opts.pick) { var pe = new Error(POWER); pe.code = 'POWER'; throw pe; }
-      // 선택 창은 화면을 누른 직후에만 열린다(자동 뽑기 등에서는 크롬이 막는다)
-      if (navigator.userActivation && navigator.userActivation.isActive === false) { var ne = new Error(NEED_TAP); ne.code = 'NEED_TAP'; throw ne; }
-      var opt = SERVICES.concat(userUuids());
-      return navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: opt }).then(attach);
-    }).catch(function (e) {
+    return p.catch(function (e) {
       lastErr = errText(e);
       throw new Error(lastErr);
     });
@@ -185,26 +208,33 @@
     try { if (dev && dev.gatt && dev.gatt.connected) { dropping = true; dev.gatt.disconnect(); } } catch (e) { }
     ch = null; emit('none');
   }
+  var BT_PERM = '블루투스 사용이 막혀 있어요. ① 태블릿 설정 → 애플리케이션 → Chrome → 권한에서 「근처 기기」(안드로이드 11 이하는 「위치」)를 허용하고, ② 크롬 주소창 왼쪽 ⓘ → 권한에서 블루투스를 허용한 뒤 다시 눌러 주세요.';
   function errText(e) {
     var n = e && e.name, m = String(e && e.message || e || '');
-    if (e && (e.code === 'POWER' || n === 'TimeoutError')) { return POWER; }
+    if (e && (e.code === 'NEED_STAFF' || e.code === 'NEED_TAP_USB' || e.code === 'DROPPED')) { return m; }
     if (e && e.code === 'NEED_TAP') { return NEED_TAP; }
+    if (n === 'TimeoutError') { return POWER; }
     if (n === 'SecurityError' && /gesture|activation/i.test(m)) { return viaUsb() ? NEED_TAP.replace(/「Bluetooth Printer」/g, 'USB 프린터') : NEED_TAP; }
-    // 크롬은 선택 취소·서비스 번호 없음·블루투스 꺼짐을 모두 NotFoundError로 낸다(문구로 나눈다)
-    if (n === 'NotFoundError' && /service/i.test(m)) { return '이 프린터의 서비스 번호를 몰라 연결하지 못했어요. 프린터 연결 설정 → 고급 설정의 「추가 서비스 번호」에 제조사 자료의 번호를 넣어 주세요.'; }
-    if (n === 'NotFoundError' && /adapter|bluetooth.*(off|disabled|not available)/i.test(m)) { return '태블릿의 블루투스가 꺼져 있어요. 화면 위에서 아래로 내려 블루투스를 켠 뒤 다시 눌러 주세요.'; }
-    if (n === 'NotFoundError' || /cancel|chooser|no device selected/i.test(m)) { return '프린터를 고르지 않았어요. 다시 눌러 프린터를 골라 주세요.'; }
-    if (n === 'NetworkError' || /connection failed|unknown reason/i.test(m)) { return viaUsb() ? 'USB 프린터와 연결하지 못했어요. 선(OTG 어댑터)과 프린터 전원을 확인해 주세요.' : POWER; }
-    if (viaUsb() && (n === 'SecurityError' || /protected class/i.test(m))) { return 'USB 프린터를 열 수 없어요. 이 장치는 크롬에서 막혀 있어요(컴퓨터에서는 프린터 드라이버가 잡고 있을 수 있어요). 태블릿에서 다시 해 보세요.'; }
-    if (n === 'SecurityError' || n === 'NotAllowedError') {
-      return viaUsb() ? 'USB 사용이 허용되지 않았어요. 크롬 설정에서 허용해 주세요.'
-        : '블루투스 사용이 막혀 있어요. ① 태블릿 설정 → 애플리케이션 → Chrome → 권한에서 「근처 기기」(안드로이드 11 이하는 「위치」)를 허용하고, ② 크롬 주소창 왼쪽 ⓘ → 권한에서 블루투스를 허용한 뒤 다시 눌러 주세요.';
+    if (viaUsb()) {
+      // 다른 앱(제조사 앱 등)이 잡고 있음을 먼저 가린다(크롬은 이것도 NetworkError로 낸다)
+      if (/claimInterface|Unable to claim|Access denied/i.test(m)) { return 'USB 프린터를 쓸 수 없어요(다른 앱이나 시스템이 쓰는 중이거나 허용되지 않은 장치). 제조사 앱을 「항상 이 앱으로 열기」로 정해 두었다면 풀고, 케이블을 뽑았다 다시 꽂고 해 보세요.'; }
+      if (/no device selected|cancel/i.test(m)) { return '프린터를 고르지 않았어요. 다시 눌러 프린터를 골라 주세요.'; }
+      if (/disconnected|no device|not open|closed/i.test(m)) { return '프린터와 연결이 끊겼어요. USB 선(OTG 어댑터)과 프린터 전원을 확인하고 다시 연결해 주세요.'; }
+      if (n === 'SecurityError' || /protected class/i.test(m)) { return 'USB 프린터를 열 수 없어요. 이 장치는 크롬에서 막혀 있어요(컴퓨터에서는 프린터 드라이버가 잡고 있을 수 있어요). 태블릿에서 다시 해 보세요.'; }
+      if (n === 'NotAllowedError') { return 'USB 사용이 허용되지 않았어요. 크롬 설정에서 허용해 주세요.'; }
+      if (n === 'NetworkError') { return 'USB 프린터와 연결하지 못했어요. 선(OTG 어댑터)과 프린터 전원을 확인해 주세요.'; }
+      return m || 'USB 연결에 실패했어요.';
     }
-    if (e && e.code === 'NEED_TAP_USB') { return m; }
-    if (/claimInterface|Unable to claim|Access denied|protected/i.test(m)) { return 'USB 프린터를 쓸 수 없어요(다른 앱이나 시스템이 쓰는 중이거나 허용되지 않은 장치). 제조사 앱을 「항상 이 앱으로 열기」로 정해 두었다면 풀고, 케이블을 뽑았다 다시 꽂고 해 보세요.'; }
-    if (viaUsb() && /disconnected|no device|not open|closed/i.test(m)) { return '프린터와 연결이 끊겼어요. USB 선(OTG 어댑터)과 프린터 전원을 확인하고 다시 연결해 주세요.'; }
-    if (/disconnected|GATT/i.test(m)) { return '프린터와 연결이 끊겼어요. 프린터 전원과 거리를 확인하고 다시 연결해 주세요.'; }
-    return m || (viaUsb() ? 'USB 연결에 실패했어요.' : '블루투스 연결에 실패했어요.');
+    // 블루투스: 크롬은 선택 취소·서비스 번호 없음·블루투스 꺼짐·권한 거부를 모두 NotFoundError로 낸다(문구로 나눈다)
+    if (/permission|denied/i.test(m)) { return BT_PERM; }
+    if (/globally disabled|enterprise|not supported|low energy not available/i.test(m)) { return '이 태블릿·브라우저에서는 블루투스 인쇄를 쓸 수 없어요(정책이나 기기 사양). USB 선(OTG)으로 연결해 보세요.'; }
+    if (/adapter/i.test(m)) { return '태블릿의 블루투스가 꺼져 있어요. 화면 위에서 아래로 내려 블루투스를 켠 뒤 다시 눌러 주세요.'; }
+    if (/service/i.test(m)) { return '이 프린터의 서비스 번호를 몰라 연결하지 못했어요. 프린터 연결 설정 → 고급 설정의 「추가 서비스 번호」에 제조사 자료의 번호를 넣어 주세요.'; }
+    if (n === 'NotFoundError' || /cancel|chooser/i.test(m)) { return '프린터를 고르지 않았어요. 다시 눌러 프린터를 골라 주세요(선택 창에 「블루투스 꺼짐」이 보였으면 블루투스를 켜고 다시 눌러 주세요).'; }
+    if (/GATT|disconnected/i.test(m)) { return '프린터와 연결이 끊겼어요. 프린터 전원과 거리를 확인하고 다시 연결해 주세요.'; }
+    if (n === 'NetworkError' || /connection failed|unknown reason/i.test(m)) { return POWER; }
+    if (n === 'SecurityError' || n === 'NotAllowedError') { return BT_PERM; }
+    return m || '블루투스 연결에 실패했어요.';
   }
 
   // ------------------------------------------------------------------ USB(WebUSB) 연결
@@ -241,7 +271,8 @@
       });
     });
   }
-  function usbConnect() {
+  function usbConnect(opts) {
+    opts = opts || {};
     if (!usbOk()) { return Promise.reject(new Error(whyNot('USB'))); }
     if (connected()) { return Promise.resolve({ name: deviceName() }); }
     var saved = get().usbId, again = Promise.resolve(null);
@@ -256,6 +287,7 @@
     }
     return again.then(function (r) {
       if (r) { return r; }
+      if (opts.noPick) { var se = new Error(NEED_STAFF.replace(/「Bluetooth Printer」/g, 'USB 프린터')); se.code = 'NEED_STAFF'; throw se; }
       if (navigator.userActivation && navigator.userActivation.isActive === false) { var ne = new Error(NEED_TAP.replace(/「Bluetooth Printer」/g, 'USB 프린터')); ne.code = 'NEED_TAP_USB'; throw ne; }
       return navigator.usb.requestDevice({ filters: [] }).then(usbAttach);
     }).catch(function (e) {
@@ -696,11 +728,11 @@
     }, '주소 스티커', '주소스티커');
   }
   // 프린터로 보내기 공통: jobs = 명령(바이트)을 만드는 함수들. 연결 → 차례로 보냄 → (설정 시) 연결 놓기
-  function sendJobs(jobs) {
+  function sendJobs(jobs, copt) {
     if (busy) { return Promise.reject(new Error('인쇄 중이에요. 잠시 뒤에 다시 눌러 주세요.')); }
     busy = true;
     var done = 0;
-    return connect().then(function () {
+    return connect(copt).then(function () {
       var chain = Promise.resolve();
       jobs.forEach(function (job) {
         chain = chain.then(function () { return writeAll(job()); }).then(function () { done++; return sleep(150); });
@@ -718,21 +750,21 @@
   }
 
   // entries: 스티커 한 장씩. 크기는 mm(영수증 롤이면 무시하고 롤 폭·내용 길이). 연결이 없으면(사용자 단추 안에서만) 선택 창을 띄운다.
-  function print(entries, wmm, hmm, note) {
+  function print(entries, wmm, hmm, note, copt) {
     if (busy) { return Promise.reject(new Error(viaApp() ? '보내는 중이에요. 잠시 뒤에 다시 눌러 주세요.' : '인쇄 중이에요. 잠시 뒤에 다시 눌러 주세요.')); }
     lastRes = '';
     if (viaApp()) { return sendToApp(entries, wmm, hmm, note); }
-    return sendJobs(entries.map(function (e) { return function () { return encode(e, wmm, hmm, note); }; }));
+    return sendJobs(entries.map(function (e) { return function () { return encode(e, wmm, hmm, note); }; }), copt);
   }
   // 영수증 롤에 접수 메모 한 장(어르신 화면 「감열 영수증」). 용지 설정과 상관없이 연속지로 뽑는다.
-  function printMemo(memo, rollW) {
+  function printMemo(memo, rollW, copt) {
     if (busy) { return Promise.reject(new Error('인쇄 중이에요. 잠시 뒤에 다시 눌러 주세요.')); }
     lastRes = '';
     var dpi = Number(get().dpi) || 203, rw = Math.min(112, Math.max(40, Number(rollW) || rollWidth())), c;
     var what = memo && memo.blocks ? '주소 쪽지' : '접수 메모';
     if (viaApp()) { return appJob(sigOf(['m', memo, rw]), function () { return [oneBits(renderMemo(memo || {}, rw, dpi))]; }, what, what === '주소 쪽지' ? '주소쪽지' : '접수메모'); }
     try { c = renderMemo(memo || {}, rw, dpi); } catch (e) { return Promise.reject(new Error(what + '를 그리지 못했어요. ' + ((e && e.message) || ''))); }
-    return sendJobs([function () { return encodeCanvas(c, rw, pxToMm(c.height), { media: 'cont' }); }]);
+    return sendJobs([function () { return encodeCanvas(c, rw, pxToMm(c.height), { media: 'cont' }); }], copt);
   }
   // 위치 맞춤 시험지(헤드 폭 전체, 가로 보정 없이)
   function printRuler() {
@@ -818,10 +850,11 @@
     $('bsMedia').onchange = showFor;
     $('bsRollDir').onchange = showFor;
     showFor();
-    var via0 = s.via, clampNote = '';
+    var via0 = s.via, keep0 = s.keep, clampNote = '';
     function read() {
       var media = $('bsMedia').value, rollW = Number($('bsRollW').value) || 80, head = Number($('bsHead').value) || 104;
-      var wv = media === 'cont' ? rollW : ((opts.size && opts.size()[0]) || 100), xo = Math.min(40, Math.max(0, Number($('bsXoff').value) || 0));
+      var sz = opts.size ? opts.size() : [100, 45], rot = Number($('bsRot').value) || 0;
+      var wv = media === 'cont' ? rollW : ((rot === 90 || rot === 270 ? sz[1] : sz[0]) || 100), xo = Math.min(40, Math.max(0, Number($('bsXoff').value) || 0));   // 90·270도면 헤드 방향 폭은 라벨 세로
       var xmax = Math.max(0, Math.floor((Math.min(112, Math.max(40, head)) - wv) * 2) / 2);
       clampNote = '';
       if (xo > xmax) { xo = xmax; $('bsXoff').value = xo; clampNote = '가로 위치 보정을 ' + xo + 'mm로 줄였어요(용지 폭 ' + wv + 'mm + 보정이 헤드 폭 ' + head + 'mm를 넘으면 오른쪽이 잘려요). '; }
@@ -832,7 +865,8 @@
         rollDir: $('bsRollDir').value, rollLen: Math.min(300, Math.max(30, Number($('bsRollLen').value) || 100)) });
       // 블루투스에서 다른 방식으로 바꾸면 잡고 있던 연결·다시 연결을 놓는다(앱이 프린터를 찾을 수 있게)
       if (via0 === 'ble' && c.via !== 'ble') { disconnect(); }
-      via0 = c.via;
+      else if (keep0 && !c.keep && !busy && c.via === 'ble') { release(); emit('none'); }   // 「연결 계속 잡아 두기」를 끄면 지금 연결도 놓는다(휴대폰 앱이 프린터를 찾을 수 있게)
+      via0 = c.via; keep0 = c.keep;
       return c;
     }
     function msg(t) { $('bsMsg').textContent = clampNote + t; }
