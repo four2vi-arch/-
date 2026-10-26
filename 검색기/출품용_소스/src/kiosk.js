@@ -984,7 +984,7 @@
     log('어르신 입력 완료', st.entries.length, '접수번호 ' + st.no);
     if (helpOnly || !cfg().autoPrint) { return; }
     if (appMode()) { toast('직원을 불러 주세요. 직원이 ' + what + '를 뽑아 드려요.'); }
-    else if ((bleOn() || bleRoll()) && window.__ble && __ble.ready && !__ble.ready()) { toast('직원을 불러 주세요. 프린터가 아직 연결되지 않았어요.', 6000); }
+    else if ((bleOn() || bleRoll()) && __ble.via() === 'ble' && __ble.ready && !__ble.ready()) { toast('직원을 불러 주세요. 프린터가 아직 연결되지 않았어요.', 6000); }
     else if (printing) { toast('앞 분 종이가 나오는 중이에요. 그 종이는 가져가지 마세요. 다 나오면 빨간 단추를 눌러 주세요.', 6000); }
     else { toast(what + '를 뽑고 있어요. 창구에 가져가세요.'); setTimeout(function () { if ($('#kPrintBtn', main)) { printSlip(); } }, 700); }
   }
@@ -1144,9 +1144,10 @@
   }
   // 앱으로 보내기: 어르신 앞에 공유 창을 띄우지 않는다. 직원이 단추를 2초 눌렀다 떼면 공유 창을 연다
   function appAsk() {
+    var job = st;
     var m = modal('<div class="k-bubble">직원을 불러 주세요. 직원이 뽑아 드려요.<small>(직원 확인) 이 기기는 「전용 앱으로 보내기」로 되어 있어요. 아래 「직원: 앱으로 보내기」를 2초 눌렀다 떼면 공유 창이 열리니 Print Label을 고르세요. 이름·주소가 든 PDF가 그 앱으로 넘어가요(다른 앱은 고르지 마세요).</small></div>',
       [['닫기', closeModal, 'pri'], ['직원: 앱으로 보내기(2초)', function () { }, 'sub']]);
-    staffHold(m.querySelectorAll('#kModalBtns button')[1], function () { closeModal(); if (paper() === 'lbl') { bleSlip(); } else { bleMemo(); } });
+    staffHold(m.querySelectorAll('#kModalBtns button')[1], function () { closeModal(); if (job !== st) { return; } if (paper() === 'lbl') { bleSlip(); } else { bleMemo(); } });   // 그사이 지워졌으면 빈 PDF를 보내지 않는다
   }
   // 보내는 동안(블루투스는 쪽지 한 장에 30초쯤): 단추를 막고 기다리라고 알린다(다시 누르면 「뽑지 못했어요」가 뜨고 두 장 나오던 것)
   var printing = false, printingJob = null;
@@ -1452,7 +1453,7 @@
   }
   function idleWarn() {
     if (!root || root.hidden) { return; }
-    if (!hasData()) { welcome(); return; }
+    if (!hasData()) { closeModal(); welcome(); return; }   // 직원 설정 등 열어 둔 창을 다음 분 앞에 남기지 않는다
     if (st && st.doneAt && !printing) { wipe(); return; }   // 뽑고 3분이 지나면 묻지 않고 지운다(다음 분이 눌러 앞 분 내용이 남지 않게)
     var left = 30;
     var m = modal('<div class="k-bubble">계속하시겠어요?<small><b id="kLeft">30</b>초 뒤에 적으신 내용을 지웁니다. 화면 아무 곳이나 누르면 계속해요.</small></div>', [['계속할게요', function () { clearTimeout(warnT); closeModal(); touch(); }, 'pri']]);
@@ -1461,7 +1462,7 @@
     (function tick() { var el = document.getElementById('kLeft'); if (!el) { return; } if (left <= 0) { closeModal(); wipe(); return; } el.textContent = left; left--; warnT = setTimeout(tick, 1000); })();
   }
   function wipe(silent) {
-    clearTimeout(warnT);
+    clearTimeout(warnT); closeModal();
     stopCam(); stopMic();
     try { if (window.__cam) { __cam.dispose(); } } catch (e) { }
     fresh();

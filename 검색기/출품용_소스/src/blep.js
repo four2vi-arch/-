@@ -16,7 +16,7 @@
 
   var KEY = 'zipfinder.ble.v1';
   var BUILD = 'v1.11 8차(10.26)';
-  var NEED_TAP = '이 화면을 연 뒤 처음 인쇄할 때는 프린터를 한 번 골라야 해요. 「다시 연결하고 뽑기(직원)」나 프린터 연결 설정의 「프린터 연결」을 눌러 「Bluetooth Printer」를 골라 주세요(직원이 프린터 연결 설정에서 미리 연결해 두면 이 창이 뜨지 않아요).';   // 설정 창 제목·시험 인쇄에 찍어, 어느 파일로 뽑혔는지 종이에서 확인한다
+  var NEED_TAP = '이 화면을 연 뒤 처음 인쇄할 때는 프린터를 한 번 골라야 해요. 「직원: 프린터 고르고 뽑기(2초)」나 프린터 연결 설정의 「프린터 연결」을 눌러 「Bluetooth Printer」를 골라 주세요(직원이 프린터 연결 설정에서 미리 연결해 두면 이 창이 뜨지 않아요).';   // 설정 창 제목·시험 인쇄에 찍어, 어느 파일로 뽑혔는지 종이에서 확인한다
   // 흔한 BLE 프린터 서비스(Web Bluetooth 는 미리 적어 둔 서비스만 열 수 있다). 설정에서 더 보탤 수 있다.
   var SERVICES = [0x18f0, 0xff00, 0xffe0, 0xffe5, 0xfff0, 0xfee7, 0xae30, 0xff12,
     '49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', 'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
@@ -153,7 +153,8 @@
     cp.then(function () { if (late && mine === tries) { drop(device); } }, function () { });
     return timeout(cp, 12000, POWER).catch(function (e) { if (e && e.name === 'TimeoutError') { late = true; } throw e; });
   }
-  function attach(device) {
+  // picked: 선택 창에서 방금 고른 기기
+  function attach(device, picked) {
     var my = gen, v0 = get().via, prev = dev;
     dev = device; ch = null;
     if (!dev.__zfHook) { dev.__zfHook = true; dev.addEventListener('gattserverdisconnected', onDrop); }
@@ -165,12 +166,13 @@
       clearTimeout(rcT); rcN = 0; emit('connected');
       return dev;
     }, function (e) {
-      if (prev && prev !== device && dev === device) { dev = prev; }   // 프린터가 아닌 기기(이어폰 등)를 골라 실패하면 앞서 고른 프린터로 되돌린다
+      // 프린터가 아닌 기기(이어폰 등)를 골라 실패하면 그 연결을 놓고 앞서 고른 프린터로 되돌린다(처음 고를 때면 「고른 프린터 없음」으로, 실패 창이 다시 「프린터 고르고 뽑기」가 되게)
+      if (dev === device && prev !== device && (picked || prev)) { drop(device); dev = prev; }
       throw e;
     });
   }
   function active() { return !(navigator.userActivation && navigator.userActivation.isActive === false); }
-  function choose() { return navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: SERVICES.concat(userUuids()) }).then(attach); }
+  function choose() { return navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: SERVICES.concat(userUuids()) }).then(function (d) { return attach(d, true); }); }
   // 사용자가 누른 단추 안에서 불러야 한다(선택 창이 뜬다).
   // opts.pick: 직원이 프린터를 고를 때. 누른 그 자리에서 선택 창을 연다(이전 프린터를 기다리다 몇 초가 지나 선택 창이 막히던 것. 같은 프린터도 목록에 뜬다)
   // opts.noPick: 어르신 화면. 고른 프린터가 없으면 선택 창(주변 기기 전부)을 어르신 앞에 띄우지 않고 직원을 부르게 한다

@@ -9,6 +9,8 @@ let pass = 0, fail = 0; const ok = (n, c, x) => { (c ? pass++ : fail++); console
 
 // 가짜 BLE 프린터: 끊김 알림(gattserverdisconnected)을 낼 수 있고, 쓰기 하나에 writeMs 만큼 걸린다. window.__bt 로 조종한다
 const MOCK = `(() => {
+  // 뽑은 뒤 3분 자리 비움 타이머만 __idleMs 로 줄인다(시험 10)
+  const T0 = window.setTimeout; window.setTimeout = function (f, ms) { if (ms === 180000 && window.__idleMs) { ms = window.__idleMs; } return T0.apply(this, [f, ms].concat([].slice.call(arguments, 2))); };
   const bt = window.__bt = { writes: [], connects: 0, failConnect: false, writeMs: 0, reqErr: null, reqs: 0, listeners: [] };
   const ch = { uuid: 'ffe1', properties: { write: true, writeWithoutResponse: true },
     writeValueWithoutResponse: (v) => new Promise(r => setTimeout(() => { bt.writes.push(Array.from(v)); r(); }, bt.writeMs)), writeValue: async (v) => { bt.writes.push(Array.from(v)); } };
@@ -17,7 +19,11 @@ const MOCK = `(() => {
     gatt: { connected: false, connect: async function () { bt.connects++; if (bt.failConnect) { const e = new Error('Connection failed for unknown reason.'); e.name = 'NetworkError'; throw e; } dev.gatt.connected = true; return dev.gatt; },
       disconnect() { dev.gatt.connected = false; bt.listeners.forEach(f => f()); }, getPrimaryServices: async () => [svc] } };
   bt.drop = () => { dev.gatt.connected = false; bt.listeners.forEach(f => f()); };
-  Object.defineProperty(navigator, 'bluetooth', { configurable: true, value: { requestDevice: async () => { bt.reqs++; if (bt.reqErr) { const e = new Error(bt.reqErr[1]); e.name = bt.reqErr[0]; throw e; } return dev; } } });
+  // 프린터가 아닌 기기(이어폰): 붙기는 하지만 서비스가 없다. bt.pickEar 이면 선택 창에서 이것을 고른 것으로 한다
+  const ear = bt.ear = { name: 'Galaxy Buds', addEventListener() { },
+    gatt: { connected: false, connect: async function () { ear.gatt.connected = true; return ear.gatt; }, disconnect() { ear.gatt.connected = false; },
+      getPrimaryServices: async () => { const e = new Error('No Services found in device.'); e.name = 'NotFoundError'; throw e; } } };
+  Object.defineProperty(navigator, 'bluetooth', { configurable: true, value: { requestDevice: async () => { bt.reqs++; if (bt.reqErr) { const e = new Error(bt.reqErr[1]); e.name = bt.reqErr[0]; throw e; } return bt.pickEar ? ear : dev; } } });
   // 공유: 부른 횟수와 넘긴 파일. shareErr 가 있으면 그 이름의 오류
   const sh = window.__sh = { calls: [], err: null, can: true, dl: [] };
   navigator.canShare = (o) => sh.can && !!(o && o.files);
@@ -341,6 +347,79 @@ async function toFinish(p, sender) {
   ok('실패 창 직원 단추(2초) → 선택 창 1번 → 그 분 쪽지 인쇄', (await p.evaluate(() => window.__bt.reqs)) === 1 && /다 됐어요! 뽑은/.test(await p.textContent('#kFinMsg')), (await p.textContent('#kFinMsg')).slice(0, 40));
   ok('뽑은 뒤 표시(doneAt)', await p.evaluate(() => !!__kiosk.state().doneAt));
   ok('페이지 오류 없음(8)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
+  // ---- 9. 처음 고를 때 이어폰을 고르면 놓고 「고른 프린터 없음」으로 되돌림 → 실패 창이 다시 「프린터 고르고 뽑기」 → 프린터를 고르면 그 분 쪽지
+  p = await open(browser, { hash: '#kiosk', init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80' }) });
+  await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+  await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
+  await p.click('#kPrintBtn'); await p.waitForSelector('#kModal', { timeout: 5000 });
+  await p.evaluate(() => { window.__bt.pickEar = true; });
+  await longPress(p, (await p.$$('#kModalBtns button'))[1], 2200);
+  await p.waitForFunction(() => window.__bt.reqs === 1 && document.querySelector('#kModal') && /서비스 번호/.test(document.querySelector('#kModal').textContent), null, { timeout: 15000 }).catch(() => null);
+  { const lab = await (await p.$$('#kModalBtns button'))[1].textContent();
+    const s = await p.evaluate(() => ({ ready: __ble.ready(), ear: window.__bt.ear.gatt.connected, name: __ble.deviceName() }));
+    ok('처음 고를 때 이어폰 → 실패 창 문구 「서비스 번호」, 단추는 다시 「프린터 고르고 뽑기(2초)」', /서비스 번호/.test(await p.textContent('#kModal')) && /프린터 고르고 뽑기\(2초\)/.test(lab), lab);
+    ok('이어폰 연결은 놓고 고른 프린터 없음으로 되돌림', !s.ready && !s.ear && !s.name, JSON.stringify(s)); }
+  await p.evaluate(() => { window.__bt.pickEar = false; });
+  await longPress(p, (await p.$$('#kModalBtns button'))[1], 2200);
+  await p.waitForFunction(() => /다 됐어요! 뽑은/.test(document.getElementById('kFinMsg').textContent), null, { timeout: 30000 }).catch(() => null);
+  ok('다시 2초 → 선택 창 2번째 → 프린터 → 그 분 쪽지 인쇄', (await p.evaluate(() => window.__bt.reqs)) === 2 && /다 됐어요! 뽑은/.test(await p.textContent('#kFinMsg')), (await p.textContent('#kFinMsg')).slice(0, 40));
+  { const h = fs.readFileSync(HTML, 'utf8'); ok('「처음 인쇄할 때는 프린터를 한 번 골라야」 문구가 지금 단추 이름을 가리킴', h.includes('「직원: 프린터 고르고 뽑기(2초)」나 프린터 연결 설정의') && !h.includes('다시 연결하고 뽑기(직원)')); }
+  // 이미 쓰던 프린터가 있을 때(연결만 끊긴 상태) 직원이 이어폰을 고르면 그 프린터로 되돌림(이어폰 연결은 놓음). 연결돼 있으면 connect는 선택 창 없이 그대로 쓴다
+  await p.evaluate(() => { window.__bt.dev.gatt.connected = false; window.__bt.pickEar = true; });
+  const kept = await p.evaluate(() => __ble.connect({ pick: true }).then(() => 'ok', e => e.message)).catch(e => String(e));
+  { const s = await p.evaluate(() => ({ name: __ble.deviceName(), ear: window.__bt.ear.gatt.connected })); await p.evaluate(() => { window.__bt.pickEar = false; });
+    ok('쓰던 프린터가 있을 때 이어폰 → 실패 알림 뒤 그 프린터로 되돌림·이어폰 놓음', /서비스 번호/.test(kept) && s.name === 'Bluetooth Printer' && !s.ear && (await p.evaluate(() => window.__bt.reqs)) === 3, kept.slice(0, 30) + ' ' + JSON.stringify(s)); }
+  ok('되돌린 프린터로 다시 연결(선택 창 없이)', await p.evaluate(() => __ble.connect().then(() => __ble.connected() && window.__bt.reqs === 3, () => false)));
+  ok('페이지 오류 없음(9)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
+  // ---- 10. 뽑은 뒤 3분 자리 비움: 열어 둔 창(처음 화면 확인·직원 설정)까지 닫고 지움 / 입력 없는 자리 비움도 직원 설정을 닫음 / USB는 연결 전 알림 안 띄움
+  for (const kind of ['done', 'staff']) {
+    p = await open(browser, { hash: '#kiosk', init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80' }) });
+    await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+    await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+    await p.waitForSelector('#kfPrn', { timeout: 4000 }); await p.click('#kfPrn');
+    await p.waitForFunction(() => /연결됨/.test(document.getElementById('kfMsg').textContent), null, { timeout: 5000 });
+    await p.evaluate(() => { const m = document.getElementById('kModal'); if (m) m.remove(); });
+    await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
+    await p.click('#kPrintBtn');
+    await p.waitForFunction(() => !!__kiosk.state().doneAt, null, { timeout: 20000 }).catch(() => null);
+    await p.evaluate(() => { window.__idleMs = 4000; });
+    if (kind === 'done') { await p.click('#kDone'); } else { await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); }); }
+    await p.waitForSelector('#kModal', { timeout: 4000 });
+    const before = await p.evaluate(() => __kiosk.state().entries.length);
+    await p.waitForTimeout(5500);
+    const s = await p.evaluate(() => ({ modal: !!document.getElementById('kModal'), start: !!document.getElementById('kStart'), n: __kiosk.state().entries.length }));
+    ok('뽑은 뒤 3분 지우기: ' + (kind === 'done' ? '「처음 화면으로」 확인 창' : '직원 설정 창') + '까지 닫고 처음 화면', before === 2 && !s.modal && s.start && s.n === 0, JSON.stringify(s));
+    ok('페이지 오류 없음(10' + kind + ')', p.errs.length === 0, p.errs.join(' / '));
+    await p.context().close();
+  }
+  p = await open(browser, { hash: '#kiosk', init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80', idle: 4 }) });
+  await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+  await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  await p.waitForSelector('#kfExit', { timeout: 4000 });
+  await p.waitForTimeout(5000);
+  ok('입력 없는 자리 비움: 열어 둔 직원 설정 창을 닫고 처음 화면', !(await p.$('#kModal')) && !!(await p.$('#kStart')));
+  await p.context().close();
+  // USB: 화면을 연 뒤 첫 분 자동 뽑기에 「프린터가 아직 연결되지 않았어요」를 띄우지 않는다(허용한 프린터는 선택 창 없이 붙음)
+  p = await open(browser, { hash: '#kiosk', init: [() => {
+    localStorage.setItem('zipfinder.ble.v1', JSON.stringify({ via: 'usb', proto: 'tspl', usbId: '4660:22136', delay: 0, cfgv: 2 }));
+    localStorage.setItem('zipfinder.kiosk.v1', JSON.stringify({ region: '전북특별자치도 정읍시', idle: 300, paper: 'lbl', autoPrint: true }));
+    const u = window.__u = { reqs: 0, outs: 0 };
+    u.dev = { vendorId: 0x1234, productId: 0x5678, productName: 'Label USB', opened: false,
+      configuration: { interfaces: [{ interfaceNumber: 0, alternates: [{ alternateSetting: 0, interfaceClass: 7, endpoints: [{ direction: 'out', type: 'bulk', endpointNumber: 1 }] }] }] },
+      open: async function () { this.opened = true; }, selectConfiguration: async () => { }, close: async function () { this.opened = false; }, claimInterface: async () => { },
+      transferOut: async (ep, d) => { u.outs++; return { status: 'ok', bytesWritten: d.length }; } };
+    Object.defineProperty(navigator, 'usb', { configurable: true, value: { requestDevice: async () => { u.reqs++; return u.dev; }, getDevices: async () => [u.dev], addEventListener() { } } });
+  }, null] });
+  await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+  await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
+  await p.waitForFunction(() => window.__u.outs > 0, null, { timeout: 15000 }).catch(() => null);
+  { const u = await p.evaluate(() => ({ reqs: window.__u.reqs, outs: window.__u.outs })); const tt = await toasts(p);
+    ok('USB 자동 뽑기: 「아직 연결되지 않았어요」 알림 없이 허용한 프린터로 선택 창 없이 뽑음', !/아직 연결되지 않았어요/.test(tt) && u.reqs === 0 && u.outs > 0, JSON.stringify(u) + ' ' + tt.slice(0, 60)); }
+  ok('페이지 오류 없음(10usb)', p.errs.length === 0, p.errs.join(' / '));
   await p.context().close();
 
   // ---- 6. 엑셀 파일 정보 작성자 = 물어물어
