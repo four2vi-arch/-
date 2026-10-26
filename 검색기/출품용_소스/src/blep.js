@@ -5,23 +5,24 @@
    - v1.8: 선으로 잇는 방식(WebUSB)을 더했다. 태블릿에 OTG 어댑터로 USB 라벨프린터를 꽂으면 컴퓨터·블루투스 없이 같은 TSPL/ESC·POS 명령을 USB 대량 전송(bulk OUT)으로 보낸다.
    - v1.11: 4인치 감열 라벨프린터(기본 이름 「Bluetooth Printer」, 제조사 앱 Print Label) 실기 대응.
      용지 종류(갭 라벨·연속지(영수증 롤)·블랙마크)와 가로 위치 보정(넓은 프린터에 좁은 용지)을 더하고,
-     제조사 앱처럼 인쇄할 때만 붙었다가 끝나면 연결을 놓아(휴대폰 앱과 프린터를 같이 쓰도록) 둔다.
-     브라우저 블루투스로 안 되는 기종을 위해 스티커를 라벨 크기 PDF로 만들어 제조사 앱으로 넘기는 길(공유)을 더했다.
-     라벨지(스티커 크기대로 한 장씩)와 영수증 롤(롤 폭에 맞춰 내용 길이만큼)을 나누고, 어르신 화면의 접수 메모(QR 포함)를
+     블루투스 연결은 기본으로 계속 잡아 두고(끊기면 저절로 다시 붙음), 「연결 계속 잡아 두기」를 끄면 인쇄 뒤 놓는다(휴대폰 앱과 같이 쓰기).
+     브라우저 블루투스로 안 되는 기종을 위해 스티커를 라벨 크기 PDF로 만들어 제조사 앱으로 넘기는 길(공유)을 더했다(직원이 고를 때만).
+     라벨지(스티커 크기대로 한 장씩)와 영수증 롤(롤 폭에 맞춰 내용 길이만큼)을 나누고, 어르신 화면의 주소 쪽지를
      롤로 바로 뽑게 했다. 헤드 폭 전체에 mm 눈금을 찍는 「위치 맞춤 시험지」로 가로 위치 보정값을 읽는다.
-   - 주소·이름은 이 기기 안에서 그림으로만 만들어 프린터로 보낸다(인터넷으로 나가지 않는다). */
+   - 주소·이름은 이 기기 안에서 그림으로만 만들어 프린터로 보낸다(인터넷으로 나가지 않는다).
+     예외: 직원이 「전용 앱으로 보내기」를 고르면 이름·주소가 든 PDF가 공유 창에서 고른 앱으로 넘어간다(설정 창·결과 문구에 알림). */
 (function () {
   'use strict';
 
   var KEY = 'zipfinder.ble.v1';
-  var BUILD = 'v1.11 7차(10.26)';
-  var NEED_TAP = '이 화면을 연 뒤 처음 인쇄할 때는 프린터를 한 번 골라야 해요. 「다시 해 볼게요」나 「프린터 연결」을 눌러 「Bluetooth Printer」를 골라 주세요(직원이 프린터 연결 설정에서 미리 연결해 두면 이 창이 뜨지 않아요).';   // 설정 창 제목·시험 인쇄에 찍어, 어느 파일로 뽑혔는지 종이에서 확인한다
+  var BUILD = 'v1.11 8차(10.26)';
+  var NEED_TAP = '이 화면을 연 뒤 처음 인쇄할 때는 프린터를 한 번 골라야 해요. 「다시 연결하고 뽑기(직원)」나 프린터 연결 설정의 「프린터 연결」을 눌러 「Bluetooth Printer」를 골라 주세요(직원이 프린터 연결 설정에서 미리 연결해 두면 이 창이 뜨지 않아요).';   // 설정 창 제목·시험 인쇄에 찍어, 어느 파일로 뽑혔는지 종이에서 확인한다
   // 흔한 BLE 프린터 서비스(Web Bluetooth 는 미리 적어 둔 서비스만 열 수 있다). 설정에서 더 보탤 수 있다.
   var SERVICES = [0x18f0, 0xff00, 0xffe0, 0xffe5, 0xfff0, 0xfee7, 0xae30, 0xff12,
     '49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', 'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
     '6e400001-b5a3-f393-e0a9-e50e24dcca9e', 0xff10, 0xffb0];
   var dev = null, ch = null, busy = false, lastErr = '', lastRes = '';
-  var status = 'none', listeners = [], dropping = false, rcT = 0, rcN = 0;   // 연결 상태: none · connected · reconnecting · lost
+  var status = 'none', listeners = [], dropping = false, rcT = 0, rcN = 0, gen = 0;   // 연결 상태: none · connected · reconnecting · lost · gen: 놓기·방식 바꾸기 때 올려 진행 중인 다시 연결을 버린다
   function emit(st) { if (st === status) { return; } status = st; listeners.forEach(function (f) { try { f(st); } catch (e) { } }); }
   // 끊기면(프린터 절전·거리·전원) 같은 프린터에 저절로 다시 붙는다. 선택 창이 필요 없어 화면을 누르지 않아도 된다.
   function onDrop() {
@@ -33,10 +34,16 @@
   function retry() {
     clearTimeout(rcT);
     var waits = [700, 1500, 3000, 6000, 10000], wait = rcN < waits.length ? waits[rcN] : 20000;
+    var my = gen;
     rcT = setTimeout(function () {
-      if (!dev || !get().keep) { return; }
+      if (my !== gen) { return; }
+      if (!dev || !get().keep || get().via !== 'ble') { emit('none'); return; }   // 인쇄 방식을 바꾸면 다시 붙지 않는다
       if (dev.gatt && dev.gatt.connected && ch) { emit('connected'); return; }
-      Promise.resolve(dev.gatt.connect()).then(pickChar).then(function (c) { ch = c; rcN = 0; emit('connected'); }, function () {
+      Promise.resolve(dev.gatt.connect()).then(pickChar).then(function (c) {
+        if (my !== gen || get().via !== 'ble') { dropping = true; try { dev.gatt.disconnect(); } catch (e) { } ch = null; return; }   // 그사이 놓았으면 되살리지 않는다
+        ch = c; rcN = 0; emit('connected');
+      }, function () {
+        if (my !== gen) { return; }
         rcN++;
         if (rcN >= waits.length) { emit('lost'); }   // 다섯 번 안 되면 직원을 부르게 하고, 그 뒤로도 20초마다 계속 시도
         retry();
@@ -48,22 +55,25 @@
   function $(id) { return document.getElementById(id); }
   function clean(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  // media: gap(라벨지·틈) · bline(라벨지·뒷면 검은 표시) · cont(영수증 롤·연속지) / xoff: 가로 위치 보정 mm / release: 인쇄 뒤 연결 놓기(블루투스)
+  // media: gap(라벨지·틈) · bline(라벨지·뒷면 검은 표시) · cont(영수증 롤·연속지) / xoff: 가로 위치 보정 mm
   // rollW: 영수증 롤 폭 mm / tail: 영수증 끝 여백(자를 자리) mm / head: 프린터 헤드 폭 mm(위치 맞춤 시험지)
   // rollDir: side(돌려 찍기 · 라벨 높이 = 롤 폭) · down(위에서 아래로) / rollLen: 돌려 찍기 라벨 길이 mm
   // keep: 연결 계속 잡아 두기(화면을 닫을 때까지 · 끊기면 저절로 다시 연결). 끄면 인쇄 뒤 연결을 놓는다(휴대폰 앱과 같이 쓰기)
   // delay 30ms: 4인치 감열 라벨프린터 실기 시험에서 10ms는 받다가 몇십 바이트를 놓쳐 그림이 옆으로 밀렸다
-  var DEF = { via: 'dialog', proto: 'tspl', dpi: 203, gap: 2, chunk: 100, delay: 30, invert: false, rotate: 0, after: 'ff', uuids: '', name: '', usbId: '', media: 'gap', xoff: 0, release: true, rollW: 80, tail: 12, head: 104, rollDir: 'side', rollLen: 100, keep: true };
+  // cfgv: 설정 판. 판이 없는 옛 설정(v1.10·v1.11 7차 이전)에 남은 기본 간격 10ms는 30ms로 읽는다(새 기본값이 저장된 값에 가려지던 것)
+  var DEF = { via: 'dialog', proto: 'tspl', dpi: 203, gap: 2, chunk: 100, delay: 30, invert: false, rotate: 0, after: 'ff', uuids: '', name: '', usbId: '', media: 'gap', xoff: 0, rollW: 80, tail: 12, head: 104, rollDir: 'side', rollLen: 100, keep: true, cfgv: 2 };
+  function raw() { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; } }
   function get() {
-    var o = {};
-    try { o = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { o = {}; }
-    var r = {};
+    var o = raw(), r = {};
     for (var k in DEF) { r[k] = o[k] === undefined ? DEF[k] : o[k]; }
+    if (o.cfgv === undefined && Number(o.delay) === 10) { r.delay = 30; }
     return r;
   }
   function set(p) {
-    var c = get();
-    for (var k in p) { c[k] = p[k]; }
+    var o = raw(), c = get(), k;
+    for (k in o) { if (!(k in c)) { c[k] = o[k]; } }   // 다른 판이 쓰는 키는 지우지 않는다
+    for (k in p) { c[k] = p[k]; }
+    c.cfgv = DEF.cfgv;
     try { localStorage.setItem(KEY, JSON.stringify(c)); } catch (e) { }
     return c;
   }
@@ -73,6 +83,23 @@
   function appOk() { return !!(window.Blob && window.Uint8Array && document.createElement('canvas').getContext); }
   function btOk() { return !!(navigator.bluetooth && navigator.bluetooth.requestDevice && window.isSecureContext !== false); }
   function usbOk() { return !!(navigator.usb && navigator.usb.requestDevice && window.isSecureContext !== false); }
+  function shareOk() { try { return !!(navigator.share && navigator.canShare && window.File && navigator.canShare({ files: [new File(['x'], 'a.pdf', { type: 'application/pdf' })] })); } catch (e) { return false; } }
+  // 이 기기 상태(설정 창 첫 줄): 파일을 연 방식, 안전한 연결, 블루투스·USB·공유를 쓸 수 있는지
+  function envInfo() {
+    var p = String(location.protocol || '').replace(':', '');
+    return { proto: p, secure: window.isSecureContext !== false, bt: btOk(), usb: usbOk(), share: shareOk(), content: p === 'content' };
+  }
+  function envText() {
+    var e = envInfo(), yn = function (b) { return b ? '됨' : '안 됨'; };
+    var how = e.content ? '「내 파일」로 연 파일(content://)' : (e.proto === 'file' ? '파일(file://)' : (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) ? '이 기기 안 주소(' + location.host + ')' : '웹 주소(' + e.proto + ')'));
+    return '이 기기 상태: ' + how + ' · 안전한 연결 ' + yn(e.secure) + ' · 블루투스 ' + yn(e.bt) + ' · USB ' + yn(e.usb) + ' · 앱 공유 ' + yn(e.share) +
+      (e.content ? ' · 이렇게 열면 마이크·카메라(말로 하기·사진 읽기)는 크롬이 막습니다. 쓰려면 이 기기 안 주소(localhost)로 여세요.' : '');
+  }
+  // 쓸 수 없을 때의 까닭(안전한 연결이 아니면 크롬 탓이 아니라 파일을 연 방식 탓)
+  function whyNot(kind) {
+    if (window.isSecureContext === false) { return '이 파일을 연 방식에서는 ' + kind + '를 쓸 수 없어요(안전한 연결이 아님). 이 기기 안 주소(localhost)나 파일로 다시 열어 주세요.'; }
+    return '이 브라우저에서는 ' + kind + ' 인쇄를 쓸 수 없어요(안드로이드 크롬이 필요해요).';
+  }
   // 지금 고른 방식(블루투스 또는 USB)을 이 브라우저가 쓸 수 있는지
   function supported() { var v = get().via; return v === 'app' ? appOk() : (v === 'usb' ? usbOk() : btOk()); }
   function connected() { return viaUsb() ? !!(udev && udev.opened && uep) : !!(dev && dev.gatt && dev.gatt.connected && ch); }
@@ -104,26 +131,36 @@
       return best.c;
     });
   }
+  // 안드로이드 블루투스 연결은 프린터가 꺼져 있으면 오래 매달리므로 시간을 정해 끊는다
+  function timeout(p, ms, msg) {
+    return new Promise(function (ok, no) {
+      var t = setTimeout(function () { var e = new Error(msg); e.name = 'TimeoutError'; no(e); }, ms);
+      p.then(function (v) { clearTimeout(t); ok(v); }, function (e) { clearTimeout(t); no(e); });
+    });
+  }
+  var POWER = '프린터에 다시 연결하지 못했어요. 프린터 전원이 켜져 있는지, 태블릿 가까이 있는지 확인하고 다시 눌러 주세요.';
   function attach(device) {
     dev = device; ch = null;
     if (!dev.__zfHook) { dev.__zfHook = true; dev.addEventListener('gattserverdisconnected', onDrop); }
-    return dev.gatt.connect().then(pickChar).then(function (c) {
+    return timeout(Promise.resolve(dev.gatt.connect()), 12000, POWER).then(pickChar).then(function (c) {
       ch = c;
       set({ name: dev.name || '' });
       clearTimeout(rcT); rcN = 0; emit('connected');
       return dev;
     });
   }
-  // 사용자가 누른 단추 안에서 불러야 한다(선택 창이 뜬다)
-  function connect() {
+  // 사용자가 누른 단추 안에서 불러야 한다(선택 창이 뜬다). opts.pick: 다시 붙지 못하면 선택 창으로(직원이 프린터를 고를 때)
+  function connect(opts) {
     lastErr = '';
+    opts = opts || {};
     if (viaUsb()) { return usbConnect(); }
-    if (!supported()) { return Promise.reject(new Error('이 브라우저에서는 블루투스 인쇄를 쓸 수 없어요(안드로이드 크롬이 필요해요).')); }
+    if (!supported()) { return Promise.reject(new Error(whyNot('블루투스'))); }
     if (connected()) { return Promise.resolve(dev); }
     // 같은 기기가 이미 허용돼 있으면 선택 창 없이 다시 붙는다
-    var saved = get().name, again = Promise.resolve(null);
+    var saved = get().name, again = Promise.resolve(null), lost = null;
     if (dev && dev.gatt) {
-      again = attach(dev).catch(function () { return null; });
+      // 이미 고른 프린터가 안 붙으면 까닭(전원·거리)을 그대로 알린다(「처음이라 골라야 해요」로 잘못 안내하던 것)
+      again = attach(dev).catch(function (e) { lost = e; return null; });
     } else if (saved && navigator.bluetooth.getDevices) {
       again = navigator.bluetooth.getDevices().then(function (ds) {
         var d = ds.filter(function (x) { return x.name === saved; })[0];
@@ -132,6 +169,7 @@
     }
     return again.then(function (d) {
       if (d) { return d; }
+      if (lost && !opts.pick) { var pe = new Error(POWER); pe.code = 'POWER'; throw pe; }
       // 선택 창은 화면을 누른 직후에만 열린다(자동 뽑기 등에서는 크롬이 막는다)
       if (navigator.userActivation && navigator.userActivation.isActive === false) { var ne = new Error(NEED_TAP); ne.code = 'NEED_TAP'; throw ne; }
       var opt = SERVICES.concat(userUuids());
@@ -143,21 +181,27 @@
   }
   function disconnect() {
     if (udev) { try { udev.close(); } catch (e) { } udev = null; uep = 0; }
-    clearTimeout(rcT);
+    clearTimeout(rcT); gen++;
     try { if (dev && dev.gatt && dev.gatt.connected) { dropping = true; dev.gatt.disconnect(); } } catch (e) { }
     ch = null; emit('none');
   }
   function errText(e) {
     var n = e && e.name, m = String(e && e.message || e || '');
-    if (n === 'NotFoundError' || /cancel|chooser/i.test(m)) { return '프린터를 고르지 않았어요. 다시 눌러 프린터를 골라 주세요.'; }
-    if (viaUsb() && (n === 'SecurityError' || /protected class/i.test(m))) { return 'USB 프린터를 열 수 없어요. 이 장치는 크롬에서 막혀 있어요(컴퓨터에서는 프린터 드라이버가 잡고 있을 수 있어요). 태블릿에서 다시 해 보세요.'; }
+    if (e && (e.code === 'POWER' || n === 'TimeoutError')) { return POWER; }
     if (e && e.code === 'NEED_TAP') { return NEED_TAP; }
-    if (n === 'SecurityError' && /gesture|activation/i.test(m)) { return NEED_TAP; }
+    if (n === 'SecurityError' && /gesture|activation/i.test(m)) { return viaUsb() ? NEED_TAP.replace(/「Bluetooth Printer」/g, 'USB 프린터') : NEED_TAP; }
+    // 크롬은 선택 취소·서비스 번호 없음·블루투스 꺼짐을 모두 NotFoundError로 낸다(문구로 나눈다)
+    if (n === 'NotFoundError' && /service/i.test(m)) { return '이 프린터의 서비스 번호를 몰라 연결하지 못했어요. 프린터 연결 설정 → 고급 설정의 「추가 서비스 번호」에 제조사 자료의 번호를 넣어 주세요.'; }
+    if (n === 'NotFoundError' && /adapter|bluetooth.*(off|disabled|not available)/i.test(m)) { return '태블릿의 블루투스가 꺼져 있어요. 화면 위에서 아래로 내려 블루투스를 켠 뒤 다시 눌러 주세요.'; }
+    if (n === 'NotFoundError' || /cancel|chooser|no device selected/i.test(m)) { return '프린터를 고르지 않았어요. 다시 눌러 프린터를 골라 주세요.'; }
+    if (n === 'NetworkError' || /connection failed|unknown reason/i.test(m)) { return viaUsb() ? 'USB 프린터와 연결하지 못했어요. 선(OTG 어댑터)과 프린터 전원을 확인해 주세요.' : POWER; }
+    if (viaUsb() && (n === 'SecurityError' || /protected class/i.test(m))) { return 'USB 프린터를 열 수 없어요. 이 장치는 크롬에서 막혀 있어요(컴퓨터에서는 프린터 드라이버가 잡고 있을 수 있어요). 태블릿에서 다시 해 보세요.'; }
     if (n === 'SecurityError' || n === 'NotAllowedError') {
       return viaUsb() ? 'USB 사용이 허용되지 않았어요. 크롬 설정에서 허용해 주세요.'
         : '블루투스 사용이 막혀 있어요. ① 태블릿 설정 → 애플리케이션 → Chrome → 권한에서 「근처 기기」(안드로이드 11 이하는 「위치」)를 허용하고, ② 크롬 주소창 왼쪽 ⓘ → 권한에서 블루투스를 허용한 뒤 다시 눌러 주세요.';
     }
-    if (/claimInterface|Unable to claim|Access denied|protected/i.test(m)) { return 'USB 프린터를 쓸 수 없어요(다른 앱이나 시스템이 쓰는 중이거나 허용되지 않은 장치). 케이블을 뽑았다 다시 꽂고 해 보세요.'; }
+    if (e && e.code === 'NEED_TAP_USB') { return m; }
+    if (/claimInterface|Unable to claim|Access denied|protected/i.test(m)) { return 'USB 프린터를 쓸 수 없어요(다른 앱이나 시스템이 쓰는 중이거나 허용되지 않은 장치). 제조사 앱을 「항상 이 앱으로 열기」로 정해 두었다면 풀고, 케이블을 뽑았다 다시 꽂고 해 보세요.'; }
     if (viaUsb() && /disconnected|no device|not open|closed/i.test(m)) { return '프린터와 연결이 끊겼어요. USB 선(OTG 어댑터)과 프린터 전원을 확인하고 다시 연결해 주세요.'; }
     if (/disconnected|GATT/i.test(m)) { return '프린터와 연결이 끊겼어요. 프린터 전원과 거리를 확인하고 다시 연결해 주세요.'; }
     return m || (viaUsb() ? 'USB 연결에 실패했어요.' : '블루투스 연결에 실패했어요.');
@@ -198,7 +242,7 @@
     });
   }
   function usbConnect() {
-    if (!usbOk()) { return Promise.reject(new Error('이 브라우저에서는 USB 인쇄를 쓸 수 없어요(안드로이드 크롬이 필요해요).')); }
+    if (!usbOk()) { return Promise.reject(new Error(whyNot('USB'))); }
     if (connected()) { return Promise.resolve({ name: deviceName() }); }
     var saved = get().usbId, again = Promise.resolve(null);
     if (udev) {
@@ -212,6 +256,7 @@
     }
     return again.then(function (r) {
       if (r) { return r; }
+      if (navigator.userActivation && navigator.userActivation.isActive === false) { var ne = new Error(NEED_TAP.replace(/「Bluetooth Printer」/g, 'USB 프린터')); ne.code = 'NEED_TAP_USB'; throw ne; }
       return navigator.usb.requestDevice({ filters: [] }).then(usbAttach);
     }).catch(function (e) {
       lastErr = errText(e);
@@ -406,7 +451,7 @@
     }
     return c;
   }
-  // 주소 쪽지: memo = { blocks:[{ title, zip, name, addr, phone, note }], foot } — 창구에서 받아 적도록 크게
+  // 주소 쪽지: memo = { blocks:[{ title, zip, name, addr, phone, note }], foot } · 창구에서 받아 적도록 크게
   function renderBlocks(memo, wmm, dpi) {
     var pxmm = dpi / 25.4, k = Math.max(0.6, wmm / 80), W = Math.round(wmm * pxmm), m = Math.round(3 * pxmm);
     function sz(mm) { return mm * k * pxmm; }
@@ -533,11 +578,14 @@
     if (media === 'cont' && (rot === 90 || rot === 270)) { rot = 0; }   // 영수증 롤은 길이가 내용만큼이라 90도 회전을 쓰지 않는다
     var side = rot === 90 || rot === 270, t = turn(c, rot);
     var o = { dpi: Number(s.dpi) || 203, gap: s.gap, media: media, xoff: f.xoff == null ? s.xoff : f.xoff, invert: !!s.invert, after: s.after, wmm: side ? hmm : wmm, hmm: side ? wmm : hmm };
+    o.xoff = Math.min(Math.max(0, Number(o.xoff) || 0), xoffMax(o.wmm));   // 보정 + 용지 폭이 헤드 폭을 넘으면 오른쪽이 잘리므로 줄인다
     var bytes = s.proto === 'escpos' ? encodeEscpos(t, o) : encodeTspl(t, o);
     t.width = t.height = 0; c.width = c.height = 0;
     return bytes;
   }
   function pxToMm(px) { return px * 25.4 / (Number(get().dpi) || 203); }
+  function headMm() { return Math.min(112, Math.max(40, Number(get().head) || 104)); }
+  function xoffMax(wmm) { return Math.max(0, Math.floor((headMm() - (Number(wmm) || 0)) * 2) / 2); }
   // 라벨지는 스티커 크기대로, 영수증 롤은 롤 폭에 맞춰 내용 길이만큼
   function encode(entry, wmm, hmm, note) {
     var s = get(), dpi = Number(s.dpi) || 203;
@@ -565,6 +613,7 @@
   }
   // 블루투스 연결만 놓는다(같은 화면에서 다시 누르면 선택 창 없이 다시 붙는다)
   function release() {
+    clearTimeout(rcT); gen++;
     try { if (dev && dev.gatt && dev.gatt.connected) { dropping = true; dev.gatt.disconnect(); } } catch (e) { }
     ch = null;
   }
@@ -609,29 +658,42 @@
     document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
-  // 그림들을 PDF 하나로 묶어 공유 창으로(안 되면 내려받기). 사용자가 누른 단추 안에서 곧바로(기다림 없이) 불러야 한다.
-  function shareCanvases(list, what, prefix) {
-    var dpi = Number(get().dpi) || 203, pdf, n = list.length;
-    try { pdf = makePdf(list.map(function (c) { var b = toBits(c); c.width = c.height = 0; return b; }), dpi); }
-    catch (e) { return Promise.reject(new Error(what + ' PDF를 만들지 못했어요. ' + ((e && e.message) || ''))); }
+  // 그림(흑백 점)들을 PDF 하나로 묶어 공유 창으로. 사용자가 누른 단추 안에서 곧바로 불러야 한다(크롬은 누른 뒤 몇 초 안에만 공유 창을 연다).
+  // 공유 창을 아예 못 여는 기기에서만 내려받기로 저장한다(공유가 막히거나 늦어 실패한 것은 저장하지 않고 다시 누르게 한다).
+  // 만들기가 오래 걸려 공유 창이 막히면 만든 PDF를 2분 동안 들고 있다가, 같은 내용으로 다시 누를 때 곧바로 연다.
+  var pend = null;
+  function shareBits(bits, what, prefix, sig) {
+    var dpi = Number(get().dpi) || 203, n = bits.length, pdf;
+    try { pdf = makePdf(bits, dpi); } catch (e) { return Promise.reject(new Error(what + ' PDF를 만들지 못했어요. ' + ((e && e.message) || ''))); }
     var name = (prefix || '주소스티커') + '_' + stamp() + '.pdf', blob = new Blob([pdf], { type: 'application/pdf' }), file = null;
     try { file = new File([blob], name, { type: 'application/pdf' }); } catch (e) { file = null; }
-    var can = false;
-    try { can = !!(file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { can = false; }
-    if (can) {
-      return navigator.share({ files: [file], title: what + ' ' + n + '장' }).then(function () { lastRes = 'shared'; return n; }, function (e) {
-        if (e && e.name === 'AbortError') { throw new Error('보내기를 취소했어요. 다시 눌러 Print Label 앱을 골라 주세요.'); }
-        saveBlob(blob, name); lastRes = 'saved'; return n;
-      });
-    }
-    saveBlob(blob, name); lastRes = 'saved';
-    return Promise.resolve(n);
+    return openShare({ file: file, blob: blob, name: name, what: what, n: n, sig: sig });
   }
+  function openShare(job) {
+    var can = false;
+    try { can = !!(job.file && navigator.share && navigator.canShare && navigator.canShare({ files: [job.file] })); } catch (e) { can = false; }
+    if (!can) { pend = null; saveBlob(job.blob, job.name); lastRes = 'saved'; return Promise.resolve(job.n); }
+    return navigator.share({ files: [job.file], title: job.what + ' ' + job.n + '장' }).then(function () { pend = null; lastRes = 'shared'; return job.n; }, function (e) {
+      if (e && e.name === 'AbortError') { pend = null; throw new Error('보내기를 취소했어요. 다시 눌러 Print Label 앱을 골라 주세요.'); }
+      job.t = Date.now(); pend = job;   // 공유 창이 막힘(누른 뒤 시간이 지남·앞 공유가 안 끝남): 만든 PDF는 들고 있다가 다시 누르면 곧바로 연다
+      var ae = new Error(job.what + ' PDF를 만들었어요. 한 번 더 누르면 공유 창이 열려요.'); ae.code = 'SHARE_AGAIN'; throw ae;
+    });
+  }
+  function sigOf(x) { try { return JSON.stringify(x); } catch (e) { return String(Math.random()); } }
+  function appJob(sig, makeBits, what, prefix) {
+    if (busy) { return Promise.reject(new Error('보내는 중이에요. 잠시 뒤에 다시 눌러 주세요.')); }
+    if (pend && pend.sig === sig && Date.now() - pend.t < 120000) { busy = true; return openShare(pend).then(function (n) { busy = false; return n; }, function (e) { busy = false; throw e; }); }
+    pend = null; busy = true;
+    var bits;
+    try { bits = makeBits(); } catch (e) { busy = false; return Promise.reject(new Error(what + '를 그리지 못했어요. ' + ((e && e.message) || ''))); }
+    return shareBits(bits, what, prefix, sig).then(function (n) { busy = false; return n; }, function (e) { busy = false; throw e; });
+  }
+  function oneBits(c) { var b = toBits(c); c.width = c.height = 0; return b; }   // 한 장씩 그리고 곧바로 흑백으로 바꿔 그림을 놓는다(수백 장이어도 그림을 한꺼번에 들지 않음)
   function sendToApp(entries, wmm, hmm, note) {
-    var s = get(), dpi = Number(s.dpi) || 203, list;
-    try { list = entries.map(function (e) { return s.media === 'cont' ? rollCanvas(e, dpi, note) : render(e, wmm, hmm, dpi, note); }); }
-    catch (e) { return Promise.reject(new Error('스티커를 그리지 못했어요. ' + ((e && e.message) || ''))); }
-    return shareCanvases(list, '주소 스티커', '주소스티커');
+    var s = get(), dpi = Number(s.dpi) || 203;
+    return appJob(sigOf(['s', entries, wmm, hmm, note, s.media, s.rollW, s.rollDir, s.rollLen]), function () {
+      return entries.map(function (e) { return oneBits(s.media === 'cont' ? rollCanvas(e, dpi, note) : render(e, wmm, hmm, dpi, note)); });
+    }, '주소 스티커', '주소스티커');
   }
   // 프린터로 보내기 공통: jobs = 명령(바이트)을 만드는 함수들. 연결 → 차례로 보냄 → (설정 시) 연결 놓기
   function sendJobs(jobs) {
@@ -657,7 +719,7 @@
 
   // entries: 스티커 한 장씩. 크기는 mm(영수증 롤이면 무시하고 롤 폭·내용 길이). 연결이 없으면(사용자 단추 안에서만) 선택 창을 띄운다.
   function print(entries, wmm, hmm, note) {
-    if (busy) { return Promise.reject(new Error('인쇄 중이에요. 잠시 뒤에 다시 눌러 주세요.')); }
+    if (busy) { return Promise.reject(new Error(viaApp() ? '보내는 중이에요. 잠시 뒤에 다시 눌러 주세요.' : '인쇄 중이에요. 잠시 뒤에 다시 눌러 주세요.')); }
     lastRes = '';
     if (viaApp()) { return sendToApp(entries, wmm, hmm, note); }
     return sendJobs(entries.map(function (e) { return function () { return encode(e, wmm, hmm, note); }; }));
@@ -667,8 +729,9 @@
     if (busy) { return Promise.reject(new Error('인쇄 중이에요. 잠시 뒤에 다시 눌러 주세요.')); }
     lastRes = '';
     var dpi = Number(get().dpi) || 203, rw = Math.min(112, Math.max(40, Number(rollW) || rollWidth())), c;
-    try { c = renderMemo(memo || {}, rw, dpi); } catch (e) { return Promise.reject(new Error('메모를 그리지 못했어요. ' + ((e && e.message) || ''))); }
-    if (viaApp()) { return shareCanvases([c], '접수 메모', '접수메모'); }
+    var what = memo && memo.blocks ? '주소 쪽지' : '접수 메모';
+    if (viaApp()) { return appJob(sigOf(['m', memo, rw]), function () { return [oneBits(renderMemo(memo || {}, rw, dpi))]; }, what, what === '주소 쪽지' ? '주소쪽지' : '접수메모'); }
+    try { c = renderMemo(memo || {}, rw, dpi); } catch (e) { return Promise.reject(new Error(what + '를 그리지 못했어요. ' + ((e && e.message) || ''))); }
     return sendJobs([function () { return encodeCanvas(c, rw, pxToMm(c.height), { media: 'cont' }); }]);
   }
   // 위치 맞춤 시험지(헤드 폭 전체, 가로 보정 없이)
@@ -703,11 +766,13 @@
     var s = get(), old = $('bleSet'); if (old) { old.remove(); }
     var m = document.createElement('div'); m.id = 'bleSet';
     function sel(id, label, cur, list) { return '<label>' + label + '<select id="' + id + '">' + list.map(function (x) { return '<option value="' + x[0] + '"' + (String(x[0]) === String(cur) ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>'; }
+    var env = envInfo();
     m.innerHTML = '<div class="b-card" role="dialog" aria-label="프린터 연결 설정"><h3>프린터 연결 설정 <small style="font-weight:400;color:#888;font-size:13px">' + esc(BUILD) + '</small></h3>' +
+      '<p class="b-note" id="bsEnv" style="margin:0 0 8px;padding:8px 10px;border-radius:8px;background:' + (env.secure && !env.content ? '#eef7ee' : '#fff4e5') + '">' + esc(envText()) + '</p>' +
       sel('bsVia', '인쇄 방식', s.via, [['dialog', '기기 인쇄 창(컴퓨터 등 · 크롬 인쇄 창)'], ['usb', 'USB 선(OTG)으로 바로 인쇄(태블릿)'], ['ble', '블루투스(BLE)로 바로 인쇄(태블릿)'], ['app', '전용 앱(Print Label 등)으로 보내기 · PDF 공유(태블릿)']]) +
       '<div id="bsAppNote" class="b-note" style="display:none;background:#f3f6fa;border-radius:10px;padding:10px 12px;margin:8px 0">' +
-      '<b>전용 앱으로 보내기</b> — 프린터와 직접 연결하지 않고, 스티커를 라벨 크기 PDF로 만들어 공유 창으로 넘깁니다. 공유 창에서 <b>Print Label</b>을 고르고, 앱에서 인쇄 너비·높이를 스티커 크기와 같게 두고 인쇄하세요.' +
-      ' 공유 창이 열리지 않으면 PDF가 다운로드 폴더에 저장되니, 앱의 「PDF 인쇄」로 여세요. 브라우저 블루투스로 바로 인쇄가 안 되는 프린터에 쓰는 길입니다.</div>' +
+      '<b>전용 앱으로 보내기</b>: 프린터와 직접 연결하지 않고, 스티커를 라벨 크기 PDF로 만들어 공유 창으로 넘깁니다. 공유 창에서 <b>Print Label</b>을 고르고(목록에 없으면 이 방식은 쓸 수 없어요), 앱에서 인쇄 너비·높이를 스티커 크기와 같게 두고 인쇄하세요. 브라우저 블루투스로 바로 인쇄가 안 되는 프린터에 쓰는 길입니다.' +
+      '<br><b style="color:#b3261e">개인정보</b>: PDF에는 이름·주소·전화가 들어 있고 고른 앱으로 넘어갑니다. 공유 창에서 메신저·메일 같은 다른 앱은 고르지 마세요. 공유 창을 못 여는 기기에서는 PDF가 다운로드 폴더에 저장되니 인쇄 뒤 지워 주세요. 어르신 화면에서는 공유 창을 띄우지 않고 직원을 부르게 합니다.</div>' +
       '<div id="bsPaper"><div class="b-two">' + sel('bsMedia', '용지', s.media, [['gap', '라벨지 · 갭(라벨 사이 틈)'], ['bline', '라벨지 · 블랙마크(뒷면 검은 표시)'], ['cont', '영수증 롤(연속지)']]) +
       '<label class="b-dir">가로 위치 보정(mm) <small>위치 맞춤 시험지로 확인</small><input id="bsXoff" type="number" min="0" max="40" step="0.5" value="' + esc(s.xoff) + '"></label></div>' +
       '<div class="b-two" id="bsRollBox">' + sel('bsRollW', '롤 폭', s.rollW, [[80, '80mm'], [58, '58mm'], [76, '76mm'], [100, '100mm']]) +
@@ -729,7 +794,7 @@
       '<label class="b-bt">추가 서비스 번호(선택) <small>프린터를 못 찾으면 제조사 자료의 번호를 넣으세요(쉼표로 여러 개)</small><input id="bsUuid" type="text" value="' + esc(s.uuids) + '" placeholder="예) ffe0, 49535343-fe7d-4ae5-8fa9-9fafd205e455"></label></details></div>' +
       '<div class="b-msg" id="bsMsg">' + (s.via === 'app' ? '연결할 필요가 없어요. 인쇄를 누르면 공유 창이 열립니다.' : (connected() ? '연결됨: ' + esc(deviceName() || '프린터') : '연결되지 않았어요.')) + '</div>' +
       '<div class="b-row"><button class="pri" id="bsConn">프린터 연결</button><button id="bsTest">시험 인쇄</button><button id="bsRuler">위치 맞춤 시험지</button><button id="bsSave">저장하고 닫기</button></div>' +
-      '<p class="b-note"><b>USB</b>: 태블릿 충전 단자에 OTG 어댑터를 끼우고 프린터 USB 선을 연결한 뒤 「프린터 연결」을 누르세요. 처음에는 안드로이드가 허용 여부를 묻습니다(허용). 컴퓨터(윈도우)에서는 프린터 드라이버가 먼저 잡고 있어 열리지 않을 수 있습니다. 「한 번에 보내는 크기」·「보내는 간격」은 블루투스에서만 씁니다.<br><b>라벨지와 영수증 롤</b>: 라벨지는 스티커 크기(가로×세로)대로 한 장씩, 영수증 롤은 「돌려 찍기」(라벨 높이 = 롤 폭, 길이는 직접 지정)나 「위에서 아래로」(내용 길이만큼)로 뽑습니다(어르신 화면의 「감열 영수증」 접수 메모는 늘 위에서 아래로). 블루투스로 보낼 때 글자가 중간부터 옆으로 밀려 나오면 고급 설정의 「보내는 간격」을 늘리세요(기본 30ms). 먼저 <b>위치 맞춤 시험지</b>를 뽑아 용지 왼쪽 끝에 보이는 맨 왼쪽 눈금(mm)을 「가로 위치 보정」에 넣으면 좌우가 맞습니다. 용지를 바꾼 뒤에는 프린터의 FEED 단추를 5~6초 눌러 용지 보정을 다시 하세요(영수증 롤을 「라벨지」로 두면 틈을 찾느라 빈 종이가 길게 나옵니다).<br><b>블루투스</b>: 태블릿(안드로이드 크롬)에서 BLE(저전력 블루투스) 라벨프린터를 쓸 때의 설정입니다. 탭의 블루투스 설정에서 미리 등록하지 않아도 됩니다(「프린터 연결」을 누르면 뜨는 목록에서 「Bluetooth Printer」를 고릅니다). 프린터가 클래식 블루투스(SPP)만 지원하면 연결되지 않습니다. 안드로이드 11 이하는 「위치」 기능을 켜야 프린터가 검색될 수 있습니다. 시험 인쇄의 테두리가 라벨 가장자리와 맞는지 확인하고, 거꾸로·검은 바탕이면 회전·색 반전을 바꾸세요.</p></div>';
+      '<p class="b-note"><b>USB</b>: 태블릿 충전 단자에 OTG 어댑터를 끼우고 프린터 USB 선을 연결한 뒤 「프린터 연결」을 누르세요. 처음에는 안드로이드가 허용 여부를 묻습니다(허용). 컴퓨터(윈도우)에서는 프린터 드라이버가 먼저 잡고 있어 열리지 않을 수 있습니다. 「한 번에 보내는 크기」·「보내는 간격」은 블루투스에서만 씁니다.<br><b>라벨지와 영수증 롤</b>: 라벨지는 스티커 크기(가로×세로)대로 한 장씩, 영수증 롤은 「돌려 찍기」(라벨 높이 = 롤 폭, 길이는 직접 지정)나 「위에서 아래로」(내용 길이만큼)로 뽑습니다(어르신 화면의 「감열 영수증」 접수 메모는 늘 위에서 아래로). 블루투스로 보낼 때 글자가 중간부터 옆으로 밀려 나오면 고급 설정의 「보내는 간격」을 늘리세요(기본 30ms). 먼저 <b>위치 맞춤 시험지</b>를 뽑아 용지 왼쪽 끝에 보이는 맨 왼쪽 눈금(mm)을 「가로 위치 보정」에 넣으면 좌우가 맞습니다. 용지를 바꾼 뒤에는 프린터의 FEED 단추를 5~6초 눌러 용지 보정을 다시 하세요(영수증 롤을 「라벨지」로 두면 틈을 찾느라 빈 종이가 길게 나옵니다).<br><b>블루투스</b>: 태블릿(안드로이드 크롬)에서 BLE(저전력 블루투스) 라벨프린터를 쓸 때의 설정입니다. 탭의 블루투스 설정에서 미리 등록하지 않아도 됩니다(「프린터 연결」을 누르면 뜨는 목록에서 「Bluetooth Printer」를 고릅니다). 프린터가 클래식 블루투스(SPP)만 지원하면 연결되지 않습니다. 안드로이드 11 이하는 「위치」 기능을 켜야 프린터가 검색될 수 있습니다. 안드로이드 12 이상은 크롬에 「근처 기기」 권한이 있어야 합니다. 시험 인쇄의 테두리가 라벨 가장자리와 맞는지 확인하고, 거꾸로·검은 바탕이면 회전·색 반전을 바꾸세요.<br><b>쓸 수 없는 연결</b>: 랜·와이파이로 잇는 네트워크 프린터(9100 포트)는 웹 페이지가 직접 보낼 수 없어 바로 인쇄가 안 됩니다(USB나 블루투스로). 제조사 앱을 깔았다면 USB를 꽂을 때 「항상 이 앱으로 열기」를 고르지 마세요(앱이 프린터를 잡으면 크롬이 못 엽니다). 연결을 계속 잡아 두는 동안에는 휴대폰·태블릿의 제조사 앱이 같은 프린터를 못 찾을 수 있습니다.</p></div>';
     // 「라벨 인쇄」 창처럼 모달 대화상자가 열려 있으면 그 바깥은 눌리지 않으므로, 맨 위 모달 안에 띄운다
     var host = null;
     try { Array.prototype.forEach.call(document.querySelectorAll('dialog[open]'), function (d) { if (d.matches(':modal')) { host = d; } }); } catch (e) { host = null; }
@@ -753,17 +818,27 @@
     $('bsMedia').onchange = showFor;
     $('bsRollDir').onchange = showFor;
     showFor();
+    var via0 = s.via, clampNote = '';
     function read() {
-      return set({ via: $('bsVia').value, proto: $('bsProto').value, dpi: Number($('bsDpi').value), rotate: Number($('bsRot').value), gap: Number($('bsGap').value) || 0,
+      var media = $('bsMedia').value, rollW = Number($('bsRollW').value) || 80, head = Number($('bsHead').value) || 104;
+      var wv = media === 'cont' ? rollW : ((opts.size && opts.size()[0]) || 100), xo = Math.min(40, Math.max(0, Number($('bsXoff').value) || 0));
+      var xmax = Math.max(0, Math.floor((Math.min(112, Math.max(40, head)) - wv) * 2) / 2);
+      clampNote = '';
+      if (xo > xmax) { xo = xmax; $('bsXoff').value = xo; clampNote = '가로 위치 보정을 ' + xo + 'mm로 줄였어요(용지 폭 ' + wv + 'mm + 보정이 헤드 폭 ' + head + 'mm를 넘으면 오른쪽이 잘려요). '; }
+      var c = set({ via: $('bsVia').value, proto: $('bsProto').value, dpi: Number($('bsDpi').value), rotate: Number($('bsRot').value), gap: Number($('bsGap').value) || 0,
         chunk: Number($('bsChunk').value), delay: Number($('bsDelay').value) || 0, after: $('bsAfter').value, invert: $('bsInv').checked, uuids: clean($('bsUuid').value),
-        media: $('bsMedia').value, xoff: Math.min(40, Math.max(0, Number($('bsXoff').value) || 0)), keep: $('bsKeep').checked,
-        rollW: Number($('bsRollW').value) || 80, tail: Math.min(40, Math.max(0, Number($('bsTail').value) || 0)), head: Number($('bsHead').value) || 104,
+        media: media, xoff: xo, keep: $('bsKeep').checked,
+        rollW: rollW, tail: Math.min(40, Math.max(0, Number($('bsTail').value) || 0)), head: head,
         rollDir: $('bsRollDir').value, rollLen: Math.min(300, Math.max(30, Number($('bsRollLen').value) || 100)) });
+      // 블루투스에서 다른 방식으로 바꾸면 잡고 있던 연결·다시 연결을 놓는다(앱이 프린터를 찾을 수 있게)
+      if (via0 === 'ble' && c.via !== 'ble') { disconnect(); }
+      via0 = c.via;
+      return c;
     }
-    function msg(t) { $('bsMsg').textContent = t; }
+    function msg(t) { $('bsMsg').textContent = clampNote + t; }
     $('bsConn').onclick = function () {
       read(); msg(viaUsb() ? 'USB 프린터를 찾는 중… 선택 창에서 프린터를 골라 주세요.' : '프린터를 찾는 중… 선택 창에서 프린터를 골라 주세요.');
-      connect().then(function (d) { msg('연결됨: ' + ((d && d.name) || '프린터')); }, function (e) { msg('연결 실패: ' + e.message); });
+      connect({ pick: true }).then(function (d) { msg('연결됨: ' + ((d && d.name) || '프린터')); }, function (e) { msg('연결 실패: ' + e.message); });
     };
     $('bsTest').onclick = function () {
       read();
@@ -775,14 +850,14 @@
       read(); msg('위치 맞춤 시험지를 보내는 중…');
       printRuler().then(function () { msg('보냈어요. 용지 왼쪽 끝에 보이는 맨 왼쪽 눈금(mm)을 「가로 위치 보정」에 넣고 저장하세요. 오른쪽 끝 눈금 − 왼쪽 끝 눈금이 실제 인쇄 폭입니다.'); }, function (e) { msg('실패: ' + e.message); });
     };
-    $('bsSave').onclick = function () { read(); m.remove(); if (opts.onClose) { opts.onClose(get()); } };
+    $('bsSave').onclick = function () { read(); m.remove(); if (clampNote) { try { alert(clampNote); } catch (e) { } } if (opts.onClose) { opts.onClose(get()); } };
   }
 
   // 인쇄 결과 안내 문구(앱으로 보내기는 공유했는지·내려받았는지에 따라 다르다)
   function resultText(n, printed, what) {
     what = what || '스티커';
     if (lastRes === 'shared') { return what + ' ' + n + '장을 앱으로 넘겼어요. Print Label 앱에서 인쇄를 누르세요(인쇄 너비·높이를 용지와 같게).'; }
-    if (lastRes === 'saved') { return what + ' ' + n + '장을 PDF로 저장했어요(다운로드 폴더). Print Label 앱의 「PDF 인쇄」로 열어 인쇄하세요.'; }
+    if (lastRes === 'saved') { return what + ' ' + n + '장을 PDF로 저장했어요(다운로드 폴더). Print Label 앱에서 그 PDF를 열어 인쇄하고, 인쇄한 뒤에는 PDF를 지워 주세요(이름·주소가 들어 있어요).'; }
     return printed || (what + ' ' + n + '장을 프린터로 보냈어요.');
   }
 
@@ -790,6 +865,9 @@
     render: render, renderRoll: renderRoll, renderMemo: renderMemo, renderRuler: renderRuler, printMemo: printMemo, printRuler: printRuler, isRoll: isRoll, rollWidth: rollWidth, rollCanvas: rollCanvas, rollLen: rollLen, rollSide: rollSide,
     encode: encode, encodeCanvas: encodeCanvas, encodeTspl: encodeTspl, encodeEscpos: encodeEscpos, toBits: toBits, makePdf: makePdf, deviceName: deviceName, via: function () { return get().via; },
     direct: function () { var v = get().via; return (v === 'ble' || v === 'usb' || v === 'app') && supported(); }, lastError: function () { return lastErr; },
+    // 어르신 화면에서 바로 뽑을 수 있는 방식(블루투스·USB). 앱으로 보내기는 공유 창이 떠서 직원이 할 때만 쓴다
+    kioskDirect: function () { var v = get().via; return (v === 'ble' || v === 'usb') && supported(); }, busy: function () { return busy; },
+    envInfo: envInfo, envText: envText,
     lastResult: function () { return lastRes; }, resultText: resultText, testNote: testNote, build: BUILD,
     // 이 화면에서 프린터를 이미 골랐는지(골랐으면 끊겨 있어도 선택 창 없이 다시 붙는다)
     ready: function () { var v = get().via; return v === 'app' || v === 'dialog' || (v === 'usb' ? !!udev : !!(dev && dev.gatt)); },

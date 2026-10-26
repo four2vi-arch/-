@@ -1,0 +1,266 @@
+// 물어물어 v1.11(8차) 새 기능·고친 곳 시험: 주소 쪽지 보내는 동안 막기, 앱으로 보내기(직원만·잠금·다시 누르기·내려받기 대체),
+// 끊김 띠 위치·다시 연결 멈춤, 프린터 오류 문구, 옛 설정 옮김, 가로 보정 상한, 이 기기 상태, 키보드 숫자판, 말로 하기, 직원 설정, 엑셀 작성자.
+// 사용: node v111_test.js <출품본.html> <주소록.xlsx> <결과 폴더>   (가짜 프린터·가짜 음성 인식·가상 자료만)
+const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const fs = require('fs'); const path = require('path'); const cp = require('child_process');
+const [HTML, INPUT, OUT] = process.argv.slice(2);
+fs.mkdirSync(OUT, { recursive: true });
+let pass = 0, fail = 0; const ok = (n, c, x) => { (c ? pass++ : fail++); console.log((c ? '통과  ' : '실패  ') + n + (x ? ' · ' + x : '')); };
+
+// 가짜 BLE 프린터: 끊김 알림(gattserverdisconnected)을 낼 수 있고, 쓰기 하나에 writeMs 만큼 걸린다. window.__bt 로 조종한다
+const MOCK = `(() => {
+  const bt = window.__bt = { writes: [], connects: 0, failConnect: false, writeMs: 0, reqErr: null, reqs: 0, listeners: [] };
+  const ch = { uuid: 'ffe1', properties: { write: true, writeWithoutResponse: true },
+    writeValueWithoutResponse: (v) => new Promise(r => setTimeout(() => { bt.writes.push(Array.from(v)); r(); }, bt.writeMs)), writeValue: async (v) => { bt.writes.push(Array.from(v)); } };
+  const svc = { uuid: 'ffe0', getCharacteristics: async () => [ch] };
+  const dev = bt.dev = { name: 'Bluetooth Printer', addEventListener(t, f) { if (t === 'gattserverdisconnected') bt.listeners.push(f); },
+    gatt: { connected: false, connect: async function () { bt.connects++; if (bt.failConnect) { const e = new Error('Connection failed for unknown reason.'); e.name = 'NetworkError'; throw e; } dev.gatt.connected = true; return dev.gatt; },
+      disconnect() { dev.gatt.connected = false; bt.listeners.forEach(f => f()); }, getPrimaryServices: async () => [svc] } };
+  bt.drop = () => { dev.gatt.connected = false; bt.listeners.forEach(f => f()); };
+  Object.defineProperty(navigator, 'bluetooth', { configurable: true, value: { requestDevice: async () => { bt.reqs++; if (bt.reqErr) { const e = new Error(bt.reqErr[1]); e.name = bt.reqErr[0]; throw e; } return dev; } } });
+  // 공유: 부른 횟수와 넘긴 파일. shareErr 가 있으면 그 이름의 오류
+  const sh = window.__sh = { calls: [], err: null, can: true, dl: [] };
+  navigator.canShare = (o) => sh.can && !!(o && o.files);
+  navigator.share = (o) => { sh.calls.push({ n: o.files.length, name: o.files[0].name, size: o.files[0].size, type: o.files[0].type }); if (sh.err) { const e = new Error(sh.err); e.name = sh.err; return Promise.reject(e); } return Promise.resolve(); };
+  const click0 = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () { if (this.download && !sh.passDl) { sh.dl.push(this.download); return; } return click0.call(this); };
+  // 화면 꺼짐 막기
+  const wl = window.__wl = { req: 0, rel: 0 };
+  Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => { wl.req++; const l = { released: false, _h: [], addEventListener(t, f) { this._h.push(f); }, release() { wl.rel++; this.released = true; this._h.forEach(f => f()); return Promise.resolve(); } }; return l; } } });
+  // 가짜 음성 인식: __sr.next = { error: 'not-allowed' } 또는 { text: '...', ms: 500 }
+  const sr = window.__sr = { next: null, starts: 0, aborts: 0 };
+  window.SpeechRecognition = window.webkitSpeechRecognition = function () {
+    const me = this; let t = 0;
+    me.start = function () { sr.starts++; const n = sr.next || { error: 'no-speech' };
+      t = setTimeout(() => { if (n.error) { me.onerror && me.onerror({ error: n.error }); } else { me.onresult && me.onresult({ results: [[{ transcript: n.text }]] }); } me.onend && me.onend(); }, n.ms || 50); };
+    me.abort = function () { sr.aborts++; clearTimeout(t); me.onerror && me.onerror({ error: 'aborted' }); me.onend && me.onend(); };
+  };
+})();`;
+async function open(browser, opts) {
+  opts = opts || {};
+  const ctx = await browser.newContext(Object.assign({ locale: 'ko-KR', viewport: { width: 1280, height: 800 }, acceptDownloads: true }, opts.ctx || {}));
+  const page = await ctx.newPage(); page.errs = [];
+  page.on('pageerror', e => page.errs.push(e.message));
+  await page.addInitScript(MOCK);
+  if (opts.init) await page.addInitScript(opts.init[0], opts.init[1]);
+  await page.goto('file://' + HTML + (opts.hash || ''));
+  await page.waitForFunction(() => /구간/.test(document.querySelector('#dbInfo').textContent), null, { timeout: 60000 });
+  await page.waitForFunction(() => !/확인 중/.test(document.querySelector('#intChip').textContent), null, { timeout: 30000 });
+  if (await page.isVisible('#btnPrivacyOk')) await page.click('#btnPrivacyOk');
+  return page;
+}
+const toasts = p => p.evaluate(() => Array.from(document.querySelectorAll('.k-toast')).map(e => e.textContent).join(' | '));
+const SET = (ble, kiosk) => [([b, k]) => { localStorage.setItem('zipfinder.ble.v1', JSON.stringify(b)); localStorage.setItem('zipfinder.kiosk.v1', JSON.stringify(Object.assign({ region: '전북특별자치도 정읍시', idle: 300 }, k))); }, [ble, kiosk]];
+async function toFinish(p, sender) {
+  await p.evaluate((sender) => { const st = __kiosk.state(); st.entries.push(
+    { name: '가상일', phone: '010-0000-1111', zip: '56180', addr1: '전북특별자치도 정읍시 충정로 234-1', addr2: '정읍시청 3층', check: false },
+    { name: '가상이', phone: '', zip: '56204', addr1: '전북특별자치도 정읍시 시기4길 42', addr2: '101동 1004호', check: true, why: '비슷한 주소' });
+    st.sender = sender; __kiosk.finish(); }, sender);
+  await p.waitForSelector('#kFinMsg');
+}
+(async () => {
+  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--allow-file-access-from-files'] });
+
+  // ---- 1. 주소 쪽지(영수증 롤, 블루투스): 보내는 동안 단추 막기 · 다시 눌러도 한 장 · 끝나면 안내
+  let p = await open(browser, { init: SET({ via: 'ble', media: 'cont', rollW: 76, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80' }) });
+  await p.evaluate(() => { window.__bt.writeMs = 40; const o = __ble.printMemo; __ble.printMemo = function (m, w) { window.__memo = { m: m, w: w }; return o.apply(this, arguments); }; });
+  await p.click('#btnKiosk'); await p.waitForSelector('#kiosk:not([hidden])');
+  ok('직원이 연 어르신 화면: 프린터 고르기 안내 창', !!(await p.waitForSelector('#kModal', { timeout: 3000 }).catch(() => null)));
+  ok('아래 줄 「프린터 연결 전(직원)」 표시', !!(await p.$('#kPrnHint')));
+  await p.click('#kModal button.k-btn.pri');   // 프린터 연결(누름 = 사용자 몸짓)
+  await p.waitForFunction(() => !document.querySelector('#kModal'), null, { timeout: 5000 });
+  ok('연결 뒤 표시 사라짐', !(await p.$('#kPrnHint')));
+  await toFinish(p, { name: '가상발송', phone: '010-0000-9999', zip: '56180', addr1: '전북특별자치도 정읍시 충정로 234-1', addr2: '', check: true, why: '비슷한 주소' });
+  ok('마침 단추 「주소 쪽지 뽑기」', (await p.textContent('#kPrintBtn')).trim() === '주소 쪽지 뽑기');
+  await p.click('#kPrintBtn');
+  await p.waitForTimeout(150);
+  ok('보내는 동안 단추 막힘·「뽑는 중」', await p.evaluate(() => { const b = document.getElementById('kPrintBtn'); return b.disabled && /뽑는 중/.test(b.textContent); }));
+  ok('말풍선 「잠시 기다려 주세요 · 30초쯤」', /기다려 주세요/.test(await p.textContent('#kFinMsg')) && /30초/.test(await p.textContent('#kFinMsg')));
+  await p.evaluate(() => { document.getElementById('kPrintBtn').disabled = false; document.getElementById('kPrintBtn').click(); });   // 막힌 단추를 억지로 다시 눌러도
+  await p.waitForTimeout(200);
+  ok('다시 눌러도 실패 창 없이 「지금 뽑고 있어요」', !(await p.$('#kModal')) && /지금 뽑고 있어요/.test(await toasts(p)));
+  await p.waitForFunction(() => /다 됐어요! 뽑은/.test(document.getElementById('kFinMsg').textContent), null, { timeout: 60000 });
+  const nSize = await p.evaluate(() => { const all = [].concat.apply([], window.__bt.writes); let s = ''; for (const c of all) s += String.fromCharCode(c); return (s.match(/SIZE /g) || []).length; });
+  ok('쪽지는 한 장만 나감', nSize === 1, nSize + '장');
+  ok('끝나면 단추 다시 켜짐', await p.evaluate(() => !document.getElementById('kPrintBtn').disabled));
+  const memo = await p.evaluate(() => window.__memo);
+  ok('쪽지 폭 = 프린터 롤 폭(76mm)', memo && memo.w === 76, memo && memo.w);
+  ok('보내는 분 칸에도 「창구 확인 필요」', memo && memo.m.blocks[0].title === '보내는 분' && /창구 확인 필요/.test(memo.m.blocks[0].note || ''), memo && JSON.stringify(memo.m.blocks[0]));
+  ok('쪽지에 번호·QR 없음', memo && !memo.m.no && !memo.m.qr);
+  ok('처음 화면으로: 뽑은 뒤라 「지워도 괜찮아요」', await (async () => { await p.click('#kDone'); const t = await p.textContent('#kModal'); await p.click('#kModal button.k-btn.pri'); return /지워도 괜찮아요/.test(t); })());
+  // 보내는 분 주소를 창구에서 적기로 한 경우
+  await p.evaluate(() => { const st = __kiosk.state(); st.entries.length = 0; });
+  await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
+  await p.click('#kPrintBtn');
+  await p.waitForFunction(() => /다 됐어요! 뽑은/.test(document.getElementById('kFinMsg').textContent), null, { timeout: 60000 });
+  const memo2 = await p.evaluate(() => window.__memo);
+  ok('보내는 분 주소 없음 → 「주소는 창구에서 적기」', memo2 && memo2.m.blocks[0].note === '주소는 창구에서 적기', memo2 && memo2.m.blocks[0].note);
+  // 끊김 띠: 「직원」 단추를 가리지 않음
+  await p.evaluate(() => { window.__bt.failConnect = true; window.__bt.drop(); });
+  await p.waitForSelector('#kBleBar', { timeout: 3000 });
+  const geo = await p.evaluate(() => { const bar = document.getElementById('kBleBar').getBoundingClientRect(), sb = document.getElementById('kStaff').getBoundingClientRect(); const hit = document.elementFromPoint(sb.left + sb.width / 2, sb.top + sb.height / 2); return { barBottom: bar.bottom, staffTop: sb.top, hit: hit && hit.id }; });
+  ok('끊김 띠가 「직원」 단추 위에 뜸(단추를 누를 수 있음)', geo.barBottom <= geo.staffTop + 1 && geo.hit === 'kStaff', JSON.stringify(geo));
+  // 인쇄 방식을 바꾸면 다시 연결을 멈춤
+  await p.evaluate(() => __ble.set({ via: 'dialog' }));
+  const c0 = await p.evaluate(() => window.__bt.connects);
+  await p.waitForTimeout(5000);
+  const c1 = await p.evaluate(() => window.__bt.connects);
+  ok('방식을 바꾸면 다시 연결 시도 멈춤', c1 - c0 <= 1 && (await p.evaluate(() => __ble.status())) === 'none', (c1 - c0) + '번 · ' + (await p.evaluate(() => __ble.status())));
+  ok('페이지 오류 없음(1)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
+  // ---- 2. 이미 고른 프린터가 꺼져 있음 → 「전원·거리」(선택 창으로 넘어가지 않음) / 오류 문구 나눔
+  p = await open(browser, { init: SET({ via: 'ble', cfgv: 2 }, { paper: 'lbl' }) });
+  await p.evaluate(() => { const b = document.createElement('button'); b.id = 'tConn'; b.textContent = 'c'; b.onclick = () => { window.__r = null; __ble.connect(window.__copt).then(() => { window.__r = 'ok'; }, e => { window.__r = e.message; }); }; document.body.appendChild(b); });
+  await p.click('#tConn'); await p.waitForFunction(() => window.__r);
+  await p.evaluate(() => { window.__bt.failConnect = true; window.__bt.drop(); __ble.set({ keep: false }); });
+  const reqs0 = await p.evaluate(() => window.__bt.reqs);
+  await p.click('#tConn'); await p.waitForFunction(() => window.__r, null, { timeout: 20000 });
+  const r1 = await p.evaluate(() => window.__r);
+  ok('꺼진 프린터: 「전원·거리」 안내', /전원/.test(r1) && /가까이/.test(r1), r1);
+  ok('꺼진 프린터: 선택 창을 열지 않음', (await p.evaluate(() => window.__bt.reqs)) === reqs0);
+  await p.evaluate(() => { __ble.disconnect(); });
+  for (const [name, msg, want] of [['NotFoundError', 'No Services found in device.', /서비스 번호/], ['NotFoundError', 'Bluetooth adapter not available.', /블루투스가 꺼져/], ['NotFoundError', 'User cancelled the requestDevice() chooser.', /고르지 않았어요/], ['NetworkError', 'Connection failed for unknown reason.', /전원/]]) {
+    await p.evaluate(([a, b]) => { window.__bt.reqErr = [a, b]; window.__copt = { pick: true }; }, [name, msg]);
+    await p.evaluate(() => { location.hash = ''; });
+    const r = await (async () => { await p.evaluate(() => { window.__r = null; }); await p.click('#tConn'); await p.waitForFunction(() => window.__r, null, { timeout: 5000 }); return p.evaluate(() => window.__r); })();
+    ok('오류 문구: ' + msg.slice(0, 30), want.test(r), r);
+  }
+  ok('「다시 해 볼게요」(없는 단추) 안내 없음', !(await p.evaluate(() => /다시 해 볼게요/.test(document.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/g, '')) || /다시 해 볼게요/.test(String(__ble.connect)))));
+  // 옛 설정 옮김 · 다른 키 보존 · 가로 보정 상한 · 이 기기 상태
+  const mig = await p.evaluate(() => {
+    localStorage.setItem('zipfinder.ble.v1', JSON.stringify({ via: 'ble', delay: 10, futureKey: 7 })); const a = __ble.get().delay;
+    __ble.set({ proto: 'tspl' }); const raw = JSON.parse(localStorage.getItem('zipfinder.ble.v1'));
+    localStorage.setItem('zipfinder.ble.v1', JSON.stringify({ via: 'ble', delay: 10, cfgv: 2 })); const b = __ble.get().delay;
+    return { a, keep: raw.futureKey, cfgv: raw.cfgv, b };
+  });
+  ok('옛 설정(판 없음)의 간격 10ms → 30ms', mig.a === 30, JSON.stringify(mig));
+  ok('설정을 저장해도 모르는 키는 남김 · 판 표시', mig.keep === 7 && mig.cfgv === 2);
+  ok('새 판에서 직원이 고른 10ms는 그대로', mig.b === 10);
+  const head = await p.evaluate(() => { __ble.set({ media: 'cont', rollW: 100, xoff: 12, head: 104, proto: 'tspl' }); const c = document.createElement('canvas'); c.width = 800; c.height = 80; const b = __ble.encodeCanvas(c, 100, 10); let s = ''; for (let i = 0; i < 120; i++) s += String.fromCharCode(b[i]); return s; });
+  ok('가로 보정 + 용지 폭이 헤드 폭을 넘지 않음(100mm 롤·보정 12 → 4mm)', /^SIZE 104 mm/.test(head) && /BITMAP 32,0,/.test(head), head.split('\r\n').filter(l => /SIZE|BITMAP/.test(l)).join(' / ').slice(0, 80));
+  const env = await p.evaluate(() => __ble.envText());
+  ok('이 기기 상태 한 줄(파일·안전한 연결·블루투스·USB·공유)', /이 기기 상태: 파일\(file:\/\/\)/.test(env) && /안전한 연결 됨/.test(env) && /블루투스 됨/.test(env) && /앱 공유 됨/.test(env), env);
+  await p.evaluate(() => __ble.openSettings({}));
+  ok('설정 창 첫 줄에 이 기기 상태', /이 기기 상태/.test(await p.textContent('#bsEnv')));
+  await p.selectOption('#bsVia', 'app');
+  ok('앱으로 보내기 안내에 개인정보 알림', /이름·주소·전화/.test(await p.textContent('#bsAppNote')) && /다른 앱은 고르지/.test(await p.textContent('#bsAppNote')));
+  ok('설정 안내: 네트워크 프린터·「항상 이 앱으로」·근처 기기', await p.evaluate(() => { const t = document.querySelector('#bleSet .b-note:last-of-type').textContent; return /9100/.test(t) && /항상 이 앱으로 열기/.test(t) && /근처 기기/.test(t); }));
+  await p.click('#bsSave');
+  ok('페이지 오류 없음(2)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
+  // ---- 3. 앱으로 보내기: 어르신 화면은 직원이 누를 때만 · 자동 뽑기는 공유 안 함 · 공유 막힘은 저장하지 않고 다시 누르기 · 공유를 못 여는 기기만 내려받기
+  p = await open(browser, { init: SET({ via: 'app', media: 'gap', cfgv: 2 }, { paper: 'lbl', lblW: 100, lblH: 45, autoPrint: true }) });
+  await p.click('#btnKiosk'); await p.waitForSelector('#kiosk:not([hidden])');
+  ok('앱 방식: 어르신 화면을 열 때 프린터 안내 창 없음', !(await p.waitForSelector('#kModal', { timeout: 1200 }).catch(() => null)));
+  await toFinish(p, { name: '가상발송', phone: '010-0000-9999', zip: '56180', addr1: '전북특별자치도 정읍시 충정로 234-1', addr2: '' });
+  await p.waitForTimeout(1200);
+  ok('자동 뽑기여도 공유 창을 띄우지 않음', (await p.evaluate(() => window.__sh.calls.length)) === 0 && (await p.evaluate(() => window.__sh.dl.length)) === 0);
+  await p.click('#kPrintBtn');
+  ok('뽑기 → 「직원을 불러 주세요」 창(공유 창은 아직)', /직원을 불러 주세요/.test(await p.textContent('#kModal')) && (await p.evaluate(() => window.__sh.calls.length)) === 0);
+  await p.click('#kModal button.k-btn.pri');
+  await p.waitForFunction(() => window.__sh.calls.length === 1, null, { timeout: 10000 });
+  const sc = await p.evaluate(() => window.__sh.calls[0]);
+  ok('직원이 누르면 PDF 한 개 공유(받는 분 2장)', sc.type === 'application/pdf' && /^주소스티커_/.test(sc.name), JSON.stringify(sc));
+  await p.waitForTimeout(400);
+  ok('공유 뒤 결과 안내(앱에서 인쇄)', /앱으로 넘겼어요/.test(await toasts(p)));
+  // 공유가 막힘(NotAllowedError): 내려받지 않고 「한 번 더」, 다시 누르면 만든 PDF로 곧바로
+  await p.evaluate(() => { window.__sh.err = 'NotAllowedError'; });
+  await p.click('#kPrintBtn'); await p.click('#kModal button.k-btn.pri');
+  await p.waitForSelector('#kModal', { timeout: 10000 });
+  ok('공유 막힘 → PDF를 내려받지 않고 「한 번 더 누르면」', (await p.evaluate(() => window.__sh.dl.length)) === 0 && /한 번 더 누르면/.test(await p.textContent('#kModal')), (await p.textContent('#kModal')).slice(0, 80));
+  await p.evaluate(() => { window.__sh.err = null; });
+  const n0 = await p.evaluate(() => window.__sh.calls.length);
+  await p.click('#kModal button.k-btn.pri');   // 다시 연결하고 뽑기(직원)
+  await p.waitForFunction((n) => window.__sh.calls.length === n + 1, n0, { timeout: 10000 });
+  ok('다시 누르면 같은 PDF를 곧바로 공유', (await p.evaluate(() => window.__sh.calls[window.__sh.calls.length - 1].name)) === (await p.evaluate(() => window.__sh.calls[window.__sh.calls.length - 2].name)));
+  // 잠금: 공유 중 또 누르면 거절
+  const lock = await p.evaluate(() => { let hold; window.__sh.err = null; const s0 = navigator.share; navigator.share = (o) => new Promise(r => { hold = r; }); const e = [{ zip: '12345', name: '시험', addr1: '정읍시 충정로 234-1' }]; const a = __ble.print(e, 100, 45); return __ble.print(e, 100, 45).then(() => 'ok', x => x.message).then(m => { hold(); navigator.share = s0; return a.then(() => m); }); });
+  ok('앱으로 보내는 중 또 누르면 「보내는 중이에요」', /보내는 중/.test(lock), lock);
+  // 공유를 아예 못 여는 기기 → 내려받기 + 지우라는 안내
+  await p.evaluate(() => { window.__sh.can = false; });
+  const saved = await p.evaluate(() => __ble.print([{ zip: '12345', name: '시험', addr1: '정읍시 충정로 234-1' }], 100, 45).then(n => __ble.resultText(n, '')));
+  ok('공유 못 여는 기기: 다운로드 저장 + 「인쇄한 뒤 지워」', (await p.evaluate(() => window.__sh.dl.length)) === 1 && /지워 주세요/.test(saved), saved);
+  ok('페이지 오류 없음(3)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
+  // ---- 4. #kiosk 자동 시작: 프린터 안내 창을 어르신 앞에 띄우지 않음 · 화면 꺼짐 막기
+  p = await open(browser, { hash: '#kiosk', init: SET({ via: 'ble', cfgv: 2 }, { paper: 'lbl' }) });
+  await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(1200);
+  ok('#kiosk 자동 시작: 안내 창 없이 아래 줄 표시만', !(await p.$('#kModal')) && !!(await p.$('#kPrnHint')));
+  ok('화면 꺼짐 막기 요청', (await p.evaluate(() => window.__wl.req)) >= 1);
+  // 숫자판: 키보드 「234-1」 · Enter 는 다음
+  await (await p.waitForSelector('#kStart')).click();
+  await p.fill('#kIn', '정읍시 충정로'); await p.click('#kGo'); await p.waitForTimeout(600);
+  const hasPad = !!(await p.$('#kNum'));
+  ok('번호 묻는 숫자판', hasPad, (await p.textContent('#kMain .k-bubble')).slice(0, 40));
+  if (hasPad) {
+    await p.click('#kNum'); await p.click('#kMain [data-k="2"]');
+    await p.keyboard.type('34-1');
+    ok('키보드 「-」 받음(234-1)', (await p.textContent('#kNum')).trim() === '234-1', await p.textContent('#kNum'));
+    await p.keyboard.press('Enter'); await p.waitForTimeout(600);
+    ok('숫자를 손으로 누른 뒤 Enter = 다음(숫자 한 번 더 들어가지 않음)', !(await p.$('#kNum')) || (await p.textContent('#kNum')).trim() !== '234-11', (await p.textContent('#kMain .k-bubble')).slice(0, 40));
+  }
+  // 직원 설정: 맨 위 끝내기·전체 화면·말로 하기·화면 꺼짐
+  await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  await p.waitForSelector('#kfExit', { timeout: 4000 });
+  ok('직원 설정 맨 위에 「어르신 화면 끝내기」', await p.evaluate(() => { const m = document.querySelector('#kModal > div'); return m.firstElementChild.contains(document.getElementById('kfExit')); }));
+  ok('직원 설정에 전체 화면·말로 하기·화면 꺼짐 막기', !!(await p.$('#kfFull')) && !!(await p.$('#kfMic')) && (await p.isChecked('#kfWake')));
+  ok('직원 설정 아래 단추 줄에 끝내기 중복 없음', (await p.$$eval('#kModalBtns button', bs => bs.filter(b => /어르신 화면 끝내기/.test(b.textContent)).length)) === 0);
+  p.once('dialog', d => d.accept());   // 적힌 내용이 있으면 지울지 묻는다
+  await p.click('#kfExit'); await p.waitForTimeout(500);
+  const closed = await p.evaluate(() => document.getElementById('kiosk').hidden);
+  ok('끝내기 → 직원 화면', closed);
+  ok('어르신 화면을 닫으면 화면 꺼짐 막기 풂', (await p.evaluate(() => window.__wl.rel)) >= 1, JSON.stringify(await p.evaluate(() => window.__wl)));
+  ok('페이지 오류 없음(4)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
+  // ---- 5. 말로 하기: 오류 종류별 안내 · 두 번 인터넷 오류에만 숨김 · 직원이 다시 켜기 · 늦은 결과 버림
+  p = await open(browser, { init: SET({ via: 'dialog', cfgv: 2 }, { paper: 'a4' }) });
+  await p.click('#btnKiosk'); await p.waitForSelector('#kiosk:not([hidden])');
+  await (await p.waitForSelector('#kStart')).click(); await p.waitForSelector('#kMic');
+  await p.evaluate(() => { window.__sr.next = { error: 'audio-capture' }; }); await p.click('#kMic'); await p.waitForTimeout(300);
+  ok('audio-capture → 「마이크를 쓸 수 없어요」(단추 남음)', /마이크를 쓸 수 없어요/.test(await toasts(p)) && !!(await p.$('#kMic')));
+  await p.evaluate(() => { window.__sr.next = { error: 'network' }; }); await p.click('#kMic'); await p.waitForTimeout(300);
+  ok('인터넷 오류 한 번 → 단추 남음 · 직원 코드', !!(await p.$('#kMic')) && /직원 확인: network/.test(await toasts(p)));
+  await p.click('#kMic'); await p.waitForTimeout(300);
+  ok('인터넷 오류 두 번 → 단추 숨김', !(await p.$('#kMic')));
+  await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  await p.waitForSelector('#kfMic', { timeout: 4000 });
+  ok('직원 설정: 「말로 하기 쓰기」 꺼져 보임(숨김 안내)', !(await p.isChecked('#kfMic')) && /숨겨 둠/.test(await p.textContent('#kModal')));
+  await p.check('#kfMic'); await p.click('#kModal .k-btn.pri');
+  await p.waitForTimeout(300);
+  await p.evaluate(() => __kiosk.close()); await p.click('#btnKiosk'); await (await p.waitForSelector('#kStart')).click();
+  ok('직원이 다시 켜면 단추가 돌아옴', !!(await p.waitForSelector('#kMic', { timeout: 3000 }).catch(() => null)));
+  await p.evaluate(() => { window.__sr.next = { error: 'not-allowed' }; }); await p.click('#kMic'); await p.waitForTimeout(300);
+  ok('not-allowed → 「안 돼요」 + 직원 코드 + 숨김', /직원 확인: not-allowed/.test(await toasts(p)) && !(await p.$('#kMic')));
+  // 늦은 결과는 버림: 다시 켜고, 듣는 중에 화면을 바꾼다
+  await p.evaluate(() => { sessionStorage.removeItem('zipfinder.kiosk.micoff'); __kiosk.close(); }); await p.click('#btnKiosk'); await (await p.waitForSelector('#kStart')).click(); await p.waitForSelector('#kMic');
+  await p.evaluate(() => { window.__sr.next = { text: '서울 종로구 세종대로 209', ms: 800 }; }); await p.click('#kMic'); await p.waitForTimeout(100);
+  await p.click('#kRegion'); await p.waitForTimeout(1500);
+  ok('듣는 중 화면을 바꾸면 늦은 결과로 끌려가지 않음(듣기 멈춤)', (await p.evaluate(() => window.__sr.aborts)) >= 1 && !/세종대로/.test(await p.textContent('#kMain')), (await p.textContent('#kMain .k-bubble')).slice(0, 30));
+  ok('페이지 오류 없음(5)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
+  // ---- 6. 엑셀 파일 정보 작성자 = 물어물어
+  p = await open(browser, {});
+  await p.evaluate(() => { window.__sh.passDl = true; });   // 이 시험은 실제 내려받기를 받는다
+  const b64 = fs.readFileSync(INPUT).toString('base64');
+  await p.evaluate(([b64, name]) => { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const f = new File([u], name); const dt = new DataTransfer(); dt.items.add(f); const el = document.querySelector('#fileInput'); el.files = dt.files; el.dispatchEvent(new Event('change', { bubbles: true })); }, [b64, 'addr.xlsx']);
+  await p.waitForFunction(() => !document.querySelector('#step2').hidden, null, { timeout: 60000 });
+  await p.waitForFunction(() => document.querySelector('#busy').hidden, null, { timeout: 60000 });
+  await p.click('#btnRun');
+  await p.waitForFunction(() => !document.querySelector('#step3').hidden && document.querySelectorAll('#resultTable tbody tr').length > 0, null, { timeout: 120000 });
+  await p.waitForFunction(() => document.querySelector('#busy').hidden, null, { timeout: 120000 });
+  const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }), p.click('#btnDownload')]);
+  const f = path.join(OUT, 'author__' + dl.suggestedFilename()); await dl.saveAs(f);
+  const core = cp.execFileSync('python3', ['-I', '-c', 'import zipfile,sys;print(zipfile.ZipFile(sys.argv[1]).read("docProps/core.xml").decode())', f]).toString();
+  ok('엑셀 작성자 = 물어물어(제작자 이름 아님)', /<dc:creator>물어물어<\/dc:creator>/.test(core) && !/<dc:creator>이희재/.test(core), (core.match(/<dc:creator>[^<]*/) || [''])[0]);
+  ok('페이지 오류 없음(6)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
+  await browser.close();
+  console.log('\n통과 ' + pass + ' · 실패 ' + fail);
+  process.exit(fail ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(2); });

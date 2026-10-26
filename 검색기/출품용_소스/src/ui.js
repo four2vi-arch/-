@@ -2712,8 +2712,8 @@
       Title: d,
       Subject: "개인정보 포함",
       Company: "",
-      Author: APP.author,
-      Manager: APP.author,
+      Author: "물어물어",   // 파일 정보의 작성자·관리자는 프로그램 이름(쓰는 사람마다 제작자 이름이 박히던 것)
+      Manager: "물어물어",
       Keywords: APP_CREDIT,
       // 줄바꿈을 넣으면 core.xml의 설명 칸에 xml:space 속성이 붙어 엑셀이 「복구」를 묻는다(2026-10-09 확인). 한 줄로 쓴다.
       Comments: "개인정보 포함 · 업무 목적 외 사용·제공·보관 금지. 용무가 끝나면 파기하세요. " + APP_CREDIT + " · " + dateLabel(todayYmd()) + " 생성"

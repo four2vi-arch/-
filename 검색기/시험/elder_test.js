@@ -1,4 +1,4 @@
-// 물어물어 어르신 화면 회귀 시험(v1.10, 10.18 어르신 모의 심사에서 틀린 우편번호가 확정되던 시나리오)
+// 물어물어 어르신 화면 회귀 시험(v1.10·v1.11, 10.18 어르신 모의 심사에서 틀린 우편번호가 확정되던 시나리오)
 // 사용: node elder_test.js <출품본.html>   (가상 이름·공개 주소만)
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const HTML = process.argv[2];
@@ -104,11 +104,11 @@ const zipShown = p => p.evaluate(() => { const z = document.querySelector('#kMai
   await say(p, '시기동 주공아파트 101동');
   ok('「시기동 주공아파트 101동」(호 없음) → 건물 후보', !!(await p.$('#kMain .k-choice')) && /주공/.test(await p.textContent('#kMain .k-choice')), await bubble(p));
   await p.context().close();
-  // 10. 아무것도 적지 않고 「직원 도움」 → 번호표 화면 / 「다시 적기」 뒤에 빈 받는 곳이 남지 않음
+  // 10. 아무것도 적지 않고 「직원 도움」 → 「창구로 오세요」 마침 화면(v1.11: 번호 없이, 뽑을 것 없음) / 「다시 적기」 뒤에 빈 받는 곳이 남지 않음
   p = await open(b);
   await (await btn(p, '시작하기')).click(); await p.waitForSelector('#kHelp'); await p.click('#kHelp'); await p.waitForTimeout(300);
   await (await btn(p, '창구에서 할게요')).click(); await p.waitForTimeout(400);
-  ok('빈 「직원 도움」 → 마침 화면(접수 번호)', !!(await p.$('#kPrintBtn')) && /\d{3}번/.test(await p.textContent('#kMain')));
+  ok('빈 「직원 도움」 → 마침 화면(창구로 오세요 · 번호·뽑기 단추 없음)', !(await p.$('#kPrintBtn')) && /창구로 오세요/.test(await p.textContent('#kMain')) && !/\d{3}번/.test(await p.textContent('#kMain')));
   await p.context().close();
   p = await open(b);
   await (await btn(p, '시작하기')).click(); await p.fill('#kIn', '수성동 어딘가 할머니댁'); await p.click('#kHelp'); await p.waitForTimeout(300);
