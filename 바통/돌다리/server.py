@@ -196,7 +196,7 @@ def is_work(path):
         return False
 
 
-def do_extract(folder, exclude=None):
+def do_extract(folder, exclude=None, fresh=False):
     t0 = time.time()
     backup_draft()
     exclude = set(exclude or [])
@@ -231,8 +231,12 @@ def do_extract(folder, exclude=None):
         STATE.update({'folder': folder, 'subdirs': subdirs, 'exclude': sorted(exclude), 'warn': warn, 'suggest': suggest, 'files': [{'file': f['file'], 'kind': f['kind'], 'chars': f['chars'], 'mchars': f.get('mchars', f['chars']), 'mtime': f.get('mtime', ''), 'year': year_of(f), 'ocr': bool(f.get('ocr'))} for f in files], 'n_ocr': n_ocr,
                       'failures': failures, 'fingerprints': fps, 'items': [], 'dropped': [], 'errors': [], 'calls': [], 'exports': [], 'step': 2, 'progress': None,
                       'prev_items': STATE['items'] or STATE.get('prev_items') or []})   # 넣기·버리기·메모·직접 적은 항목은 다시 만들 때 파일 기준으로 이어 간다
+        if fresh:   # 다른 업무 폴더로 새 인계서: 앞 폴더의 사람·물품·업무 설명·직접 적은 항목을 넘기지 않는다(지금 초안은 backup_draft가 남겼음)
+            STATE.update({'handover_from': '', 'handover_to': '', 'witness': '', 'handover_date': '', 'org': '', 'title': '', 'assets': {}, 'overview': {}, 'manual_path': '', 'keyfiles': [],
+                          'prev_items': [], 'areas': core.DEFAULT_AREAS, 'areas_src': '', 'areas_mode': '', 'exports': [], 'dirty_after_export': False})
+            log('새 인계서로 시작합니다(앞 폴더의 인계자·물품·업무 설명·직접 적은 항목을 비움)')
         if not files:
-            STATE['extract_error'] = ('이 폴더(하위 폴더 포함)에서 읽을 수 있는 문서를 찾지 못했습니다.' + (' 못 읽은 파일 %d개의 사유는 4절 「확인하지 못한 자료」에 있습니다.' % len(failures) if failures else ' 폴더가 비어 있습니다.') + ' 업무 폴더를 다시 고르세요.')
+            STATE['extract_error'] = ('이 폴더(하위 폴더 포함)에서 읽을 수 있는 문서를 찾지 못했습니다.' + (' 못 읽은 파일 %d개의 사유는 준비 화면 ① 아래 「못 읽은 파일」 표에 있습니다.' % len(failures) if failures else ' 폴더가 비어 있습니다.') + ' 업무 폴더를 다시 고르세요.')
         fa = docs.folder_areas(files)   # 맨 위 폴더가 업무 이름이면 그것으로 업무를 나눈다(사용자가 키워드를 손본 뒤에는 그대로 둔다)
         if fa and STATE.get('areas_src') in (None, '', '기본', '폴더') and STATE.get('areas_mode') != 'keyword':
             STATE['areas'] = fa; STATE['areas_src'] = '폴더'
@@ -311,8 +315,9 @@ def run_draft():
             STATE['items'], STATE['dropped'], STATE['calls'], STATE['errors'], STATE['info'] = items, [], calls, errors, info
             STATE['prev_items'] = []
             STATE['progress'] = dict(STATE['progress'] or {}, index=len(items), total=len(items), calls_done=len(calls), calls_total=len(calls), sec=round(time.time() - t0), stopped=info.get('stopped', False))
-            if calls:
-                STATE['avg_sec'] = round(sum(c['sec'] for c in calls) / len(calls), 1)
+            real = [c for c in calls if not c.get('reused')]   # 저장된 응답을 다시 쓴 호출(0초)은 평균에서 뺀다(예상 시간이 「약 0초」로 나오던 것)
+            if real:
+                STATE['avg_sec'] = round(sum(c['sec'] for c in real) / len(real), 1)
             STATE['step'] = 4
         log('초안 %d건(현안 %d·반복 %d·문서 %d, 기간 밖 %d, 붙임 %d) · 매뉴얼 %s(문서번호 %d개) · 모델 호출 %d · 오류 %d · %.0f초' % (
             len(items), info['n_issue'], info['n_recur'], info['n_doc'], info['n_old'], info['n_attach'], info['manual'] or '없음', info['manual_refs'], len(calls), len(errors), time.time() - t0))
@@ -466,7 +471,11 @@ class H(BaseHTTPRequestHandler):
                 st['ocr_status'] = ocr_status(); st['ocr_engine'] = EX.OCR_CONFIG.get('engine', '')
                 st['missing'] = MISSING; st.pop('prev_items', None)
                 st['presets'] = [[n, docs.areas_text(a)] for n, a in core.AREA_PRESETS]   # 업무 키워드 보기(다른 기관용)
+                st['folder_missing'] = bool(STATE.get('folder')) and not os.path.isdir(STATE['folder'])   # 이동식 디스크·공유 폴더에 닿지 못함
+                st['units_loaded'] = bool(_units); st['dirty_after_export'] = bool(STATE.get('dirty_after_export'))
                 st['allowed_hosts'] = sorted(core.ALLOWED_MODEL_HOSTS); st['remote_ok'] = core.remote_allowed()
+                st['contacts'] = export.contact_rows({'items': STATE['items'], 'info': STATE.get('info') or {}, 'areas': STATE.get('areas') or core.DEFAULT_AREAS, 'overview': STATE.get('overview') or {},
+                                                      'handover_from': STATE.get('handover_from', ''), 'org': STATE.get('org', '')}) if STATE['items'] else []   # 화면 4절은 내보내기와 같은 목록
             return self._send(200, st)
         if p.path == '/api/items':
             with LOCK:
@@ -485,7 +494,7 @@ class H(BaseHTTPRequestHandler):
                 session = {'items': STATE['items'], 'areas': STATE.get('areas') or core.DEFAULT_AREAS, 'overview': STATE.get('overview') or {}, 'assets': STATE.get('assets') or {},
                            'info': STATE.get('info') or {}, 'months': STATE.get('months', 12), 'failures': STATE['failures'], 'handover_from': STATE.get('handover_from', ''),
                            'handover_to': STATE.get('handover_to', ''), 'witness': STATE.get('witness', ''), 'handover_date': STATE.get('handover_date', ''), 'org': STATE.get('org', '')}
-                session.update({'title': STATE.get('title') or '', 'files': STATE['files'], 'fingerprints': STATE['fingerprints'], 'model': STATE['model'] or '없음(규칙층만)', 'version': VERSION})
+                session.update({'title': STATE.get('title') or '', 'files': STATE['files'], 'fingerprints': STATE['fingerprints'], 'model': STATE['model'] or '없음(규칙층만)', 'version': VERSION, 'folder': STATE.get('folder') or ''})   # 인쇄본 끝줄의 「업무 폴더」가 비어 나오던 것
             if p.path == '/api/report':
                 return self._send(200, {'html': export.to_html(session)})
             return self._send(200, {'sections': [{'name': n, 'text': t} for n, t in export.onnara_sections(session)]})
@@ -559,7 +568,7 @@ class H(BaseHTTPRequestHandler):
             def run():   # 11분 넘는 읽기를 HTTP 요청 안에서 기다리지 않는다(브라우저가 끊어도 서버는 계속, 화면은 진행을 묻는다)
                 global _extracting
                 try:
-                    do_extract(folder, [str(x) for x in body.get('exclude', [])])
+                    do_extract(folder, [str(x) for x in body.get('exclude', [])], fresh=bool(body.get('fresh')))
                 except Exception as e:
                     log('폴더 읽기 실패: %s' % str(e)[:160]); STATE['extract_error'] = '폴더를 읽다가 실패했습니다: ' + str(e)[:160]
                 finally:
@@ -571,7 +580,12 @@ class H(BaseHTTPRequestHandler):
             with LOCK:
                 for k in ('model', 'key', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path', 'ocr', 'ocr_pages', 'ocr_images', 'areas_mode'):
                     if k in body:
-                        STATE[k] = body[k]
+                        if k in ('overview', 'assets') and isinstance(body[k], dict) and isinstance(STATE.get(k), dict):
+                            STATE[k] = dict(STATE[k], **body[k])   # 창이 둘 열려 있어도 서로의 업무 설명·물품 칸을 지우지 않게(칸 단위로 합침)
+                        else:
+                            STATE[k] = body[k]
+                if STATE.get('exports') and any(k in body for k in ('overview', 'assets', 'handover_from', 'handover_to', 'witness', 'handover_date', 'org', 'title', 'areas_text', 'manual_path')):
+                    STATE['dirty_after_export'] = True   # 내려받은 뒤 고침(다시 열어도 「예전 파일」 안내가 남게)
                 if 'areas_text' in body:
                     STATE['areas'] = docs.parse_areas(body['areas_text']) or core.DEFAULT_AREAS; STATE['areas_src'] = '사람' if body['areas_text'].strip() else '기본'
                     for it in STATE['items']:
@@ -615,6 +629,8 @@ class H(BaseHTTPRequestHandler):
         if p == '/api/items':
             if not isinstance(body, dict) or not isinstance(body.get('changes', []), list) or not isinstance(body.get('bulk', []), list):
                 return self._send(400, {'error': '잘못된 요청 꼴'})
+            if STATE['running']:   # 다시 만드는 동안 고친 것은 끝날 때 새 초안에 덮여 사라지므로 받지 않는다(화면도 그동안 잠근다)
+                return self._send(409, {'error': '초안을 다시 만드는 중입니다. 끝난 뒤에 고치세요(그동안 고친 것은 저장되지 않습니다)'})
             with LOCK:
                 by_id = {it['id']: it for it in STATE['items']}
                 for ch in body.get('changes', []):
@@ -660,6 +676,8 @@ class H(BaseHTTPRequestHandler):
                            'owner': '', 'model_status': '', 'src': '직접 입력', 'keep': True, 'decided': True, 'status': '진행', 'next': '', 'note': str(new.get('note', '')).strip(), 'seen': False, 'quote': '',
                            'when': str(new.get('when', '')).strip()[:40]}
                     STATE['items'].append(rec)
+            if STATE.get('exports'):
+                STATE['dirty_after_export'] = True
             save_session()
             return self._send(200, {'ok': True, 'items': STATE['items'], 'dropped': []})
         if p == '/api/export':
@@ -692,13 +710,33 @@ class H(BaseHTTPRequestHandler):
         return self._send(404, {'error': '없는 주소'})
 
 
+def ref_date():
+    """기한의 연도를 채울 기준: 인계 일자 → 초안 기준일 → 오늘."""
+    for v in (STATE.get('handover_date'), (STATE.get('info') or {}).get('base_date')):
+        m = re.match(r'^(20\d{2})-(\d{2})-(\d{2})', str(v or ''))
+        if m:
+            try:
+                return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except ValueError:
+                pass
+    return datetime.date.today()
+
+
 def iso_date(v):
-    """'2026.11.3' / '2026. 11. 3.' / '2026-11-03' → '2026-11-03'. 날짜가 아니면 앞 10자 그대로."""
+    """'2026.11.3' / '2026. 11. 3.' / '2026-11-03' → '2026-11-03'. 「11월 30일」「12.1」「3/20」처럼 연도가 없으면 인계 일자의 연도로(기준 달보다 두 달 넘게 이르면 이듬해). 날짜가 아니면 앞 10자 그대로."""
     s = str(v or '').strip()
     m = re.match(r'^(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})', s)
     if m:
         try:
             return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
+        except ValueError:
+            pass
+    m = re.match(r'^(\d{1,2})\s*[.월/\-]\s*(\d{1,2})\s*일?\.?\s*$', s)
+    if m:   # 연도 없는 꼴(「(지남)」으로 찍히고 인수 직후 할 일에서 빠지던 것)
+        r = ref_date(); mo, dd = int(m.group(1)), int(m.group(2))
+        y = r.year + (1 if mo < r.month - 2 else 0)
+        try:
+            return datetime.date(y, mo, dd).isoformat()
         except ValueError:
             pass
     return s[:10]

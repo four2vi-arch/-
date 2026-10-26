@@ -170,9 +170,9 @@ for i in items_b:
     if i.get('kind3') == '반복':
         i.update(todo='', summary='', quote='')   # 전임자가 할 일 칸을 지운 경우(10.23. 사용자 결과의 「9월」 줄과 같은 꼴)
 md_b = export.to_markdown(session(items_b, info_r))
-foot = [l for l in md_r.split('\n') if '문서 항목' in l][0]
-nums = [int(x) for x in re.findall(r'\d+', foot.split('문서 항목')[1])]
-ok('끝줄 문서 항목 수 = 규칙만 + 모델 요지 + 직접 적음', nums[0] == sum(nums[1:4]), foot)
+foot = [l for l in md_r.split('\n') if '본문 항목' in l][0]   # v3.8: 「본문 항목」(본문에 실은 것만, 붙임 1 확인 전 문서는 따로)
+nums = [int(x) for x in re.findall(r'\d+', foot.split('본문 항목')[1])]
+ok('끝줄 본문 항목 수 = 규칙만 + 모델 요지 + 직접 적음', nums[0] == sum(nums[1:4]), foot)
 ok('할 일이 없는 반복 업무 줄은 「(할 일 적지 않음)」', '(할 일 적지 않음)' in md_b, [l for l in md_b.split('\n') if '매월' in l][:2])
 
 print('\n통과 %d · 실패 %d' % (P, F_))

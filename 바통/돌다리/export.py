@@ -37,14 +37,52 @@ def today_iso():
 
 
 def dshow(it, n=10):
-    """표에 쓰는 날짜. 파일 수정일로 짐작한 날짜·연도만 아는 날짜는 그렇게 적는다."""
+    """표에 쓰는 날짜. 파일 수정일로 짐작한 날짜·연도만 아는 날짜·이름의 연월만 아는 날짜는 그렇게 적는다."""
     d = str(it.get('date') or '')
     src = it.get('date_src') or ''
     if src == '연도만':
         return d[:4] + '년'
     if src == '수정일' and d:
         return d[:n] + '(수정일)'
+    if src == '파일 이름(월)' and d:
+        return d[:7]   # 이름 「202509」만 알면 달까지만(그달 1일이 시행일처럼 찍히던 것)
     return d[:n]
+
+
+def dwhen(it, n=10):
+    """날짜가 없으면 사람이 적은 시기(「매주 금요일」)를 쓴다(직접 적은 현안의 시기가 결과물에서 빠지던 것)."""
+    return dshow(it, n) if (it.get('date') or '')[:4].isdigit() else (it.get('when') or it.get('date') or '')
+
+
+def todo_cell(it):
+    """1-다·1-라의 「요지·할 일」 칸. 모델이 쓴 글은 (AI)로 표시하고, 규칙이 원문에서 그대로 가져온 근거 줄은 언제나 함께 둔다(요지가 있으면 원문이 사라지던 것)."""
+    ai = it.get('src') == '모델'
+    lines = {'summary': (('요지(AI): ' if ai and it.get('summary_by') != '사람' else '요지: ') + it['summary']) if it.get('summary') else '',
+             'todo': (('할 일(AI): ' if ai and it.get('todo_src') == '모델' and it.get('todo_by') != '사람' else '할 일: ') + it['todo']) if it.get('todo') else '',
+             'next': ('다음: ' + it['next']) if it.get('next') else '',
+             'quote': ('원문: ' + it['quote']) if it.get('quote') else '',
+             'note': ('메모: ' + it['note']) if it.get('note') else ''}
+    order = ['next', 'summary', 'todo', 'quote', 'note'] if (it.get('status') or '진행') == '미결' else ['summary', 'todo', 'next', 'quote', 'note']
+    return '\n'.join(lines[k] for k in order if lines[k])
+
+
+def owner_cell(it):
+    """「담당」: 규칙이 원문에서 찾은 연락처를 먼저, 모델이 고른 담당은 (AI)를 붙여 뒤에(화면 카드와 같은 차례)."""
+    rule = ', '.join('%s %s' % (c['name'], c['phone']) for c in (it.get('contacts') or [])[:2])
+    ai = str(it.get('owner') or '').strip()
+    if ai and ai not in rule:
+        return (rule + ' / ' if rule else '') + ai + '(AI)'
+    return rule
+
+
+def note_tail(it, sep='\n'):
+    """2절·연혁·현황 칸에 덧붙이는 메모·할 일(칸에 적은 것이 결과물에 실리지 않던 것)."""
+    out = []
+    if it.get('todo') and it.get('todo_by') == '사람':
+        out.append('할 일: ' + it['todo'])
+    if it.get('note'):
+        out.append('메모: ' + it['note'])
+    return (sep + sep.join(out)) if out else ''
 
 
 def due_show(it):
@@ -71,11 +109,11 @@ def header_lines(session):
     return ['작성 기준: %s · 돌다리 v%s' % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), session.get('version', '1.0')),
             '업무 폴더: %s' % os.path.basename(str(session.get('folder', '')).rstrip('\\/')),
             '읽은 파일 %d개 · 못 읽은 문서 %d개 · 읽지 않는 형식(그림·프로그램 등) %d개 · 원본 변경 %d개(처리 전후 SHA-256 대조)' % (len(files), sum(1 for x in failures if not x.get('skip')), sum(1 for x in failures if x.get('skip')), changed),
-            '모델: %s · 문서 항목 %d(규칙만 %d · 모델 요지 %d · 직접 적음 %d)' % (
-                session.get('model', '없음'), len(kept_items(session)),
-                sum(1 for it in kept_items(session) if str(it.get('src', '')).startswith('규칙')),   # 「규칙(반복 문장)」도 규칙(10.23. 사용자 결과에서 27≠23+0+0)
-                sum(1 for it in kept_items(session) if str(it.get('src', '')).startswith('모델')),
-                sum(1 for it in kept_items(session) if it.get('src') == '직접 입력'))]
+            '모델: %s · 본문 항목 %d(규칙만 %d · 모델 요지 %d · 직접 적음 %d) · 붙임 1 확인 전 문서 %d' % (   # 본문에 실은 항목만 센다(「확인한 항목 0/24」와 분모가 다르던 것)
+                session.get('model', '없음'), len(kept_docs(session)),
+                sum(1 for it in kept_docs(session) if str(it.get('src', '')).startswith('규칙')),   # 「규칙(반복 문장)」도 규칙(10.23. 사용자 결과에서 27≠23+0+0)
+                sum(1 for it in kept_docs(session) if str(it.get('src', '')).startswith('모델')),
+                sum(1 for it in kept_docs(session) if it.get('src') == '직접 입력'), len(pending_docs(session)))]
 
 
 CLS_ORDER = ['공문', '메일', '회의록', '보고서·계획', '메모', '인수인계서', '규정·지침', '기타', '직접 입력']
@@ -160,11 +198,50 @@ def cycle_label(it):
     r = it.get('recur') or {}
     if r.get('cycle') in ('매월', '매주', '분기', '반기'):
         return it.get('when') or r['cycle']
+    if r.get('cycle') == '매년' and not r.get('month') and not r.get('years'):
+        return it.get('when') or '매년'   # 문장에 달이 없으면 「매년」만(파일 날짜의 달이 찍히던 것)
     m = r.get('month') or month_of(it.get('date') or it.get('when') or '')
     if m:
         return '%d월' % m
     d = str(it.get('date') or '')
     return it.get('when') or ('' if re.match(r'^\d{4}', d) else d) or '시기 미정'   # 「매주 금요일」처럼 사람이 적은 시기는 그대로
+
+
+def contact_rows(session):
+    """4절 관계자 연락처(화면 4절·목차 배지도 이 목록을 그대로 쓴다: 화면과 파일이 다르던 것).
+    넣은 항목과 확인 전 현안·반복의 연락처, 그리고 표·명단 파일의 연락처. 버리기 한 문서·명단의 번호, 인계자 자신, 1-가 소속의 자기 부서 번호, 일반전화가 있는 사람의 휴대전화는 뺀다."""
+    items = kept_docs(session)
+    info = session.get('info') or {}
+    used = area_list(session, items)
+    who_from = str(session.get('handover_from') or '').split('(')[0].strip()
+    own_units = [t for t in re.split(r'\s+', str(session.get('org') or '').strip())[1:] if len(t) >= 2]
+    dropped = {it['file'] for it in session.get('items', []) if it.get('file') and not it.get('keep', True)}
+    seen, rows, names_landline = set(), [], set()
+    def add_c(a, name, phone, ln, title, pending, src):
+        if phone in seen or (who_from and name and name == who_from):   # 인계자 자신은 뺀다
+            return
+        if own_units and name and any(u in name for u in own_units):   # 1-가 「소속」의 자기 부서(우편영업실 등) 대표 번호는 뺀다
+            return
+        mobile = phone.startswith('010')
+        if mobile and name and name in names_landline:   # 같은 사람의 휴대전화는 일반전화가 있으면 뺀다
+            return
+        if not mobile and name:
+            names_landline.add(name)
+        ln = str(ln or '')
+        seen.add(phone); rows.append({'area': a, 'name': name, 'phone': phone, 'mobile': mobile, 'line': ln if len(ln) <= 70 else ln[:68].rstrip(' ([（') + '…', 'title': title, 'pending': pending, 'src': src})
+    for a in used:
+        for it in sorted([x for x in items if (x.get('area') or '기타') == a], key=lambda x: any(str(c.get('phone', '')).startswith('010') for c in x.get('contacts') or [])):
+            for c in sorted(it.get('contacts') or [], key=lambda c: c['phone'].startswith('010')):
+                add_c(a, c['name'], c['phone'], c.get('line'), it.get('title', '') + und_mark(it), undecided(it), '문서')
+    for pp in sorted(info.get('people') or [], key=lambda x: x['phone'].startswith('010')):   # 표·명단 파일에서 찾은 연락처(그 명단 항목을 버리면 함께 뺀다)
+        if pp.get('file') and pp['file'] in dropped:
+            continue
+        add_c(pp.get('area') or '기타', pp.get('name', ''), pp['phone'], pp.get('line'), pp.get('title', '') + ' (명단)', False, '명단')
+    return rows
+
+
+def und_mark(it):
+    return ' [확인 전]' if undecided(it) else (' [일괄 넣음]' if it.get('bulk') else '')
 
 
 def chapters(session):
@@ -201,7 +278,7 @@ def chapters(session):
         gone = (ov.get('gone') or '').strip() if isinstance(ov, dict) else ''
         if gone:
             desc = ('[인계 완료] ' + gone + ('\n' + desc if desc else ''))
-        rows.append([a, desc or '(적지 않음)', tip or '', '\n'.join('%s (%s)' % (it.get('title', ''), dshow(it, 7)) for it in stat[:4]) + ((' 외 %d' % (len(stat) - 4)) if len(stat) > 4 else '')])
+        rows.append([a, desc or '(적지 않음)', tip or '', '\n'.join('%s (%s)%s' % (it.get('title', ''), dshow(it, 7), note_tail(it, ' · ')) for it in stat[:4]) + ((' 외 %d' % (len(stat) - 4)) if len(stat) > 4 else '')])
     if rows:
         out.append(T(['업무', '업무 내용', '조심할 것', '현황 자료(최신 대장)'], rows, [16, 34, 28, 22]))
     else:
@@ -209,7 +286,7 @@ def chapters(session):
     hist = sorted([it for it in items if it.get('kind3') == '연혁' or it.get('hist')], key=lambda it: it.get('date') or '')
     if hist:
         out.append(('h3', '연혁(업무의 전환점)'))
-        out.append(T(['시기', '업무', '전환점 문서'], [[dshow(it, 7) if (it.get('date') or '')[:4].isdigit() else (it.get('when') or it.get('date') or ''), it.get('area') or '기타', '%s%s%s' % (it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', und(it))] for it in hist], [12, 20, 68]))
+        out.append(T(['시기', '업무', '전환점 문서'], [[dwhen(it, 7), it.get('area') or '기타', '%s%s%s%s' % (it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', und(it), note_tail(it))] for it in hist], [12, 20, 68]))
     # 나. 주요 업무계획 및 진행사항: 시기 | 업무 | 할 일 | 근거 문서
     out.append(('h2', '나. 주요 업무계획 및 진행사항'))
     base = str(info.get('base_date') or today_iso())
@@ -217,7 +294,7 @@ def chapters(session):
     soon = sorted([it for it in items if it.get('due_next') and it['due_next'] >= soon_lim and (it.get('status') or '진행') != '완료'], key=lambda it: it['due_next'])
     out.append(('h3', '인수 직후 할 일(기한 순)'))
     if soon:
-        out.append(T(['기한', '업무', '할 일·문서', '상태'], [[it['due_next'] + (' (지남)' if it['due_next'] < today_iso() else ''), it.get('area') or '기타', ((it.get('todo') or it.get('next') or '') + '\n' if (it.get('todo') or it.get('next')) else '') + it.get('title', '') + und(it), STATUS_LABEL.get(it.get('status') or '진행', '진행 중')] for it in soon[:20]], [15, 15, 55, 15]))
+        out.append(T(['기한', '업무', '할 일·문서', '상태'], [[it['due_next'] + (' (지남)' if it['due_next'] < today_iso() else ''), it.get('area') or '기타', ((it.get('todo') or it.get('next') or '') + '\n' if (it.get('todo') or it.get('next')) else '') + it.get('title', '') + und(it), STATUS_LABEL.get(it.get('status') or '진행', '진행 중')] for it in soon[:20]] + ([['', '', '외 %d건(1-다 현안 표 참고)' % (len(soon) - 20), '']] if len(soon) > 20 else []), [15, 15, 55, 15]))
     else:
         out.append(('p', '(문서에서 다가오는 기한을 찾지 못함. 아래 반복 업무와 1-다 현안을 볼 것)'))
     out.append(('h3', '해마다·매월·매주 되풀이되는 업무'))
@@ -238,10 +315,8 @@ def chapters(session):
         rows = []
         for a in used:
             for it in [x for x in cur if (x.get('area') or '기타') == a]:
-                human = it.get('todo_by') == '사람' or it.get('status_by') == '사람' or it.get('summary')
-                todo = '\n'.join(x for x in [('요지: ' + it['summary']) if it.get('summary') else ('' if human else (('원문: ' + it['quote']) if it.get('quote') else '')), ('할 일: ' + it['todo']) if it.get('todo') else '', ('다음: ' + it['next']) if it.get('next') else '', ('메모: ' + it['note']) if it.get('note') else ''] if x)
-                rows.append([a, '%s%s%s\n%s' % (it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', und(it), dshow(it) + ' · ' + fname(it)),
-                             ((due_show(it) + '\n') if it.get('due_next') else '') + STATUS_LABEL.get(it.get('status') or '진행', '진행 중'), todo, it.get('owner') or ', '.join('%s %s' % (c['name'], c['phone']) for c in (it.get('contacts') or [])[:2]), chk(it)])
+                rows.append([a, '%s%s%s\n%s' % (it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', und(it), dwhen(it) + ' · ' + fname(it)),
+                             ((due_show(it) + '\n') if it.get('due_next') else '') + STATUS_LABEL.get(it.get('status') or '진행', '진행 중'), todo_cell(it), owner_cell(it), chk(it)])
         out.append(T(['업무', '현안(문서)', '기한·상태', '요지·할 일', '담당', '인수 확인'], rows, [10, 27, 14, 30, 12, 7]))
     else:
         out.append(('p', '(없음)'))
@@ -249,7 +324,7 @@ def chapters(session):
     out.append(('h2', '라. 주요 미결사항'))
     pend = [it for it in issues if (it.get('status') or '진행') == '미결']
     if pend:
-        out.append(T(['업무', '미결 사항(문서)', '기한', '기다리는 것·다음에 할 일', '인수 확인'], [[it.get('area') or '기타', '%s%s%s\n%s' % (it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', und(it), dshow(it) + ' · ' + fname(it)), due_show(it).replace('기한\n', ''), (it.get('next') or '') + ((' / 메모: ' + it['note']) if it.get('note') else ''), chk(it)] for it in sorted(pend, key=lambda x: (used.index(x.get('area') or '기타') if (x.get('area') or '기타') in used else 99))], [12, 34, 14, 33, 7]))
+        out.append(T(['업무', '미결 사항(문서)', '기한', '기다리는 것·다음에 할 일', '인수 확인'], [[it.get('area') or '기타', '%s%s%s\n%s' % (it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', und(it), dwhen(it) + ' · ' + fname(it)), due_show(it).replace('기한\n', ''), todo_cell(it), chk(it)] for it in sorted(pend, key=lambda x: (used.index(x.get('area') or '기타') if (x.get('area') or '기타') in used else 99))], [12, 34, 14, 33, 7]))
     else:
         out.append(('p', '(없음)'))
     # 2. 관련 문서 현황
@@ -262,7 +337,7 @@ def chapters(session):
     for a in area_order(session, items2):
         r = sorted([it for it in items2 if (it.get('area') or '기타') == a], key=lambda it: it.get('date') or '', reverse=True)
         out.append(('h3', '%s (%d건)' % (a, len(r))))
-        out.append(T(['날짜', '문서(파일)', '종류', '구분', '매뉴얼'], [[dshow(it) if (it.get('date') or '')[:4].isdigit() else (it.get('when') or it.get('date') or ''), '%s%s%s\n%s' % (it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', und(it), fname(it)), it.get('cls', ''), {'현안': '현안', '반복': '반복', '연혁': '연혁', '현황': '현황 자료'}.get(it.get('kind3'), ''), ('★ 미반영' if (info.get('manual') and it.get('cls') == '공문' and not it.get('reflected')) else ('반영' if it.get('reflected') else ''))] for it in r], [15, 52, 11, 11, 11]))
+        out.append(T(['날짜', '문서(파일)', '종류', '구분', '매뉴얼'], [[dwhen(it), '%s%s%s\n%s%s' % (it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', und(it), fname(it), note_tail(it)), it.get('cls', ''), {'현안': '현안', '반복': '반복', '연혁': '연혁', '현황': '현황 자료'}.get(it.get('kind3'), ''), ('★ 미반영' if (info.get('manual') and it.get('cls') == '공문' and not it.get('reflected')) else ('반영' if it.get('reflected') else ''))] for it in r], [15, 52, 11, 11, 11]))
     # 3. 주요 물품 및 예산 등
     out.append(('h1', '3. 주요 물품 및 예산 등'))
     AS = [('acct', '계정·비밀번호 보관처(비밀번호 자체는 적지 않음)'), ('goods', '열쇠·물품·비품'), ('budget', '예산·미지급·정산'), ('etc', '그 밖의 당부')]
@@ -270,25 +345,7 @@ def chapters(session):
     # 4. 그 밖의 참고사항
     out.append(('h1', '4. 그 밖의 참고사항'))
     out.append(('h3', '관계자 연락처'))
-    seen, rows, names_landline = set(), [], set()
-    def add_c(a, name, phone, ln, title):
-        if phone in seen or (who_from and name and name == who_from):   # 인계자 자신은 뺀다
-            return
-        if own_units and name and any(u in name for u in own_units):   # 1-가 「소속」의 자기 부서(우편영업실 등) 대표 번호는 뺀다
-            return
-        mobile = phone.startswith('010')
-        if mobile and name and name in names_landline:   # 같은 사람의 휴대전화는 일반전화가 있으면 뺀다
-            return
-        if not mobile and name:
-            names_landline.add(name)
-        ln = str(ln or '')
-        seen.add(phone); rows.append([a, name, phone + (' (휴대)' if mobile else ''), ln if len(ln) <= 70 else ln[:68].rstrip(' ([（') + '…', title])
-    for a in used:
-        for it in sorted([x for x in items if (x.get('area') or '기타') == a], key=lambda x: any(str(c.get('phone', '')).startswith('010') for c in x.get('contacts') or [])):
-            for c in sorted(it.get('contacts') or [], key=lambda c: c['phone'].startswith('010')):
-                add_c(a, c['name'], c['phone'], c.get('line'), it.get('title', '') + und(it))
-    for pp in sorted(info.get('people') or [], key=lambda x: x['phone'].startswith('010')):   # 표·명단 파일에서 찾은 연락처
-        add_c(pp.get('area') or '기타', pp.get('name', ''), pp['phone'], pp.get('line'), pp.get('title', '') + ' (명단)')
+    rows = [[c['area'], c['name'], c['phone'] + (' (휴대)' if c['mobile'] else ''), c['line'], c['title']] for c in contact_rows(session)]
     if rows:
         out.append(T(['업무', '이름', '전화', '무슨 일로', '문서'], rows, [14, 12, 16, 30, 28]))
     else:
@@ -389,6 +446,7 @@ def to_markdown(session):
 
 def onnara_sections(session):
     """온나라·e-사람 인계서 입력 칸에 붙여 넣을 글. 서식의 칸(1-가·나·다·라, 2, 3, 4)마다 평문 한 덩이."""
+    _set_ref(session)   # 「(지남)」 기준을 인계 일자로(내려받은 파일과 복사한 글이 다르던 것)
     secs, cur, buf, pre = [], None, [], []
     def flush():
         if cur is not None:

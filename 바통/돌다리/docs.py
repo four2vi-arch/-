@@ -43,7 +43,9 @@ PRIVATE_NOT = re.compile(r'민원|고객|금융|다문화|가족친화|검진|�
 PRIVATE_DIR = re.compile(r'(?:^|/)(?:개인|사적|수습\s*교육|멘토링)[^/]*/')
 SECRET_KEY = r'(?:비밀\s*번호|비번|패스\s*워드|password|passwd|(?<![A-Za-z])PW(?![A-Za-z])|암호(?!화))'
 SECRET_VAL = re.compile('(' + SECRET_KEY + r'[^A-Za-z0-9\n]{0,15}?)(?!20\d{2}\s*[.\-/년]|0\d{1,2}-\d{3,4}-\d)([A-Za-z0-9!@#$%^&*_+=.~\-]{4,})(?![년월일])', re.I)   # 열쇠 말 뒤 15자 안의 값(「비밀번호는 매월 바뀜(현재 Gaon#77)」)
-SECRET_ID = re.compile(r'((?:아이디|(?<![A-Za-z])ID(?![A-Za-z])|계정)(?:\s*정보)?(?:은|는|이|가)?(?:\s*[:：=]\s*|\s+))([A-Za-z][A-Za-z0-9_.@\-]{2,})(\s*/\s*[^\s,)]+)?', re.I)   # 「계정.txt」의 확장자는 값이 아님
+SECRET_ID = re.compile(r'((?:아이디|(?<![A-Za-z])ID(?![A-Za-z])|계정|로그인|접속\s*(?:아이디|ID|계정))(?:\s*정보)?(?:은|는|이|가)?(?:\s*[:：=]\s*|\s+))([A-Za-z][A-Za-z0-9_.@\-]{2,})(\s*/\s*[^\s,)]+)?', re.I)   # 「계정.txt」의 확장자는 값이 아님
+SECRET_AFTER = re.compile(r'((?:→|->|⇒|=>|신규|변경\s*후|새로|현재|기존|에서)\s*[:：]?\s*)(?!20\d{2}\s*[.\-/년]|0\d{1,2}-\d{3,4}-\d)([A-Za-z0-9!@#$%^&*_+=.~\-]{4,})(?![년월일])')   # 「기존 ●●● → 신규 Gaon2026!」처럼 한 줄에 값이 둘일 때 뒤 값(열쇠 말이 든 줄에서만)
+RRN = re.compile(r'(?<![\d\-])(\d{6})\s*-\s*([1-8]\d{6})(?![\d\-])')   # 주민등록·외국인등록번호: 뒷자리를 가린다(손해배상·사고조사·요금후납 문서에 흔함)
 ID_LIKE = re.compile(r'(?<![A-Za-z0-9_])(?=[A-Za-z0-9_.@\-]*[0-9_])[A-Za-z][A-Za-z0-9_.@\-]{4,}(?![A-Za-z0-9_])')   # 계정 목록 표의 아이디 칸(영문+숫자·밑줄)
 DATE_FOLDER = re.compile(r'^(\d{2,4}([.\-_ ]\d{1,2}){0,2}\s*(월|년|년도)?|\d{1,2}\s*월|다운로드|downloads?|바탕\s*화면|desktop|새\s*폴더|new folder|임시|temp|tmp|백업|backup|문서|documents?)$', re.I)
 YY_DATE = re.compile(r"[’'‘`]\s?(\d{2})\.\s?(\d{1,2})\.\s?(\d{1,2})")
@@ -56,9 +58,54 @@ NOT_PENDING = re.compile(r'없음|없다|없습니다|완료|받음|받았|종�
 
 
 def mask_secret(s):
-    """비밀번호·아이디 값을 가린다(줄 자체는 남겨야 할 때)."""
-    s = SECRET_VAL.sub(lambda m: m.group(1) + '●●●', str(s or ''))
+    """비밀번호·아이디 값과 주민등록번호를 가린다(줄 자체는 남겨야 할 때)."""
+    s = RRN.sub(lambda m: m.group(1) + '-●●●●●●●', str(s or ''))
+    s = SECRET_VAL.sub(lambda m: m.group(1) + '●●●', s)
+    if re.search(SECRET_KEY, s, re.I):
+        s = SECRET_AFTER.sub(lambda m: m.group(1) + '●●●', s)
     return SECRET_ID.sub(lambda m: m.group(1) + '●●●' + (' / ●●●' if m.group(3) else ''), s)
+
+
+HEADING = re.compile(r'^\s*(?:제?\d{1,2}\s*[.장절)]|[□■◆▶Ⅰ-Ⅻ]|[IVX]{1,4}\.)\s*\S')   # 매뉴얼·인수인계서의 업무 제목 줄(「2. 요금후납 계약 관리」)
+BULLET = re.compile(r'^(?:[-•*·]\s*|\[[^\]]{1,12}\]\s*|\d+\.\s*|[가-힣]\.\s*|\d+\)\s*|[ㅇ○]\s*|※\s*)+')   # 글머리 기호·항목 부호(core.rule_items와 같은 규칙)
+
+
+def area_by_heading(text, quote, areas):
+    """여러 업무를 담는 문서(매뉴얼·인수인계서·연간 일정)에서 한 줄의 업무: 그 줄 위의 가장 가까운 제목 줄로 고른다. 못 고르면 None."""
+    lines = text.split('\n')
+    q = core.norm(quote)[:30]
+    if not q:
+        return None
+    idx = next((i for i, l in enumerate(lines) if core.norm(l)[:30] == q or (len(q) >= 12 and q in core.norm(l))), -1)
+    if idx < 0:
+        return None
+    seen = 0
+    for l in reversed(lines[max(0, idx - 120):idx]):
+        s = l.strip()
+        if 3 <= len(s) <= 30 and HEADING.match(s):
+            a = area_of(s, '', areas)
+            if a != '기타':
+                return a
+            seen += 1
+            if seen >= 3:
+                break
+    return None
+
+
+def area_by_tag(line, areas):
+    """줄 앞의 「(창구전시판매)」처럼 업무 이름을 그대로 적은 꼬리표."""
+    best, pos = None, None
+    for a in areas:   # 「(창구전시판매) … 우체국쇼핑 특산품」처럼 둘이 있으면 앞에 적은 것
+        i = line.find(a['name']) if a.get('name') else -1
+        if i >= 0 and (pos is None or i < pos):
+            best, pos = a['name'], i
+    return best
+
+
+def cut(s, n):
+    """칸에 넣을 때 자르면 「…」를 붙인다(날짜가 뒤에 오는 긴 공문 줄이 말없이 끊기던 것)."""
+    s = str(s or '')
+    return s if len(s) <= n else s[:n - 1].rstrip() + '…'
 
 
 def has_secret(s):
@@ -111,15 +158,24 @@ def iso(y, m, d):
         return ''
 
 
+SIHANG = re.compile(r'시행\s+[^\n()]{1,30}?-\s*\d+\s*\(\s*(20\d{2})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})')   # 공문의 「시행 우편영업과-3310 (2025. 10. 2.)」 줄
+
+
 def doc_date(f, text):
-    """문서 날짜: 파일 이름 YYYYMMDD → 이름 YYYYMM → 본문 「시행」 근처 날짜 → 본문 첫 날짜 → 파일 수정일."""
+    """문서 날짜: 파일 이름 YYYYMMDD → 본문 「시행 부서-번호 (날짜)」 → 이름 YYYYMM(시행일이 같은 달이면 그날) → 본문 「시행」 근처 날짜 → 본문 첫 날짜 → 파일 수정일."""
+    m = SIHANG.search(text[:4000])
+    sh = iso(*m.groups()) if m else ''
     for name in dict.fromkeys([base_name(f), outer_name(f)]):   # 안쪽 이름 → 압축 파일 이름
         m = FNAME_DATE.search(name)
         if m and iso(*m.groups()):
             return iso(*m.groups()), '파일 이름'
         m = FNAME_YM.search(name)
         if m:
+            if sh:   # 이름의 연월보다 본문의 시행일이 정확하다(이름 「202509」 때문에 모두 그달 1일로 찍히던 것)
+                return sh, '본문(시행)'
             return iso(m.group(1), m.group(2), 1), '파일 이름(월)'
+    if sh:
+        return sh, '본문(시행)'
     if f.get('kind') == 'eml':   # 메일은 머리의 날짜(Date)
         m = re.search(r'^날짜:\s*(.+)$', text[:600], re.M)
         if m:
@@ -621,18 +677,18 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                 cand_l = []
                 for l in text_of(f0).split('\n'):
                     l = re.sub(r'\s+', ' ', l).strip()
-                    if 8 <= len(l) <= 160 and HOT_LINE.search(l) and core.norm(l) != core.norm(d['title']) and l not in cand_l:
-                        cand_l.append(l)
-                pri = lambda l: (0 if re.search(r'후임|지시|해야|결정|미결', l) else 1)
+                    if 8 <= len(l) <= 160 and (HOT_LINE.search(l) or ISSUE.search(l) or MIGYEOL.search(l)) and core.norm(l) != core.norm(d['title']) and l not in cand_l:
+                        cand_l.append(l)   # 현안·미결로 고른 근거 줄(재협의 필요·미조치·아직 안 옴)도 후보에
+                pri = lambda l: (0 if re.search(r'후임|지시|해야|결정|미결', l) else 1 if (ISSUE.search(l) or MIGYEOL.search(l)) else 2)
                 qs = sorted(cand_l, key=pri)[:3]   # 후임자·지시·해야·미결 줄을 먼저, 3줄까지
                 it['quote'] = ' / '.join(mask_secret(l if len(l) <= 110 else l[:108] + '…') for l in sorted(qs, key=cand_l.index))
                 if d['kind3'] == '현안':
                     mig = [l for l in cand_l if MIGYEOL.search(l) and not NOT_PENDING.search(l)]
                     if mig:   # 「결론 못 냄」「회신 부탁」「아직 안 옴」: 미결로 제안(전임자가 확인), 기다리는 것을 다음 칸에
-                        it['status'] = '미결'; it['next'] = mask_secret(mig[0][:110]); it['status_by'] = '규칙'
+                        it['status'] = '미결'; it['next'] = mask_secret(cut(mig[0], 110)); it['status_by'] = '규칙'
                     td = [l for l in cand_l if TODO_LINE.search(l) and (re.search(r'후임|지시|해야|할\s*것', l) or DUE_PATS[2].search(l) or DUE_PATS[1].search(l))]
                     if td:
-                        it['todo'] = mask_secret(td[0][:110]); it['todo_src'] = '원문'
+                        it['todo'] = mask_secret(cut(td[0], 110)); it['todo_src'] = '원문'
                         td_due = [x['date'] for x in d['due'] if x.get('line') and core.norm(x['line']) in core.norm(td[0])]   # 할 일 줄의 「9월 11일까지」가 있으면 그 날이 기한(기간 끝 날짜보다)
                         if td_due and it['due_next'] and it['due_next'] not in td_due:
                             it['due_next'] = td_due[0]
@@ -657,14 +713,25 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                 if isinstance(obj, dict):
                     text = text_of(f)
                     it['summary'] = str(obj.get('요지') or '').strip()[:120]
-                    it['todo'] = str(obj.get('할 일') or obj.get('할일') or '').strip()[:120]
+                    mt = str(obj.get('할 일') or obj.get('할일') or '').strip()[:120]
+                    for dm in re.findall(r'(?:(20\d{2})\s*[.\-/]\s*)?(\d{1,2})\s*[.월/\-]\s*(\d{1,2})\s*일?', mt):   # 할 일에 든 날짜가 문서에 없으면 지어낸 것: 버린다
+                        mo, dd = int(dm[1]), int(dm[2])
+                        if not (1 <= mo <= 12 and 1 <= dd <= 31):
+                            continue
+                        if not re.search(r'(?<!\d)%d\s*\.?\s*월?\s*%d\s*일|(?<!\d)%d\s*\.\s*%d\s*\.|-%02d-%02d|(?<!\d)%d/%d(?!\d)' % (mo, dd, mo, dd, mo, dd, mo, dd), text):
+                            mt = ''; break
+                    if mt:   # 모델이 할 일을 비우면 규칙이 원문에서 찾은 할 일을 그대로 둔다
+                        it['todo'] = mt; it['todo_src'] = '모델'
                     due = str(obj.get('기한') or '').strip()[:10]
                     if due and any(x['date'] == due for x in d['due']):
                         it['due_next'] = due
                     owner = str(obj.get('담당') or '').strip()[:60]
                     ph = core.PHONE.search(owner)
                     nm = re.search(r'([가-힣]{2,4})\s*(?:주무관|담당|과장|팀장|실장|국장|계장|사무관|서기관)', owner)
-                    if owner and not re.search(r'미기재|확인 필요|없음|모름|○○', owner) and ((ph and ph.group(0) in text) or (nm and nm.group(1) in text and nm.group(1) not in ('담당자',))):
+                    ok_ph = (not ph) or (ph.group(0) in text)
+                    ok_nm = (not nm) or (nm.group(1) in text and nm.group(1) not in ('담당자',))
+                    same = (not ph) or (not nm) or any(ph.group(0) in l and nm.group(1) in l for l in text.split('\n'))   # 이름과 전화가 같은 원문 줄에 있을 때만(다른 줄의 번호를 짝지은 것은 버린다)
+                    if owner and not re.search(r'미기재|확인 필요|없음|모름|○○', owner) and (ph or nm) and ok_ph and ok_nm and same:
                         it['owner'] = owner
                     st = str(obj.get('상태') or '')
                     it['model_status'] = '끝남' if '끝' in st else ('진행 중' if '진행' in st else '')
@@ -732,7 +799,7 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                         continue   # 표 파일의 휴대전화는 개인 번호일 수 있다(업무 상대는 사무실 번호로)
                     role = ' · '.join(x for x in parts[2:] if len(x) <= 20 and not re.search(r'\d', x))   # 나머지 칸(주소·생일 등)은 옮기지 않고 짧은 직위·부서만
                     if ph not in people and parts[0] and parts[0] not in ('담당자', '?'):
-                        people[ph] = {'name': parts[0], 'phone': ph, 'line': mask_secret(role)[:40], 'file': d['file'], 'title': d['title'], 'area': d['area']}
+                        people[ph] = {'name': parts[0], 'phone': ph, 'line': mask_secret(role)[:40], 'file': d['file'], 'title': mask_secret(d['title']), 'area': d['area']}
                 continue
             if r['type'] != '월별 할 일' or n_rule >= 40 or n_file >= 10:
                 continue
@@ -749,6 +816,12 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                     continue   # 옛 공문의 「매주 금요일까지」(한시 운영)는 지금 할 일이 아닐 수 있다
                 cyc = {'익월': '매월', '매분기': '분기'}.get(when, when)
                 recur = {'cycle': cyc}; label = re.sub(r'\s*까지$', '', ev.group(0)).strip()
+                if cyc == '매년':   # 「매년 11월에 이관한다」의 시기는 문장 속 달(파일 날짜의 달이 찍히던 것)
+                    m2 = re.search(r'매년\s*(\d{1,2})\s*월', txt) or re.search(r'(\d{1,2})\s*월', txt)
+                    if m2 and 1 <= int(m2.group(1)) <= 12:
+                        recur['month'] = int(m2.group(1)); label = '%d월' % int(m2.group(1))
+                    else:
+                        label = '매년'
             elif annual and mo and not any(y < base_year for y in yrs):
                 recur = {'cycle': '매년', 'month': int(mo.group(1)), 'years': []}; label = '%s월' % mo.group(1)
             else:
@@ -757,9 +830,13 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
             if key in seen_r:
                 continue
             seen_r.add(key); n_rule += 1; n_file += 1; n += 1
-            it = {'id': n, 'file': d['file'], 'kind': d['kind'], 'cls': d['cls'], 'date': d['date'], 'date_src': d.get('date_src', ''), 'docno': '', 'title': r['text'][:80], 'area': d['area'],
+            full = re.sub(r'\s+', ' ', BULLET.sub('', str(r.get('quote') or r['text']).strip())).strip()   # 원문 줄 그대로, 글머리 기호만 떼고(80자에서 날짜가 잘리던 것)
+            area = area_by_tag(full, areas) or d['area']   # 「(창구전시판매) 매주 금요일 …」처럼 줄에 업무 이름을 적었으면 그 업무
+            if (annual or d['cls'] in ('인수인계서', '매뉴얼')) and not area_by_tag(full, areas):   # 매뉴얼·인수인계서는 줄 위의 제목(「3. 창구전시판매」)으로(문서 전체의 업무가 붙던 것)
+                area = area_by_heading(text_of(f), r.get('quote') or r['text'], areas) or area
+            it = {'id': n, 'file': d['file'], 'kind': d['kind'], 'cls': d['cls'], 'date': d['date'], 'date_src': d.get('date_src', ''), 'docno': '', 'title': cut(full, 80), 'area': area,
                   'due': [], 'due_next': '', 'contacts': [], 'recur': recur, 'attachments': [], 'kind3': '반복', 'reflected': '', 'hist': False, 'is_status': False,
-                  'summary': '', 'todo': r['text'][:110], 'todo_src': '원문', 'owner': '', 'model_status': '', 'src': '규칙(반복 문장)', 'keep': True, 'decided': False, 'status': '진행',
+                  'summary': '', 'todo': cut(full, 160), 'todo_src': '원문', 'owner': '', 'model_status': '', 'src': '규칙(반복 문장)', 'keep': True, 'decided': False, 'status': '진행',
                   'next': '', 'note': '', 'seen': False, 'quote': mask_secret(r['quote'][:110]), 'when': label, 'rkey': 'R:' + key}
             p = old_r.get(it['rkey'])
             if p:
@@ -781,6 +858,18 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
         if p.get('src') == '직접 입력':
             n += 1
             items.append(dict(p, id=n))
+    seen_f = {it['file'] for it in items if it.get('file') and not it.get('rkey')}
+    seen_rk = {it['rkey'] for it in items if it.get('rkey')}
+    for p in (prev_items or []):   # 사람이 넣기·버리기를 정한 항목은 기준일·기간이 바뀌어 새 초안의 후보에서 빠져도 그대로 이어 간다(「넣기·버리기·메모는 그대로 남습니다」 약속)
+        if not p.get('decided') or p.get('src') == '직접 입력':
+            continue
+        if p.get('rkey'):
+            gone = p['rkey'] not in seen_rk
+        else:
+            gone = bool(p.get('file')) and p['file'] not in seen_f
+        if gone:
+            n += 1
+            items.append(dict(p, id=n, carried=True))
     for it in items:   # 비밀번호·아이디 값은 어느 칸에도 남기지 않는다(제목·할 일·요지·다음·발췌·담당·연락처 줄·기한 줄)
         for k in ('title', 'todo', 'summary', 'next', 'quote', 'owner', 'note', 'question', 'answer'):
             if it.get(k):
@@ -801,8 +890,8 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
             'n_hist': sum(1 for i in items if i['kind3'] == '연혁'), 'n_status': sum(1 for i in items if i['kind3'] == '현황'),
             'people': people_list, 'own_phones': sorted(own), 'secret_files': [d['file'] for d in docs if d.get('secret')][:50], 'private_files': [d['file'] for d in docs if d.get('private')][:50],
             'base_date': today.isoformat() if today else '', 'base_why': base_why, 'asset_hints': asset_hints(files, docs),
-            'docs_old': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'cls': d['cls']} for d in docs if d['kind3'] == '기간 밖' and not d.get('private')][:5000],
-            'docs_other': [{'file': d['file'], 'date': d['date'], 'title': d['title'], 'area': d['area'], 'why': '업무 매뉴얼' if d['kind3'] == '매뉴얼' else {'copy': '같은 파일 사본', 'version': '이전 판(수정본, 최신: %s)' % base_name({'file': d.get('dup_of', '')})}.get(d.get('dup'), '같은 문서의 다른 형식(중복본)')} for d in docs if d['kind3'] in ('매뉴얼', '중복') and not d.get('private')][:2000]}
+            'docs_old': [{'file': d['file'], 'date': d['date'], 'title': mask_secret(d['title']), 'area': d['area'], 'cls': d['cls']} for d in docs if d['kind3'] == '기간 밖' and not d.get('private')][:5000],
+            'docs_other': [{'file': d['file'], 'date': d['date'], 'title': mask_secret(d['title']), 'area': d['area'], 'why': '업무 매뉴얼' if d['kind3'] == '매뉴얼' else {'copy': '같은 파일 사본', 'version': '이전 판(수정본, 최신: %s)' % base_name({'file': d.get('dup_of', '')})}.get(d.get('dup'), '같은 문서의 다른 형식(중복본)')} for d in docs if d['kind3'] in ('매뉴얼', '중복') and not d.get('private')][:2000]}
     return items, calls, errors, info
 
 
