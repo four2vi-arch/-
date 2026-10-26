@@ -9,7 +9,7 @@ python build.py  ->  dist/우편번호_자동검색기_v1.11_출품본.html
 """
 import re, hashlib, base64, pathlib
 ROOT = pathlib.Path(__file__).resolve().parent
-def read(p): return (ROOT / p).read_text(encoding="utf-8")
+def read(p): return (ROOT / p).read_text(encoding="utf-8").replace("\r\n", "\n")  # 윈도에서 줄바꿈이 CRLF로 바뀌어 받아도 같은 지문·CSP·SHA-256
 def sha(t): return hashlib.sha256(t.encode("utf-8")).hexdigest()
 # 사진으로 읽기: 글자 읽기 엔진·한국어 자료는 데이터 블록(지문 검증에서 제외)으로 넣고,
 # 대신 블록마다 SHA-256 을 계산해 사진 읽기 코드(핵심 코드)에 박아 둔다. 쓰기 직전에 대조한다.
