@@ -151,12 +151,12 @@
     return timeout(cp, 12000, POWER).catch(function (e) { if (e && e.name === 'TimeoutError') { late = true; } throw e; });
   }
   function attach(device) {
-    var my = gen;
+    var my = gen, v0 = get().via;
     dev = device; ch = null;
     if (!dev.__zfHook) { dev.__zfHook = true; dev.addEventListener('gattserverdisconnected', onDrop); }
     return gattConnect(device).then(pickChar).then(function (c) {
       // 붙는 사이 놓기·방식 바꾸기가 있었으면 붙은 연결을 버린다
-      if (my !== gen || get().via !== 'ble') { drop(device); var x = new Error('인쇄 방식이 바뀌어 연결을 놓았어요.'); x.code = 'DROPPED'; throw x; }
+      if (my !== gen || get().via !== v0) { drop(device); var x = new Error('인쇄 방식이 바뀌어 연결을 놓았어요.'); x.code = 'DROPPED'; throw x; }
       ch = c;
       set({ name: dev.name || '' });
       clearTimeout(rcT); rcN = 0; emit('connected');

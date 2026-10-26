@@ -1,4 +1,4 @@
-// 물어물어 v1.7 블루투스(BLE) 직접 인쇄 시험 — 가짜 BLE 프린터(navigator.bluetooth 대역)로 보낸 바이트를 받아 스티커 그림을 되살려 확인한다.
+// 물어물어 v1.7(v1.11 갱신) 블루투스(BLE) 직접 인쇄 시험 — 가짜 BLE 프린터(navigator.bluetooth 대역)로 보낸 바이트를 받아 스티커 그림을 되살려 확인한다.
 // 사용: node ble_test.js <출품본.html> <주소록.xlsx> <결과 폴더>   (가상 자료만)
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const fs = require('fs'); const path = require('path'); const cp = require('child_process');
@@ -55,6 +55,9 @@ async function open(browser, mock, extra) {
     st.sender = { name: '가상발송', phone: '010-0000-9999', zip: '56180', addr1: '전북특별자치도 정읍시 충정로 234-1', addr2: '' }; __kiosk.finish(); });
   await page.waitForSelector('#kPrintBtn');
   ok('마침 화면 단추 「주소 스티커 뽑기」', (await page.textContent('#kPrintBtn')).trim() === '주소 스티커 뽑기');
+  // v1.11: 어르신 뽑기는 선택 창을 열지 않으므로 직원이 먼저 연결한다(직원 설정 「프린터 연결」과 같은 호출)
+  await page.evaluate(() => { const b = document.createElement('button'); b.id = 'tStaffConn'; b.textContent = '직원 연결'; b.style.cssText = 'position:fixed;left:0;top:0;z-index:9999'; b.onclick = () => { __ble.connect({ pick: true }).then(() => { window.__sc = 'ok'; }, e => { window.__sc = e.message; }); }; document.body.appendChild(b); });
+  await page.click('#tStaffConn'); await page.waitForFunction(() => window.__sc, null, { timeout: 5000 });
   await page.click('#kPrintBtn');
   await page.waitForFunction(() => Array.from(document.querySelectorAll('.k-toast,#kModal')).some(e => /스티커 3장을 보냈어요|뽑지 못했/.test(e.textContent)), null, { timeout: 20000 });
   ok('토스트 「스티커 3장을 보냈어요」', true);

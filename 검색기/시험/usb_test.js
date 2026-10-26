@@ -1,4 +1,4 @@
-// 물어물어 v1.8 USB(OTG·WebUSB) 직접 인쇄 시험 — 가짜 USB 프린터(navigator.usb 대역)로 보낸 바이트를 받아 스티커 그림을 되살려 확인한다.
+// 물어물어 v1.8(v1.11 갱신) USB(OTG·WebUSB) 직접 인쇄 시험 — 가짜 USB 프린터(navigator.usb 대역)로 보낸 바이트를 받아 스티커 그림을 되살려 확인한다.
 // 사용: node ble_test.js <출품본.html> <주소록.xlsx> <결과 폴더>   (가상 자료만)
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const fs = require('fs'); const path = require('path'); const cp = require('child_process');
@@ -66,7 +66,11 @@ const MOCK = (opt) => `(() => {
   await page.evaluate(() => { localStorage.setItem('zipfinder.ble.v1', JSON.stringify({ via: 'usb' })); const k = JSON.parse(localStorage.getItem('zipfinder.kiosk.v1') || '{}'); k.paper = 'lbl'; k.lblW = 100; k.lblH = 45; localStorage.setItem('zipfinder.kiosk.v1', JSON.stringify(k)); });
   await page.click('#btnKiosk'); await page.waitForSelector('#kiosk:not([hidden])');
   await page.evaluate((E) => { const st = __kiosk.state(); eval('st.entries.push(...' + E + ')'); st.sender = { name: '가상발송', phone: '010-0000-9999', zip: '56180', addr1: '전북특별자치도 정읍시 충정로 234-1', addr2: '' }; __kiosk.finish(); }, entries);
-  await page.waitForSelector('#kPrintBtn'); await page.click('#kPrintBtn');
+  await page.waitForSelector('#kPrintBtn');
+  // v1.11: 어르신 뽑기는 선택 창을 열지 않으므로 직원이 먼저 연결한다
+  await page.evaluate(() => { const b = document.createElement('button'); b.id = 'tStaffConn'; b.textContent = '직원 연결'; b.style.cssText = 'position:fixed;left:0;top:0;z-index:9999'; b.onclick = () => { __ble.connect({ pick: true }).then(() => { window.__sc = 'ok'; }, e => { window.__sc = e.message; }); }; document.body.appendChild(b); });
+  await page.click('#tStaffConn'); await page.waitForFunction(() => window.__sc, null, { timeout: 5000 });
+  await page.click('#kPrintBtn');
   await page.waitForFunction(() => Array.from(document.querySelectorAll('.k-toast,#kModal')).some(e => /스티커 2장을 보냈어요|뽑지 못했/.test(e.textContent)), null, { timeout: 20000 });
   ok('토스트 「스티커 2장을 보냈어요」', true);
   const w1 = await page.evaluate(() => window.__w); const js = jobs(w1);
