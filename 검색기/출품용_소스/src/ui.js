@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.10 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.11 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 (function () {
   "use strict";
 
@@ -3773,6 +3773,7 @@
     qs("#labelArea").classList.toggle("rollmode", roll);
     var bleOk = !!(window.__ble && __ble.supported());
     qs("#btnLabelBle").hidden = !(roll && bleOk);
+    qs("#btnLabelBle").textContent = window.__ble && __ble.via() === "app" ? "Print Label 앱으로 보내기" : "프린터로 바로 인쇄";
     qs("#btnLabelBleSet").hidden = !(roll && window.__ble);
     // 인쇄 용지 크기: 롤 스티커는 라벨 한 장 크기, 시트는 A4
     var pg = document.getElementById("lbPageCss");
@@ -3793,6 +3794,9 @@
       });
     }
     qs("#lbInfo").textContent = roll ? fmtNum(v.length) + "건 · 롤 스티커 " + fmtNum(v.length) + "장 (" + rw + "×" + rh + "mm)" : fmtNum(v.length) + "건 · A4 " + Math.ceil(v.length / f) + "장";
+    if (roll && window.__ble && __ble.isRoll && __ble.isRoll() && __ble.via() !== "dialog") {
+      qs("#lbInfo").textContent += " · 프린터 설정이 「영수증 롤」이라 바로 인쇄는 롤 폭 " + __ble.rollWidth() + (__ble.rollSide && __ble.rollSide() ? "mm × 길이 " + __ble.rollLen() + "mm로 돌려 찍습니다" : "mm에 맞춰 내용 길이만큼 뽑습니다");
+    }
     var btnLabelPeekEl = qs("#btnLabelPeek");
     if (btnLabelPeekEl) {
       btnLabelPeekEl.hidden = !privacyMask.on;
@@ -4285,7 +4289,7 @@
       qs("#lbInfo").textContent = "프린터로 보내는 중…";
       addLog("라벨 인쇄(직접)", list.length, rw + "×" + rh);
       __ble.print(list, rw, rh).then(function (n) {
-        qs("#lbInfo").textContent = n + "장을 프린터로 보냈습니다.";
+        qs("#lbInfo").textContent = __ble.resultText ? __ble.resultText(n, n + "장을 프린터로 보냈습니다.") : n + "장을 프린터로 보냈습니다.";
       }, function (e) {
         qs("#lbInfo").textContent = "실패: " + e.message + (e.done ? " (" + e.done + "장은 보냄)" : "");
       });

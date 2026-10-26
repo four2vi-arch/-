@@ -1,4 +1,4 @@
-/*! 물어물어(우편번호 자동검색기) v1.10 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/*! 물어물어(우편번호 자동검색기) v1.11 (출품본) · 어르신 직접 입력·사진으로 읽기·감열 인쇄·QR 접수 메모 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
 /* 민원실에서 어르신이 직접 쓰는 대화형 주소 입력.
    - 말(인터넷 PC)·글자로 받은 주소를 정리해 엔진에 묻고, 빠진 부분만 되묻는다.
    - 우편번호는 언제나 엔진(우편번호 고시 DB)이 확정한다. AI는 주소 조각을 뽑는 보조 역할만 한다.
@@ -918,19 +918,20 @@
     hist = [];
     var s = st.sender || {};
     if (!st.no) { st.no = nextNo(); }
-    var what = paper() === 'lbl' ? '주소 스티커' : '접수 메모';
+    var what = paper() === 'lbl' ? '주소 스티커' : (paper() === '80' || paper() === '58' ? '주소 쪽지' : '접수 메모');
     var helpOnly = st.entries.length === 1 && st.entries[0].why === '직원 도움 요청';
     var list = helpOnly ? '<div class="k-card"><b>주소는 창구에서 직원이 함께 찾아 드려요.</b></div>' : st.entries.map(function (x) {
       var sub = [esc(x.name), x.phone ? esc(x.phone) : '', x.check ? '<span class="k-warn">창구에서 한 번 더 확인</span>' : ''].filter(Boolean).join(' · ');   // 이름이 없을 때 앞에 「· 」가 붙던 것
       return '<div class="k-card"><b>' + esc(x.zip || '우편번호 창구 확인') + '</b> ' + esc(x.addr1) + ' ' + esc(x.addr2) + (sub ? '<div class="k-sub">' + sub + '</div>' : '') + '</div>';
     }).join('');
     var sline = [esc(s.name || ''), s.phone ? esc(s.phone) : '', s.addr1 ? esc(s.zip || (s.check ? '우편번호 창구 확인' : '')) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : ''].filter(function (v) { return clean(v); }).join(' · ');
-    main.innerHTML = '<div class="k-bubble" style="text-align:center">다 됐어요! 아래 빨간 단추를 눌러 ' + what + '를 뽑아 주세요.<div class="k-big">' + esc(st.no) + '번</div>' +
-      '<small>소포 상자와 뽑은 ' + what + '를 들고 창구로 오세요. 뽑지 못하셨으면 직원을 불러 「' + esc(st.no) + '번」이라고 말씀해 주세요(이 화면은 10분 동안 남아 있어요).</small></div>' +
+    // 접수 번호는 번호표 호출기와 연동되지 않아 화면·출력물에 보이지 않는다(처리 이력에만 남김)
+    main.innerHTML = '<div class="k-bubble" style="text-align:center">다 됐어요! 아래 빨간 단추를 눌러 ' + what + '를 뽑아 주세요.' +
+      '<small>소포 상자와 뽑은 ' + what + '를 들고 창구로 오세요. 뽑지 못하셨으면 직원을 불러 주세요(이 화면은 10분 동안 남아 있어요).</small></div>' +
       '<div class="k-row" style="margin-top:4px"><button type="button" class="k-btn pri" id="kPrintBtn">' + what + ' 뽑기</button><button type="button" class="k-btn sub" id="kDone">처음 화면으로</button></div>' +
       (sline ? '<div class="k-sub">보내시는 분: ' + sline + '</div>' : '') + list;   // 뽑기 단추를 맨 위에(화면 아래로 밀려 안 보이던 것)
     st.finished = true;   // 직원이 「접수 화면으로 넘기기」(직원 설정)를 할 수 있게 자동 지우기를 늦춘다
-    speak('다 됐어요. 빨간 단추를 눌러 ' + what + '를 뽑아 주세요. ' + st.no + '번입니다.');
+    speak('다 됐어요. 빨간 단추를 눌러 ' + what + '를 뽑아 주세요.');
     $('#kPrintBtn', main).onclick = function () { st.printed = true; printSlip(); };
     $('#kDone', main).onclick = function () {
       modal('<div class="k-bubble">적으신 내용을 지우고 처음으로 갈까요?<small>' + (st.printed ? '뽑으셨으면 지워도 괜찮아요.' : '아직 ' + what + '를 뽑지 않으셨어요. 먼저 「' + what + ' 뽑기」를 눌러 주세요.') + '</small></div>',
@@ -938,7 +939,8 @@
     };
     touch();
     log('어르신 입력 완료', st.entries.length, '접수번호 ' + st.no);
-    if (cfg().autoPrint) { toast('메모를 뽑고 있어요. 창구에 가져가세요.'); setTimeout(printSlip, 700); }
+    if (cfg().autoPrint && (bleOn() || bleRoll()) && window.__ble && __ble.ready && !__ble.ready()) { toast('빨간 단추를 눌러 메모를 뽑아 주세요.'); }
+    else if (cfg().autoPrint) { toast('메모를 뽑고 있어요. 창구에 가져가세요.'); setTimeout(printSlip, 700); }
   }
   // ------------------------------------------------------------------ QR 접수 메모
   // 메모 내용 → JSON → (압축) → base32 대문자. QR 영숫자 모드에 맞고, 창구 스캐너가 한글 입력 상태여도 되살릴 수 있다.
@@ -1010,7 +1012,7 @@
     var s = st.sender || {};
     var t = new Date();
     var org = clean(cfg().org || ''), qr = qrSvg(memoPayload());
-    return '<h1>' + (org ? esc(org) + ' ' : '') + '우편 접수 메모</h1><div class="p-no">' + esc(st.no) + '번</div>' +
+    return '<h1>' + (org ? esc(org) + ' ' : '') + '우편 접수 메모</h1>' +
       '<div class="p-s">' + t.toLocaleString('ko-KR') + ' · 보내는 분: ' + esc(s.name || '') + (s.phone ? ' (' + esc(s.phone) + ')' : '') +
       (s.addr1 ? ' · ' + esc(s.zip || (s.check ? '우편번호 확인 필요' : '')) + ' ' + esc(s.addr1) + ' ' + esc(s.addr2 || '') : '') + '</div>' +
       st.entries.map(function (x, i) {
@@ -1033,7 +1035,7 @@
     return '<div class="p-lbl' + (test ? ' l-test' : '') + '"><div class="l-top"><span class="l-zip">' + esc(x.zip || '우편번호 확인필요') + '</span><span class="l-name">' + esc(x.name || '') + (x.name ? ' 귀하' : '') + '</span></div>' +
       '<div class="l-addr">' + esc(x.addr1) + ' ' + esc(x.addr2 || '') + '</div>' +
       (x.phone ? '<div class="l-tel">☎ ' + esc(x.phone) + '</div>' : '') +
-      (test ? '<div class="l-ruler">' + test + '</div>' : '<div class="l-from">' + (from || '') + (from ? ' · ' : '') + '접수 ' + esc(st.no) + '번' + (x.check ? ' <span class="l-chk">· 창구 확인</span>' : '') + '</div>') + '</div>';
+      (test ? '<div class="l-ruler">' + test + '</div>' : '<div class="l-from">' + (from || '') + (x.check ? (from ? ' · ' : '') + '<span class="l-chk">창구 확인</span>' : '') + '</div>') + '</div>';
   }
   function labelsHtml(list, test) { return list.map(function (x, i) { return labelHtml(x, i, test); }).join(''); }
   // 글자가 칸을 넘치면 조금씩 줄여 맞춘다
@@ -1079,18 +1081,50 @@
   }
   // 태블릿: 인쇄 창 없이 블루투스(BLE)·USB(OTG) 라벨프린터로 스티커를 바로 보낸다
   function bleOn() { return paper() === 'lbl' && window.__ble && __ble.direct(); }
+  // 감열 영수증(80·58mm)도 태블릿 바로 인쇄가 켜져 있으면 인쇄 창 없이 접수 메모를 롤로 뽑는다
+  function bleRoll() { return (paper() === '80' || paper() === '58') && window.__ble && __ble.direct() && !!__ble.printMemo; }
+  function bleMemo() {
+    var s = st.sender || {}, org = clean(cfg().org || '');
+    // 주소 쪽지: 창구에서 받아 적기 쉽게 보내는 분·받는 분을 크게. QR(창구 단말 연계 화면 없음)·접수 번호(호출기 미연동)는 넣지 않는다
+    var zipTxt = function (z, chk) { return z || (chk ? '우편번호 창구 확인' : '우편번호 확인 필요'); };
+    var blocks = [];
+    if (s.name || s.phone || s.addr1) {
+      blocks.push({ title: '보내는 분', zip: s.addr1 ? zipTxt(s.zip, s.check) : '', name: s.name || '', addr: clean((s.addr1 || '') + ' ' + (s.addr2 || '')), phone: s.phone || '' });
+    }
+    st.entries.forEach(function (x, i) {
+      blocks.push({ title: '받는 분' + (st.entries.length > 1 ? ' ' + (i + 1) : ''), zip: zipTxt(x.zip, x.check), name: x.name ? x.name + ' 귀하' : '',
+        addr: clean((x.addr1 || '') + ' ' + (x.addr2 || '')), phone: x.phone || '', note: x.check ? '창구 확인 필요' + (x.why ? '(' + x.why + ')' : '') : '' });
+    });
+    var slip = { blocks: blocks, foot: (org ? org + ' · ' : '') + '개인정보가 담긴 쪽지입니다. 접수가 끝나면 창구에서 파기합니다.' };
+    var memo = {
+      title: (org ? org + ' ' : '') + '우편 접수 메모', no: st.no + '번',
+      sub: new Date().toLocaleString('ko-KR') + ' · 보내는 분: ' + (s.name || '') + (s.phone ? ' (' + s.phone + ')' : '') +
+        (s.addr1 ? ' · ' + (s.zip || (s.check ? '우편번호 확인 필요' : '')) + ' ' + s.addr1 + ' ' + (s.addr2 || '') : ''),
+      items: st.entries.map(function (x, i) {
+        return { zip: x.zip || '우편번호 확인 필요', addr: clean((x.addr1 || '') + ' ' + (x.addr2 || '')),
+          sub: (i + 1) + '. 받는 분 ' + (x.name || '(미입력)') + (x.phone ? ' · ' + x.phone : '') + (x.check ? ' · 창구 확인 필요' + (x.why ? '(' + x.why + ')' : '') : '') };
+      }),
+      qr: memoPayload(), qrNote: '창구에서 이 QR을 찍으면 주소가 바로 들어갑니다', foot: '개인정보가 담긴 메모입니다. 접수가 끝나면 창구에서 파기합니다.'
+    };
+    toast('주소 쪽지를 프린터로 보내고 있어요…');
+    log('어르신 입력 주소 쪽지 인쇄(직접)', st.entries.length, '접수번호 ' + st.no);
+    __ble.printMemo(slip, Number(paper()) || 80).then(function () { toast(__ble.resultText(1, '주소 쪽지를 뽑았어요. 창구에 가져가세요.', '주소 쪽지')); }, function (e) {
+      modal('<div class="k-bubble">주소 쪽지를 뽑지 못했어요. 직원을 불러 주세요.<small>(직원 확인) ' + esc(e.message) + '</small></div>', [['다시 연결하고 뽑기(직원)', function () { closeModal(); bleMemo(); }, 'pri'], ['닫기', closeModal, 'sub']]);
+    });
+  }
   function bleSlip() {
     var sz = lblSize(), sd = st.sender || {};
     var from = sd.name ? '보내는 분 ' + sd.name + (sd.phone ? ' ' + sd.phone : '') + (sd.addr1 ? ' · ' + sd.addr1 + ' ' + (sd.addr2 || '') : '') : '';
-    var list = st.entries.map(function (x) { return { zip: x.zip, name: x.name, phone: x.phone, addr1: x.addr1, addr2: x.addr2, check: x.check, from: from, no: st.no }; });
+    var list = st.entries.map(function (x) { return { zip: x.zip, name: x.name, phone: x.phone, addr1: x.addr1, addr2: x.addr2, check: x.check, from: from, no: '' }; });
     toast('스티커를 프린터로 보내고 있어요…');
     log('어르신 입력 스티커 인쇄(직접)', list.length, '접수번호 ' + st.no);
-    __ble.print(list, sz[0], sz[1]).then(function (n) { toast('스티커 ' + n + '장을 보냈어요. 프린터에서 받아 가세요.'); }, function (e) {
-      modal('<div class="k-bubble">스티커를 뽑지 못했어요.<small>' + esc(e.message) + '<br>직원에게 말씀해 주세요.</small></div>', [['다시 해 볼게요', function () { closeModal(); bleSlip(); }, 'pri'], ['닫기', closeModal, 'sub']]);
+    __ble.print(list, sz[0], sz[1]).then(function (n) { toast(__ble.resultText ? __ble.resultText(n, '스티커 ' + n + '장을 보냈어요. 프린터에서 받아 가세요.') : '스티커 ' + n + '장을 보냈어요. 프린터에서 받아 가세요.'); }, function (e) {
+      modal('<div class="k-bubble">스티커를 뽑지 못했어요. 직원을 불러 주세요.<small>(직원 확인) ' + esc(e.message) + '</small></div>', [['다시 연결하고 뽑기(직원)', function () { closeModal(); bleSlip(); }, 'pri'], ['닫기', closeModal, 'sub']]);
     });
   }
   function printSlip() {
     if (bleOn()) { return bleSlip(); }
+    if (bleRoll()) { return bleMemo(); }
     preparePrint();
     log(paper() === 'lbl' ? '어르신 입력 스티커 인쇄' : '어르신 입력 인쇄', st.entries.length, '접수번호 ' + st.no);
     setTimeout(function () {
@@ -1151,7 +1185,21 @@
         paint();
       };
     });
+    // 블루투스·USB 키보드: 숫자(숫자키패드는 NumLock이 꺼져 있어도) · 지우기(Backspace) · 다음(Enter)
+    padKey = function (e) {
+      if (!show.isConnected) { padKey = null; return; }
+      var k = /^Numpad[0-9]$/.test(e.code || '') ? e.code.slice(6) : e.key;
+      if (/^[0-9]$/.test(k)) { e.preventDefault(); if (val.length < (o.phone ? 11 : 9)) { val += k; paint(); } }
+      else if (k === 'Backspace' || k === 'Delete') { e.preventDefault(); val = val.slice(0, -1); paint(); }
+      else if ((k === 'Enter' || e.code === 'NumpadEnter') && !(e.target && e.target.tagName === 'BUTTON')) { e.preventDefault(); o.done(val); }
+    };
   }
+  var padKey = null;
+  document.addEventListener('keydown', function (e) {
+    if (!padKey || !root || root.hidden || e.isComposing) { return; }
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { return; }
+    padKey(e);
+  });
 
   // ------------------------------------------------------------------ 직원 설정
   function aiTest() {
@@ -1169,6 +1217,14 @@
     });
   }
   function lblTest() {
+    // 태블릿 바로 인쇄(블루투스·USB·앱)를 쓰면 크롬 인쇄 창이 아니라 그 설정(용지·가로 보정)으로 뽑는다
+    if (window.__ble && __ble.direct() && __ble.testNote) {
+      var tw = Number($('#kfLblW').value) || 100, th = Number($('#kfLblH').value) || 45;
+      toast('시험 스티커를 프린터로 보내고 있어요…');
+      __ble.print([{ zip: '12345', name: '시험용', phone: '010-0000-0000', addr1: '전북특별자치도 정읍시 충정로 234-1', addr2: '시험동 101호' }], tw, th, __ble.testNote(tw, th))
+        .then(function (n) { toast(__ble.resultText(n, '시험 인쇄를 보냈어요. 테두리가 용지 끝과 맞는지 보세요.')); }, function (e) { toast('시험 인쇄 실패: ' + e.message); });
+      return;
+    }
     // 입력창의 크기로 한 장 뽑아 기표지에 대 본다(저장 전에도 쓸 수 있게 임시로 크기를 적용)
     var prev = { lblW: cfg().lblW, lblH: cfg().lblH, paper: cfg().paper };
     var w = Number($('#kfLblW').value) || 100, h = Number($('#kfLblH').value) || 45;
@@ -1216,7 +1272,12 @@
         if (!window.__ble) { return; }
         var keepVals = { w: $('#kfLblW').value, h: $('#kfLblH').value };
         __ble.openSettings({ size: function () { return [Number(keepVals.w) || lblSize()[0], Number(keepVals.h) || lblSize()[1]]; }, onClose: function (c) {
-          if (c.via === 'ble' || c.via === 'usb') { setCfg({ paper: 'lbl' }); $('#kfPaper').value = 'lbl'; $('#kfPaper').onchange(); toast('바로 인쇄를 쓰도록 용지를 「주소 스티커」로 바꿨어요. 저장을 눌러 주세요.'); }
+          if (c.via === 'ble' || c.via === 'usb' || c.via === 'app') {
+            // 프린터 용지가 영수증 롤이면 접수 메모(감열 영수증), 라벨지면 주소 스티커로 맞춘다
+            var np = c.media === 'cont' ? (Number(c.rollW) <= 60 ? '58' : '80') : 'lbl';
+            setCfg({ paper: np }); $('#kfPaper').value = np; $('#kfPaper').onchange();
+            toast(np === 'lbl' ? '바로 인쇄를 쓰도록 용지를 「주소 스티커」로 바꿨어요. 저장을 눌러 주세요.' : '바로 인쇄를 쓰도록 용지를 「감열 영수증 ' + np + 'mm」로 바꿨어요(접수 메모를 롤로 뽑습니다). 저장을 눌러 주세요.');
+          }
         } });
       }, 'sub'],
       ['닫기', closeModal, 'sub']].concat(st && st.entries && st.entries.length ? [['이 어르신 입력을 접수 화면으로 넘기기', function () { closeModal(); handOff(); }, 'sub']] : []).concat([['어르신 화면 끝내기(직원 화면으로)', function () { closeModal(); if (!hasData() || confirm('적힌 내용이 있습니다. 지우고 어르신 화면을 닫을까요?')) { fresh(); closeKiosk(); } }, 'sub']]));
@@ -1354,7 +1415,30 @@
     if (!injectSheet(SAMPLE_HEAD, SAMPLE, '예시', '예시_주문서(모의데이터).xlsx')) { alert('이 브라우저에서는 예시를 불러올 수 없습니다.'); return; }
     log('예시 체험', SAMPLE.length, '모의데이터');
   }
+  // 프린터 연결이 끊겨 저절로 다시 붙지 못하면 화면 위에 띠를 띄워 직원을 부르게 한다
+  var bleBarHooked = false;
+  function bleBar(stt) {
+    var bar = document.getElementById('kBleBar');
+    var want = root && !root.hidden && window.__ble && __ble.via() === 'ble' && (bleOn() || bleRoll()) && (stt === 'lost' || stt === 'reconnecting');
+    if (!want) { if (bar) { bar.remove(); } return; }
+    if (!bar) {
+      bar = document.createElement('div'); bar.id = 'kBleBar'; bar.setAttribute('role', 'alert');
+      bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:5200;display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;padding:14px 18px;font-size:22px;font-weight:800;color:#fff;box-shadow:0 -2px 12px rgba(0,0,0,.25)';
+      document.body.appendChild(bar);
+    }
+    if (stt === 'reconnecting') {
+      bar.style.background = '#8a5a00';
+      bar.innerHTML = '프린터에 다시 연결하고 있어요…';
+    } else {
+      bar.style.background = '#b3261e';
+      bar.innerHTML = '프린터 연결이 끊겼어요. 직원을 불러 주세요.<button type="button" id="kBleRe" style="font-size:18px;font-weight:800;padding:10px 18px;border-radius:12px;border:0;background:#fff;color:#b3261e">다시 연결(직원)</button>';
+      document.getElementById('kBleRe').onclick = function () {
+        __ble.connect().then(function () { bleBar('connected'); toast('프린터에 다시 연결했어요.'); }, function (e) { toast('연결하지 못했어요: ' + e.message, 6000); });
+      };
+    }
+  }
   function openKiosk() {
+    if (!bleBarHooked && window.__ble && __ble.onStatus) { bleBarHooked = true; __ble.onStatus(bleBar); }
     if (!E()) { alert('우편번호 DB를 여는 중입니다. 잠시 뒤 다시 눌러 주세요.'); return; }
     build();
     fresh();
@@ -1365,6 +1449,13 @@
     if (!regionOpts()) { setTimeout(function () { toast('직원 안내: 「직원」 단추를 2초 누르고 「우리 동네(기본 지역)」를 정해 두세요. 동 이름만 말씀하셔도 이 지역에서 먼저 찾습니다.', 9000); }, 600); }
     try { history.pushState({ kiosk: 1 }, ''); } catch (e) { }   // 안드로이드 「뒤로」가 프로그램을 닫지 않고 앞 화면으로 가게
     log('어르신 직접 입력 화면 열기', 0, '');
+    if (window.__ble && __ble.ready && __ble.direct() && __ble.via() === 'ble' && !__ble.ready() && (paper() === 'lbl' || paper() === '80' || paper() === '58')) {
+      setTimeout(function () {
+        modal('<div class="k-bubble">직원 확인: 프린터 연결<small>메모·스티커를 바로 뽑으려면 이 화면을 열 때 프린터를 한 번 골라야 해요. 아래 단추를 누르고 「Bluetooth Printer」를 고르세요.</small></div>', [
+          ['프린터 연결', function () { __ble.connect().then(function (d) { closeModal(); toast('프린터 연결됨: ' + ((d && d.name) || '프린터')); }, function (e) { closeModal(); toast('연결하지 못했어요: ' + e.message); }); }, 'pri'],
+          ['나중에', closeModal, 'sub']]);
+      }, 400);
+    }
   }
   window.addEventListener('popstate', function () {
     if (!root || root.hidden) { return; }
@@ -1373,6 +1464,7 @@
   });
   function closeKiosk() {
     if (!root) { return; }
+    var kb = document.getElementById('kBleBar'); if (kb) { kb.remove(); }
     clearTimeout(idleT); clearTimeout(warnT);
     closeModal();
     root.hidden = true;
