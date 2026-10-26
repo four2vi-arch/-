@@ -338,7 +338,7 @@
       '<button type="button" data-f="1">가</button><button type="button" data-f="1.25">가+</button><button type="button" data-f="1.5">가++</button>' +
       '<button type="button" id="kSound">소리로 듣기</button></div></div>' +
       '<div class="k-main" id="kMain" aria-live="polite"></div>' +
-      '<div class="k-foot"><span>적으신 내용은 이 기기 안에서만 쓰고, 마치면 바로 지워집니다. 우편번호는 정부 고시 자료로 찾습니다.</span>' +
+      '<div class="k-foot"><span>적으신 내용은 이 기기 안에서만 쓰고, 마치면 바로 지워집니다(「말로 하기」의 말소리는 음성 인식 서버를 거칩니다). 우편번호는 정부 고시 자료로 찾습니다.</span>' +
       '<button type="button" class="k-staff" id="kStaff" title="직원: 2초 동안 누르세요">직원</button></div>';
     document.body.appendChild(root);
     var pr = document.createElement('div');
