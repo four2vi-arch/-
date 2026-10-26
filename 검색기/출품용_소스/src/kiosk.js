@@ -986,7 +986,7 @@
     if (appMode()) { toast('직원을 불러 주세요. 직원이 ' + what + '를 뽑아 드려요.'); }
     else if ((bleOn() || bleRoll()) && __ble.via() === 'ble' && __ble.ready && !__ble.ready()) { toast('직원을 불러 주세요. 프린터가 아직 연결되지 않았어요.', 6000); }
     else if (printing) { toast('앞 분 종이가 나오는 중이에요. 그 종이는 가져가지 마세요. 다 나오면 빨간 단추를 눌러 주세요.', 6000); }
-    else { toast(what + '를 뽑고 있어요. 창구에 가져가세요.'); setTimeout(function () { if ($('#kPrintBtn', main)) { printSlip(); } }, 700); }
+    else { toast(what + '를 뽑는 중이에요. 잠시 기다려 주세요.'); setTimeout(function () { if ($('#kPrintBtn', main)) { printSlip(); } }, 700); }
   }
   // ------------------------------------------------------------------ QR 접수 메모
   // 메모 내용 → JSON → (압축) → base32 대문자. QR 영숫자 모드에 맞고, 창구 스캐너가 한글 입력 상태여도 되살릴 수 있다.
@@ -1132,6 +1132,13 @@
   function bleRoll() { return (paper() === '80' || paper() === '58') && kDirect() && !!__ble.printMemo; }
   function appMode() { return !!(window.__ble && __ble.via && __ble.via() === 'app' && __ble.supported() && paper() !== 'a4'); }
   // 직원만 쓰는 단추: 2초 눌렀다 떼야 한다(어르신이 한 번 눌러 공유 창·선택 창이 열리지 않게). 뗄 때 실행해 크롬이 공유·선택 창을 허락한다
+  // 직원이 프린터를 고르는 중(선택 창·연결)이거나 프린터 연결 설정 창이 열려 있으면 자리 비움이 창을 닫지 않는다
+  var staffConn = 0;
+  function staffConnect() {
+    staffConn++;
+    return __ble.connect({ pick: true }).then(function (d) { staffConn--; return d; }, function (e) { staffConn--; throw e; });
+  }
+  function staffBusy() { return staffConn > 0 || !!document.getElementById('bleSet'); }
   function staffHold(b, act) {
     var t0 = 0;
     b.style.userSelect = 'none'; b.style.webkitUserSelect = 'none'; b.style.webkitTouchCallout = 'none'; b.style.touchAction = 'none';
@@ -1183,13 +1190,14 @@
   function failBox(what, msg, again, job) {
     if (job !== st || !root || root.hidden) { toast('(직원 확인) 앞 분 ' + what + '를 뽑지 못했어요: ' + msg, 8000); return; }   // 다음 분 화면에는 실패 창을 띄우지 않는다
     var pick = !appMode() && __ble.ready && !__ble.ready();
+    Array.prototype.forEach.call(document.querySelectorAll('.k-toast'), function (t) { t.remove(); });   // 「뽑는 중」 알림이 실패 창 위에 남지 않게
     var m = modal('<div class="k-bubble">' + what + '를 뽑지 못했어요. 직원을 불러 주세요.<small>(직원 확인) ' + esc(msg) + '</small></div>',
       [['닫기', closeModal, 'pri'], [appMode() ? '직원: 다시 보내기(2초)' : (pick ? '직원: 프린터 고르고 뽑기(2초)' : '직원: 다시 뽑기(2초)'), function () { }, 'sub']]);
     staffHold(m.querySelectorAll('#kModalBtns button')[1], function () {
       closeModal();
       if (job !== st) { return; }
       if (!pick) { again(); return; }
-      __ble.connect({ pick: true }).then(function () { prnHint(); again(); }, function (e) { failBox(what, e.message, again, job); });
+      staffConnect().then(function () { prnHint(); again(); }, function (e) { failBox(what, e.message, again, job); });
     });
   }
   // 어르신 화면에서는 선택 창(주변 기기 전부)을 열지 않는다(고른 프린터가 없으면 직원을 부르게). 앱 방식은 직원이 누른 것이라 해당 없음
@@ -1404,7 +1412,7 @@
           if (c.via === 'ble' || c.via === 'usb' || c.via === 'app') {
             // 프린터 용지가 영수증 롤이면 접수 메모(감열 영수증), 라벨지면 주소 스티커로 맞춘다
             var np = c.media === 'cont' ? (Number(c.rollW) <= 60 ? '58' : '80') : 'lbl';
-            setCfg({ paper: np }); $('#kfPaper').value = np; $('#kfPaper').onchange();
+            setCfg({ paper: np }); var kp = $('#kfPaper'); if (kp) { kp.value = np; kp.onchange(); }
             toast(np === 'lbl' ? '바로 인쇄를 쓰도록 용지를 「주소 스티커」로 바꿨어요. 저장을 눌러 주세요.' : '바로 인쇄를 쓰도록 용지를 「감열 영수증 ' + np + 'mm」로 바꿨어요(주소 쪽지를 롤로 뽑습니다). 저장을 눌러 주세요.');
           }
           prnHint(); bleBar(__ble.status());
@@ -1415,7 +1423,8 @@
     if ($('#kfPrn')) {
       $('#kfPrn').onclick = function () {
         var b = this; $('#kfMsg').textContent = '프린터를 찾는 중… 선택 창에서 ' + (__ble.via() === 'usb' ? 'USB 프린터' : '「Bluetooth Printer」') + '를 골라 주세요.';
-        __ble.connect({ pick: true }).then(function (d) { b.remove(); prnHint(); $('#kfMsg').textContent = '연결됨: ' + ((d && d.name) || '프린터'); }, function (e) { $('#kfMsg').textContent = '연결 실패: ' + e.message; });
+        var say = function (s) { var km = $('#kfMsg'); if (km) { km.textContent = s; } else { toast('(직원 확인) 프린터 ' + s, 8000); } };
+        staffConnect().then(function (d) { b.remove(); prnHint(); say('연결됨: ' + ((d && d.name) || '프린터')); }, function (e) { say('연결 실패: ' + e.message); });
       };
     }
     $('#kfExit').onclick = function () { closeModal(); if (!hasData() || confirm('적힌 내용이 있습니다. 지우고 어르신 화면을 닫을까요?')) { fresh(); closeKiosk(); } };
@@ -1453,8 +1462,11 @@
   }
   function idleWarn() {
     if (!root || root.hidden) { return; }
+    var busy = staffBusy();
+    // 뽑고 3분이 지나면 묻지 않고 지운다(다음 분이 눌러 앞 분 내용이 남지 않게). 열어 둔 창도 닫되, 직원이 프린터 설정·고르기 중이면 창은 그대로 둔다
+    if (st && st.doneAt && !printing) { if (!busy) { closeModal(); } wipe(); if (busy) { touch(); } return; }
+    if (busy) { touch(); return; }
     if (!hasData()) { closeModal(); welcome(); return; }   // 직원 설정 등 열어 둔 창을 다음 분 앞에 남기지 않는다
-    if (st && st.doneAt && !printing) { wipe(); return; }   // 뽑고 3분이 지나면 묻지 않고 지운다(다음 분이 눌러 앞 분 내용이 남지 않게)
     var left = 30;
     var m = modal('<div class="k-bubble">계속하시겠어요?<small><b id="kLeft">30</b>초 뒤에 적으신 내용을 지웁니다. 화면 아무 곳이나 누르면 계속해요.</small></div>', [['계속할게요', function () { clearTimeout(warnT); closeModal(); touch(); }, 'pri']]);
     speak('계속하시려면 화면을 눌러 주세요.');
@@ -1462,7 +1474,7 @@
     (function tick() { var el = document.getElementById('kLeft'); if (!el) { return; } if (left <= 0) { closeModal(); wipe(); return; } el.textContent = left; left--; warnT = setTimeout(tick, 1000); })();
   }
   function wipe(silent) {
-    clearTimeout(warnT); closeModal();
+    clearTimeout(warnT);
     stopCam(); stopMic();
     try { if (window.__cam) { __cam.dispose(); } } catch (e) { }
     fresh();
@@ -1584,7 +1596,7 @@
       bar.style.background = '#b3261e';
       bar.innerHTML = '프린터 연결이 끊겼어요. 직원을 불러 주세요.<button type="button" id="kBleRe" title="직원: 2초 눌렀다 떼기" style="font-size:18px;font-weight:800;padding:10px 18px;border-radius:12px;border:0;background:#fff;color:#b3261e">다시 연결(직원)</button>';
       staffHold(document.getElementById('kBleRe'), function () {
-        __ble.connect({ pick: true }).then(function () { bleBar('connected'); toast('프린터에 다시 연결했어요.'); }, function (e) { toast('연결하지 못했어요: ' + e.message, 6000); });
+        staffConnect().then(function () { bleBar('connected'); toast('프린터에 다시 연결했어요.'); }, function (e) { toast('연결하지 못했어요: ' + e.message, 6000); });
       });
     }
   }
@@ -1612,7 +1624,7 @@
     if (!auto && window.__ble && __ble.ready && __ble.via() === 'ble' && (bleOn() || bleRoll()) && !__ble.ready()) {
       setTimeout(function () {
         var m = modal('<div class="k-bubble">직원 확인: 프린터 연결<small>주소 쪽지·스티커를 바로 뽑으려면 이 화면을 열 때 프린터를 한 번 골라야 해요. 아래 단추를 누르고 「Bluetooth Printer」를 고르세요.</small><small id="kPrnMsg"></small></div>', [
-          ['프린터 연결', function () { var pm = document.getElementById('kPrnMsg'); if (pm) { pm.textContent = '연결하는 중…'; } __ble.connect({ pick: true }).then(function (d) { closeModal(); prnHint(); toast('프린터 연결됨: ' + ((d && d.name) || '프린터')); }, function (e) { var pm2 = document.getElementById('kPrnMsg'); if (pm2) { pm2.textContent = '연결하지 못했어요: ' + e.message; } }); }, 'pri'],
+          ['프린터 연결', function () { var pm = document.getElementById('kPrnMsg'); if (pm) { pm.textContent = '연결하는 중…'; } staffConnect().then(function (d) { closeModal(); prnHint(); toast('프린터 연결됨: ' + ((d && d.name) || '프린터')); }, function (e) { var pm2 = document.getElementById('kPrnMsg'); if (pm2) { pm2.textContent = '연결하지 못했어요: ' + e.message; } else { toast('(직원 확인) 프린터 연결하지 못했어요: ' + e.message, 8000); } }); }, 'pri'],
           ['나중에', closeModal, 'sub']]);
         return m;
       }, 400);

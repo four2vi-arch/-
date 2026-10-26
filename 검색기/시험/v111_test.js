@@ -16,14 +16,14 @@ const MOCK = `(() => {
     writeValueWithoutResponse: (v) => new Promise(r => setTimeout(() => { bt.writes.push(Array.from(v)); r(); }, bt.writeMs)), writeValue: async (v) => { bt.writes.push(Array.from(v)); } };
   const svc = { uuid: 'ffe0', getCharacteristics: async () => [ch] };
   const dev = bt.dev = { name: 'Bluetooth Printer', addEventListener(t, f) { if (t === 'gattserverdisconnected') bt.listeners.push(f); },
-    gatt: { connected: false, connect: async function () { bt.connects++; if (bt.failConnect) { const e = new Error('Connection failed for unknown reason.'); e.name = 'NetworkError'; throw e; } dev.gatt.connected = true; return dev.gatt; },
+    gatt: { connected: false, connect: async function () { bt.connects++; if (bt.connMs) { await new Promise(r => setTimeout(r, bt.connMs)); } if (bt.failConnect) { const e = new Error('Connection failed for unknown reason.'); e.name = 'NetworkError'; throw e; } dev.gatt.connected = true; return dev.gatt; },
       disconnect() { dev.gatt.connected = false; bt.listeners.forEach(f => f()); }, getPrimaryServices: async () => [svc] } };
   bt.drop = () => { dev.gatt.connected = false; bt.listeners.forEach(f => f()); };
   // 프린터가 아닌 기기(이어폰): 붙기는 하지만 서비스가 없다. bt.pickEar 이면 선택 창에서 이것을 고른 것으로 한다
   const ear = bt.ear = { name: 'Galaxy Buds', addEventListener() { },
-    gatt: { connected: false, connect: async function () { ear.gatt.connected = true; return ear.gatt; }, disconnect() { ear.gatt.connected = false; },
+    gatt: { connected: false, connect: async function () { if (bt.earMs) { await new Promise(r => setTimeout(r, bt.earMs)); } ear.gatt.connected = true; return ear.gatt; }, disconnect() { ear.gatt.connected = false; },
       getPrimaryServices: async () => { const e = new Error('No Services found in device.'); e.name = 'NotFoundError'; throw e; } } };
-  Object.defineProperty(navigator, 'bluetooth', { configurable: true, value: { requestDevice: async () => { bt.reqs++; if (bt.reqErr) { const e = new Error(bt.reqErr[1]); e.name = bt.reqErr[0]; throw e; } return bt.pickEar ? ear : dev; } } });
+  Object.defineProperty(navigator, 'bluetooth', { configurable: true, value: { requestDevice: async () => { bt.reqs++; if (bt.reqMs) { await new Promise(r => setTimeout(r, bt.reqMs)); } if (bt.reqErr) { const e = new Error(bt.reqErr[1]); e.name = bt.reqErr[0]; throw e; } return bt.pickEar ? ear : dev; } } });
   // 공유: 부른 횟수와 넘긴 파일. shareErr 가 있으면 그 이름의 오류
   const sh = window.__sh = { calls: [], err: null, can: true, dl: [] };
   navigator.canShare = (o) => sh.can && !!(o && o.files);
@@ -404,22 +404,88 @@ async function toFinish(p, sender) {
   ok('입력 없는 자리 비움: 열어 둔 직원 설정 창을 닫고 처음 화면', !(await p.$('#kModal')) && !!(await p.$('#kStart')));
   await p.context().close();
   // USB: 화면을 연 뒤 첫 분 자동 뽑기에 「프린터가 아직 연결되지 않았어요」를 띄우지 않는다(허용한 프린터는 선택 창 없이 붙음)
-  p = await open(browser, { hash: '#kiosk', init: [() => {
-    localStorage.setItem('zipfinder.ble.v1', JSON.stringify({ via: 'usb', proto: 'tspl', usbId: '4660:22136', delay: 0, cfgv: 2 }));
+  const USB = (none) => [(none) => {
+    localStorage.setItem('zipfinder.ble.v1', JSON.stringify({ via: 'usb', proto: 'tspl', usbId: none ? '' : '4660:22136', delay: 0, cfgv: 2 }));
     localStorage.setItem('zipfinder.kiosk.v1', JSON.stringify({ region: '전북특별자치도 정읍시', idle: 300, paper: 'lbl', autoPrint: true }));
-    const u = window.__u = { reqs: 0, outs: 0 };
+    const u = window.__u = { reqs: 0, outs: 0, none: none };
     u.dev = { vendorId: 0x1234, productId: 0x5678, productName: 'Label USB', opened: false,
       configuration: { interfaces: [{ interfaceNumber: 0, alternates: [{ alternateSetting: 0, interfaceClass: 7, endpoints: [{ direction: 'out', type: 'bulk', endpointNumber: 1 }] }] }] },
       open: async function () { this.opened = true; }, selectConfiguration: async () => { }, close: async function () { this.opened = false; }, claimInterface: async () => { },
       transferOut: async (ep, d) => { u.outs++; return { status: 'ok', bytesWritten: d.length }; } };
-    Object.defineProperty(navigator, 'usb', { configurable: true, value: { requestDevice: async () => { u.reqs++; return u.dev; }, getDevices: async () => [u.dev], addEventListener() { } } });
-  }, null] });
+    Object.defineProperty(navigator, 'usb', { configurable: true, value: { requestDevice: async () => { u.reqs++; return u.dev; }, getDevices: async () => u.none ? [] : [u.dev], addEventListener() { } } });
+  }, none];
+  p = await open(browser, { hash: '#kiosk', init: USB(false) });
   await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
   await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
   await p.waitForFunction(() => window.__u.outs > 0, null, { timeout: 15000 }).catch(() => null);
   { const u = await p.evaluate(() => ({ reqs: window.__u.reqs, outs: window.__u.outs })); const tt = await toasts(p);
     ok('USB 자동 뽑기: 「아직 연결되지 않았어요」 알림 없이 허용한 프린터로 선택 창 없이 뽑음', !/아직 연결되지 않았어요/.test(tt) && u.reqs === 0 && u.outs > 0, JSON.stringify(u) + ' ' + tt.slice(0, 60)); }
   ok('페이지 오류 없음(10usb)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
+  // ---- 11. 마지막 반박 검토에서 나온 것
+  // (가) 쓰던 프린터에 다시 붙어 뽑는 사이 직원이 이어폰을 골라 실패해도 진행 중인 인쇄가 끊기지 않는다
+  p = await open(browser, { hash: '#kiosk', init: SET({ via: 'ble', media: 'gap', chunk: 500, delay: 0, cfgv: 2 }, { paper: 'lbl', autoPrint: false }) });
+  await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+  await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  await p.waitForSelector('#kfPrn', { timeout: 4000 }); await p.click('#kfPrn');
+  await p.waitForFunction(() => /연결됨/.test(document.getElementById('kfMsg').textContent), null, { timeout: 5000 });
+  await p.evaluate(() => { document.getElementById('kModal').remove(); const bt = window.__bt; bt.dev.gatt.connected = false; bt.connMs = 400; bt.earMs = 1000; bt.writeMs = 3; bt.pickEar = true;
+    const x = document.createElement('button'); x.id = 'tPickEar'; x.textContent = 'pick'; x.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;width:60px;height:40px';
+    x.onclick = () => { __ble.connect({ pick: true }).catch(() => { }); }; document.body.appendChild(x); });
+  await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
+  const w0 = await p.evaluate(() => window.__bt.writes.length);
+  await p.click('#kPrintBtn'); await p.waitForTimeout(100); await p.click('#tPickEar', { force: true });
+  await p.waitForFunction(() => /다 됐어요|뽑지 못했어요/.test(document.getElementById('kFinMsg').textContent), null, { timeout: 30000 }).catch(() => null);
+  { const s = await p.evaluate((w0) => ({ fin: document.getElementById('kFinMsg').textContent.slice(0, 20), writes: window.__bt.writes.length - w0, ear: window.__bt.ear.gatt.connected, name: __ble.deviceName(), reqs: window.__bt.reqs }), w0);
+    ok('뽑는 사이 직원이 이어폰을 골라 실패해도 인쇄가 끝까지 나감·이어폰 놓음·쓰던 프린터 유지', /다 됐어요/.test(s.fin) && !s.ear && s.name === 'Bluetooth Printer' && s.reqs === 2, JSON.stringify(s)); }
+  ok('페이지 오류 없음(11가)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+  // (나) 프린터 연결 설정 창을 연 채 자리 비움: 직원 창을 닫지 않음 → 「저장하고 닫기」 오류 없음 / 뽑은 뒤라면 어르신 입력은 지움
+  for (const kind of ['nodata', 'done']) {
+    p = await open(browser, { hash: '#kiosk', init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80', idle: 4 }) });
+    await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+    if (kind === 'done') {
+      await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+      await p.waitForSelector('#kfPrn', { timeout: 4000 }); await p.click('#kfPrn');
+      await p.waitForFunction(() => /연결됨/.test(document.getElementById('kfMsg').textContent), null, { timeout: 5000 });
+      await p.evaluate(() => { document.getElementById('kModal').remove(); });
+      await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
+      await p.click('#kPrintBtn'); await p.waitForFunction(() => !!__kiosk.state().doneAt, null, { timeout: 20000 }).catch(() => null);
+      await p.evaluate(() => { window.__idleMs = 4000; });
+    }
+    await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+    await p.waitForSelector('#kfExit', { timeout: 4000 });
+    await p.locator('#kModalBtns button', { hasText: '프린터 연결 설정' }).click();
+    await p.waitForSelector('#bleSet', { timeout: 4000 });
+    await p.waitForTimeout(5500);
+    const s = await p.evaluate(() => ({ modal: !!document.getElementById('kModal'), bleSet: !!document.getElementById('bleSet'), n: __kiosk.state().entries.length }));
+    await p.click('#bsSave'); await p.waitForTimeout(400);
+    ok('프린터 연결 설정을 연 채 자리 비움(' + (kind === 'done' ? '뽑은 뒤: 어르신 입력은 지움' : '입력 없음') + '): 직원 창 유지 → 저장 오류 없음', s.modal && s.bleSet && s.n === 0 && p.errs.length === 0 && /용지를/.test(await toasts(p)), JSON.stringify(s) + ' ' + p.errs.join(' / '));
+    await p.context().close();
+  }
+  // (다) 어르신 화면을 연 직후 직원 안내 창에서 「프린터 연결」을 누르고 선택 창이 오래 걸려도, 자리 비움이 창을 닫지 않아 실패 까닭이 보임
+  p = await open(browser, { init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80', idle: 4 }) });
+  await p.click('#btnKiosk'); await p.waitForSelector('#kModal', { timeout: 5000 });
+  await p.evaluate(() => { window.__bt.reqMs = 6000; window.__bt.reqErr = ['NotFoundError', 'User cancelled the requestDevice() chooser.']; });
+  await p.click('#kModal button.k-btn.pri');
+  await p.waitForTimeout(7000);
+  { const s = await p.evaluate(() => ({ modal: !!document.getElementById('kModal'), msg: (document.getElementById('kPrnMsg') || {}).textContent || '' }));
+    ok('직원 안내 창 「프린터 연결」 중 자리 비움: 창이 남고 실패 까닭 표시', s.modal && /연결하지 못했어요/.test(s.msg), JSON.stringify(s).slice(0, 100)); }
+  // 같은 경우 직원 설정 맨 위 「프린터 연결」(kfPrn)도 오류 없이 결과 표시
+  await p.evaluate(() => { const m = document.getElementById('kModal'); if (m) m.remove(); const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  await p.waitForSelector('#kfPrn', { timeout: 4000 }); await p.click('#kfPrn');
+  await p.waitForTimeout(7000);
+  ok('직원 설정 「프린터 연결」 중 자리 비움: 창이 남고 결과 표시·오류 없음', p.errs.length === 0 && /연결 실패/.test((await p.textContent('#kfMsg').catch(() => '')) || ''), p.errs.join(' / '));
+  await p.context().close();
+  // (라) USB에 허용한 프린터가 없는 날 자동 뽑기: 실패 창 위에 「창구에 가져가세요」 알림이 겹치지 않음
+  p = await open(browser, { hash: '#kiosk', init: USB(true) });
+  await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+  await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
+  await p.waitForSelector('#kModal', { timeout: 8000 }).catch(() => null);
+  { const lab = await p.evaluate(() => { const b = document.querySelectorAll('#kModalBtns button')[1]; return b ? b.textContent : ''; }); const tt = await toasts(p); const u = await p.evaluate(() => window.__u.reqs);
+    ok('USB 허용 프린터 없음 자동 뽑기: 실패 창(「직원: 프린터 고르고 뽑기」)만, 「창구에 가져가세요」 알림 없음, 선택 창 0번', /프린터 고르고 뽑기/.test(lab) && !/창구에 가져가세요/.test(tt) && u === 0, lab + ' | ' + tt.slice(0, 60)); }
+  ok('페이지 오류 없음(11라)', p.errs.length === 0, p.errs.join(' / '));
   await p.context().close();
 
   // ---- 6. 엑셀 파일 정보 작성자 = 물어물어

@@ -162,12 +162,12 @@
       // 붙는 사이 놓기·방식 바꾸기가 있었으면 붙은 연결을 버린다
       if (my !== gen || get().via !== v0) { drop(device); var x = new Error('설정이 바뀌어 연결을 놓았어요. 다시 눌러 주세요.'); x.code = 'DROPPED'; throw x; }
       ch = c;
-      set({ name: dev.name || '' });
+      set({ name: device.name || '' });
       clearTimeout(rcT); rcN = 0; emit('connected');
       return dev;
     }, function (e) {
       // 프린터가 아닌 기기(이어폰 등)를 골라 실패하면 그 연결을 놓고 앞서 고른 프린터로 되돌린다(처음 고를 때면 「고른 프린터 없음」으로, 실패 창이 다시 「프린터 고르고 뽑기」가 되게)
-      if (dev === device && prev !== device && (picked || prev)) { drop(device); dev = prev; }
+      if (dev === device && prev !== device && (picked || prev)) { dev = prev; drop(device); }   // dev를 먼저 되돌려야 drop이 그사이 붙은 쓰던 프린터의 ch를 지우지 않는다
       throw e;
     });
   }
