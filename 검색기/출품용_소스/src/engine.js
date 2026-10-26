@@ -1,4 +1,18 @@
 /*! 물어물어(우편번호 자동검색기) v1.11 (출품본) · 주소 판정 엔진 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/* 구조 안내(심사·정보화사업 이관용)
+   이 파일은 화면과 떨어진 순수 판정 모듈이다. 브라우저(window.ZipEngine)와 node(module.exports)에서 같은 코드가 돈다(tools/모의주소_추출.js·tools/db_빌드.js가 node에서 씀).
+   - 입력: new ZipEngine(db, extra). db는 dbbuild.js가 고시 별표 5·인터넷우체국 범위주소로 만든 구간 자료(시도·시군구·읍면동 사전, 도로명·지번·사서함 구간),
+     extra는 행정동 대응표·배달우체국·건물명 보조 자료(없어도 됨).
+   - 공개 메서드
+     lookup(text, opts)   주소 문장 하나 → {grade: '정확'|'유사'|'실패', zip, conf(유사의 상·중·하), note(판정 근거), kind, addr1, addr2, canon, score}
+     search(text, max)    건물·동 이름으로 후보 찾기(어르신 화면·사진 읽기에서 사용)
+     parseRegion(text)    「전북 정읍」 같은 지역 문장 → 시군구 번호 목록(직원 설정의 기본 지역)
+     office(zip)·building(...)·legalDongs(...)·sggLabel(...)·zipSet()·sggHasZip(...)  보조 조회
+   - 처리 순서(_lookup): 글 다듬기(prepText) → 시·도 별칭·오타 보정(_matchSido·_fixRegionTypo) → 시·군·구(_matchSgg·_narrow)
+     → 도로명·읍면동·리 머리 찾기(_heads·_headsFor·_prefixRoad·_prefixEmd·_prefixRi) → 건물번호·지번 구간 대조(_searchRoad·_searchJibun·_resolveRoad·_resolveJibun)
+     → 사서함(_resolvePobox) → 행정동·건물명·읍면동만으로 되찾기(_resolveHjd·_resolveBuilding·_emdOnly·_fallbackRoad·_resolveTail)
+     → 등급 판정(makeResult·adjustGrade). 한 번지에 우편번호가 여럿이면 「정확」으로 올리지 않고 가장 좁은 구간의 번호에 「유사」를 붙인다(AI 신뢰성 확보 원칙).
+   - 지역 변수와 안쪽 함수 이름이 a·b·c처럼 짧은 것은 현장 배포본에서 되살린 흔적이며 동작과 무관하다. 바깥 함수·메서드 이름과 주석은 원래 것이다. */
 (function (a, b) {
   if (typeof module === "object" && module.exports) {
     module.exports = b();

@@ -1,4 +1,15 @@
 /*! 물어물어(우편번호 자동검색기) v1.11 (출품본) · 주소록·양식 변환 화면 | (c) 2026 이희재 · 정읍우체국 | 2026 공공 AI 대전환 챌린지 출품본. 대회 규정에 따라 사용권 부여 */
+/* 구조 안내(심사용). 이 파일은 창구(직원) 화면 하나를 맡는다. 어르신 화면은 kiosk.js, 사진 읽기는 camera.js, 태블릿 직접 인쇄는 blep.js, 판정은 engine.js.
+   - DB 적재·갱신: loadDb(내장 b64 → gunzip → 엔진), importDbFiles·buildDbFromFiles(「DB 최신화」: 고시 별표 5·인터넷우체국 zip을 넣으면 dbbuild.js로 다시 만들어 이 PC 브라우저에 저장),
+     openUpdateDialog·checkNetwork·downloadDbOnline(인터넷 연결 확인·고시 파일 받기), dbAgeDays·dbUpdateNotice(기준일 「○○일 지남」 표시)
+   - 주소록 읽기: loadWorkbook(xlsx·csv·한셀)·openSheet(시트 고르기)·findHeaderRow·detectColumns(주소·이름·전화 열 자동 인식)·loadPastedText(붙여 넣은 글)
+   - 판정: runSearch(행마다 engine.lookup)·lookupWithDetail(상세주소 분리)·applyZipPolicy(우편번호가 여럿인 번지는 「유사 · 창구 확인」)·inferFromNeighbors(앞뒤 행 지역으로 되찾기)
+   - 결과 표·가림: renderTable·gradeBadge·countGrades, maskName·maskTel·maskAddr·maskedValue(이름·전화·번지는 기본 가림, 「보기」 10초)
+   - 양식 변환·내려받기: onDownload·buildOriginalWithZip(원본 + 우편번호)·buildPresetRows(양식1·2, 우체국쇼핑·계약소포)·customColumns·bindCustomEditor(사용자 지정 양식)·aoaToStyledSheet·downloadReport(점검표)
+   - 라벨 인쇄: openLabelDialog·labelTargetRows(A4 라벨 9종)
+   - 사진 읽기 연결: openCamDialog·camPick·camShot(camera.js 결과를 주소록 행으로)
+   - 처리 이력: addLog·loadLog·downloadLog·clearLog(언제·무슨 작업·몇 건만, 주소·이름은 남기지 않음)
+   - 시작: init(개인정보 안내, 파일 정보 「원본 확인됨」 지문 대조, 단추 연결) */
 (function () {
   "use strict";
 

@@ -20,12 +20,36 @@ TABLE_KINDS = {'xlsx', 'xlsm', 'csv'}                                  # 표 파
 NOPROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 로컬 모델 호출이 PC의 프록시 설정을 타지 않게(10.20.)
 
 
-def is_local_url(url):
+LOCAL_HOSTS = ('127.0.0.1', 'localhost', '::1')
+ALLOWED_MODEL_HOSTS = set(LOCAL_HOSTS)   # 기본은 이 PC뿐. 기관 모델 서버는 server.py·measure.py의 --allow-model-host 로 더한다(코드 수정 없이 이관)
+
+
+def allow_model_host(host):
+    """기관 안 모델 서버(OpenAI 호환 주소)를 허용 목록에 더한다. 「주소」, 「주소:포트」, 「http://주소:포트/…」 모두 받는다. 더한 이름을 돌려준다."""
+    h = str(host or '').strip()
+    if h and '://' not in h:
+        h = 'http://' + h
     try:
-        h = urllib.parse.urlsplit(url).hostname or ''
+        h = (urllib.parse.urlsplit(h).hostname or '').lower()
+    except Exception:
+        h = ''
+    if h:
+        ALLOWED_MODEL_HOSTS.add(h)
+    return h
+
+
+def remote_allowed():
+    """이 PC 밖 모델 서버가 허용돼 있는지(화면의 키 칸은 이때만 보인다)."""
+    return any(h not in LOCAL_HOSTS for h in ALLOWED_MODEL_HOSTS)
+
+
+def is_local_url(url):
+    """모델 주소가 허용 목록(기본: 이 PC 127.0.0.1·localhost·::1)에 든 곳인지. 호출처가 많아 이름은 그대로 둔다."""
+    try:
+        h = (urllib.parse.urlsplit(url).hostname or '').lower()
     except Exception:
         return False
-    return h in ('127.0.0.1', 'localhost', '::1')
+    return h in ALLOWED_MODEL_HOSTS
 
 
 TYPES = ['월별 할 일', '협의할 사람', '진행 중 현안']
@@ -571,6 +595,32 @@ DEFAULT_AREAS = [
     {'name': '규정·매뉴얼', 'keys': '지침, 매뉴얼, 규정, 서식, 길라잡이, 편람'},
     {'name': '예산·정산', 'keys': '예산, 정산, 지급, 수수료, 경비, 환급'},
     {'name': '인사·복무', 'keys': '인사, 발령, 근무평정, 근무성적, 교육훈련, 정원, 복무, 인력, 채용'},   # v3.7: 순환보직(경영지원) 자료가 「기타」로 몰리던 것
+]
+# 다른 기관용 업무 키워드 보기(화면 「업무 키워드·기간 설정」의 「다른 기관 보기」). 맨 위 폴더 이름이 업무 이름이면 이 표를 쓰지 않고 폴더 이름으로 나눈다
+AREA_PRESETS = [
+    ('우편영업(기본)', DEFAULT_AREAS),
+    ('지자체 서무·행정지원', [
+        {'name': '예산·회계', 'keys': '예산, 편성, 집행, 결산, 지출, 정산, 이월, 추경, 세출'},
+        {'name': '계약·구매', 'keys': '계약, 입찰, 구매, 견적, 수의, 납품, 검수, 업체'},
+        {'name': '물품·재산', 'keys': '물품, 재물조사, 비품, 재산, 불용, 대장'},
+        {'name': '청사·시설·안전', 'keys': '청사, 시설, 소방, 안전점검, 전기, 냉난방, 보수, 임대'},
+        {'name': '기록물·문서', 'keys': '기록물, 문서, 이관, 정리, 보존, 폐기, 서식'},
+        {'name': '인사·복무', 'keys': '인사, 발령, 근무평정, 복무, 교육, 정원, 채용, 휴가'},
+        {'name': '감사·점검', 'keys': '감사, 점검, 지적, 조치, 자체감사, 시정'},
+        {'name': '민원·대외', 'keys': '민원, 의회, 보고, 협의, 간담회, 요청'},
+        {'name': '규정·매뉴얼', 'keys': '지침, 매뉴얼, 규정, 조례, 훈령, 편람'},
+    ]),
+    ('일반 행정(공통)', [
+        {'name': '예산·정산', 'keys': '예산, 정산, 지급, 경비, 결산, 수수료'},
+        {'name': '계약·업체', 'keys': '계약, 갱신, 수탁, 업체, 입찰, 납품'},
+        {'name': '인사·복무', 'keys': '인사, 발령, 근무평정, 복무, 교육훈련, 정원'},
+        {'name': '민원·고객', 'keys': '민원, 고객, 만족도, 친절, 응대'},
+        {'name': '회의·보고', 'keys': '회의, 보고, 결과보고, 계획, 추진'},
+        {'name': '홍보·행사', 'keys': '홍보, 캠페인, 행사, 안내문, 보도'},
+        {'name': '규정·매뉴얼', 'keys': '지침, 매뉴얼, 규정, 서식, 편람'},
+        {'name': '시설·물품', 'keys': '시설, 물품, 비품, 안전, 점검'},
+        {'name': '정보화·보안', 'keys': '시스템, 계정, 보안, 개인정보, 전산'},
+    ]),
 ]
 CYCLE_PATTERNS = [('매주', r'매주|주간|주별|매 ?주'), ('매월', r'매월|월별|월마감|익월|매 ?달|월 초|월말|매월말'), ('분기', r'분기'), ('반기', r'반기|상반기|하반기'),
                   ('매년', r'매년|연간|연말|연초|연 ?1회|해마다|매 ?해')]

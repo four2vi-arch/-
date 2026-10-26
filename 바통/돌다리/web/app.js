@@ -50,7 +50,7 @@ async function refresh() {
   } else if ((ST.reloading || ST.extracting) && sec === 'prep' && $('#extractMsg')) {
     $('#extractMsg').innerHTML = extractMsgHtml();   // 되읽기·읽기 중에는 진행 글만 바꾼다
   } else if (!busy) renderMain();
-  if (wasRunning && !ST.running && ST.step >= 4 && sec === 'prep' && ITEMS.length) { sec = 's1c'; ls('sec', sec); rerender(); }   // 초안이 끝나면 바로 현안 절로
+  if (wasRunning && !ST.running && ST.step >= 4 && sec === 'prep' && ITEMS.length) { sec = (ST.handover_from && ST.handover_to && ST.handover_date) ? 's1c' : 's1a'; doneSec = sec; ls('sec', sec); rerender(); }   // 초안이 끝나면 서식 차례대로: 1-가(인계자·인수자·일자)가 비어 있으면 1-가부터, 채워져 있으면 결정할 줄이 많은 1-다 현안으로
   wasRunning = !!ST.running;
   if (ST.running || ST.reloading || ST.extracting) { clearTimeout(timer); timer = setTimeout(refresh, ST.running ? 1500 : 2500); }
 }
@@ -109,13 +109,47 @@ function renderMain() {
   if (sec === 'log') { m.innerHTML = `<h2>작업 기록</h2><div id="log">${esc((ST.log || []).join('\n'))}</div>`; return; }
   if (sec === 'preview') { renderPreview(); return; }
   const fn = {s1a: renderS1a, s1b: renderS1b, s1c: renderS1c, s1d: renderS1d, s2: renderS2, s3: renderS3, s4: renderS4}[sec];
-  if (fn) fn(m);
+  if (fn) { fn(m); m.insertAdjacentHTML('beforeend', stepBar()); bindStepBar(m); m.insertAdjacentHTML('afterbegin', topBands()); bindTopBands(m); }
   if (ST.exports && ST.exports.length && ST.step >= 5) showExports();   // 내보낸 뒤에는 어느 절에서나 받을 수 있게
 }
+// 절 아래 「이전 절 · 다음 절」: 서식 차례대로 한 절씩 채운다(왼쪽 목차를 찾지 않아도 됨). 마지막 절에서는 내려받기
+function stepBar() {
+  const i = SECS.findIndex(s => s[0] === sec); if (i < 0) return '';
+  const prev = SECS[i - 1], next = SECS[i + 1];
+  return `<div class="row stepbar" style="justify-content:space-between;margin-top:28px;border-top:1px solid var(--line2);padding-top:12px">${prev ? `<button class="ghost" data-step="${prev[0]}">← ${esc(prev[1])}</button>` : '<span></span>'}${next ? `<button class="btn" data-step="${next[0]}">다음: ${esc(next[1])} →</button>` : '<button class="btn" id="stepExport">인계·인수서 내려받기</button>'}</div>`;
+}
+function bindStepBar(root) {
+  root.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { sec = b.dataset.step; ls('sec', sec); ORD = null; rerender(); window.scrollTo(0, 0); });
+  const e = root.querySelector('#stepExport'); if (e) e.onclick = () => $('#btnExport').click();
+}
+// 절 맨 위 띠: ① 초안이 끝난 뒤 처음 보는 절에 결과(건수·모델 호출·오류)를 한 번 ② 초안 뒤 기준일(인계 일자)이 바뀌어 초안이 낡았을 때
+let doneSec = '';
+function topBands() {
+  let h = '';
+  const info = ST.info || {}, plan = ST.plan || {};
+  if (ITEMS.length && info.base_date && plan.base_date && info.base_date !== plan.base_date && !ST.running) h += `<div class="note" id="staleBand"><b>기준일이 바뀌었습니다</b>(초안 ${esc(info.base_date)} → 지금 ${esc(plan.base_date)}). 기간 안 문서·현안 후보·「(지남)」 표시가 달라지므로 <button class="btn sm" id="btnRedraft">초안 다시 만들기</button>를 누르세요. 넣기·버리기·메모·직접 적은 항목은 그대로 남습니다.</div>`;
+  if (doneSec === sec && ITEMS.length) {
+    const pr = ST.progress || {}, errs = ST.errors || [], nE = errs.filter(e => e.file).length, sysE = errs.filter(e => !e.file);
+    h += `<div class="good" id="doneBand"><b>초안 완료</b> · 문서 ${ITEMS.length}건 · 현안 후보 ${issues().length} · 반복 업무 ${recurs().length}${pr.calls_total ? ` · 모델 호출 ${pr.calls_done || 0}/${pr.calls_total}회` : ' · 규칙만'}${nE ? ` · <b style="color:var(--fail)">모델 오류 ${nE}건(그 문서는 규칙 결과로 남음)</b>` : ''}${sysE.length ? ` · <b style="color:var(--fail)">${esc(sysE[0].reason)}</b>` : ''}${pr.stopped ? ' · 중단함' : ''}. ${sec === 's1a' ? '인계자·인수자·입회자와 업무별 한 줄을 적고 아래 「다음」으로 가세요.' : '줄마다 「원문 ▸」로 근거를 보고 넣기·버리기를 하세요.'} <button class="ghost sm" id="doneClose">닫기</button></div>`;
+  }
+  return h;
+}
+function bindTopBands(root) {
+  const r = root.querySelector('#btnRedraft'); if (r) r.onclick = async () => { try { await api('/api/draft', {}); wasRunning = true; sec = 'prep'; ls('sec', sec); await refresh(); } catch (e) { alert(e.message); } };
+  const c = root.querySelector('#doneClose'); if (c) c.onclick = () => { doneSec = ''; renderMain(); };
+}
+// 넣기·버리기 두 단추는 결정한 뒤에도 그대로 두고 고른 쪽만 채운다(누르면 「빼기」 같은 다른 단추로 바뀌어 「고르는 칸이 사라진」 듯 보이던 것). 다른 쪽을 누르면 바꾼다
+function tog(it) {
+  const k = !isSug(it) && !!it.keep, o = !isSug(it) && !it.keep;
+  return `<button class="y${k ? ' on' : ''}" data-act="in" aria-pressed="${k}" title="${k ? '넣은 줄입니다(결과물에 실림)' : '결과물에 넣기'}">${k ? '✓ 넣음' : '넣기'}</button><button class="n${o ? ' on' : ''}" data-act="out" aria-pressed="${o}" title="${o ? '버린 줄입니다(결과물에 실리지 않음)' : '결과물에서 버리기'}">${o ? '✓ 버림' : '버리기'}</button>`;
+}
+// 절·업무 머리의 건수: 넣음 · 확인 전 · 버림(넣기를 누르면 줄이 사라지는 게 아니라 「✓ 넣음」으로 바뀐다는 것이 보이게)
+const cnt = r => ({in: r.filter(i => i.keep && !isSug(i)).length, sug: r.filter(isSug).length, out: r.filter(i => !i.keep && !isSug(i)).length});
+function cntChip(r) { const c = cnt(r); return `<span class="chip">넣음 ${c.in}</span>${c.sug ? ` <span class="chip" style="background:var(--info-bg);color:var(--info)">확인 전 ${c.sug}</span>` : (r.length ? ' <span class="chip cy">모두 확인함</span>' : '')}${c.out ? ` <span class="chip">버림 ${c.out}</span>` : ''}`; }
 function head(title, lead, badges) { return `<div class="crumb">업무인계·인수서</div><h2>${esc(title)} ${badges || ''}</h2><p class="lead">${lead}</p>` + copyBar(); }
 function copyBar() {
   if (!ONNARA[sec] || !ITEMS.length) return '';
-  return `<div class="copybar"><button class="ghost sm" id="btnCopy">온나라에 붙여넣을 글 복사</button><span>서식의 「${esc(ONNARA[sec])}」 칸에 그대로 붙여 넣습니다. 버리기·빼기 한 것은 빠지고, 아직 넣기·버리기를 안 누른 제안은 「[확인 전]」 표시로 들어갑니다.</span></div>`;
+  return `<div class="copybar"><button class="ghost sm" id="btnCopy">온나라에 붙여넣을 글 복사</button><span>서식의 「${esc(ONNARA[sec])}」 칸에 그대로 붙여 넣습니다. 버리기 한 것은 빠지고, 아직 넣기·버리기를 안 누른 제안은 「[확인 전]」 표시로 들어갑니다.</span></div>`;
 }
 function bindCopy() {
   const b = $('#btnCopy'); if (!b) return;
@@ -154,9 +188,8 @@ function card(it, o) {
   let act = '';
   if (ro) act = !it.keep && !sug ? '<span class="chip">전임자가 뺌</span>' : `${sug ? '<span class="chip">확인 전</span> ' : ''}<label><input type="checkbox" class="seen" ${it.seen ? 'checked' : ''}> 인수 확인</label>`;
   else if (sug) act = `<button class="y" data-act="in">넣기</button><button class="n" data-act="out">버리기</button><select class="mini" data-k="area" data-autoin="1" title="업무를 바꾸면 넣기로 처리">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>`;
-  else if (it.keep) act = `<button class="n" data-act="out">빼기</button>`;
-  else act = `<button class="y" data-act="in">되살리기</button>`;
-  if (!ro && !sug && it.keep) act += `<select class="mini" data-k="area" title="업무 바꾸기">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select><select class="mini" data-k="kind3" title="절 바꾸기">${KINDS.map(k => `<option ${it.kind3 === k ? 'selected' : ''}>${k}</option>`).join('')}</select>`;
+  else act = tog(it);
+  if (!ro && !sug && it.keep) act += `<span class="mv"><select class="mini" data-k="area" title="업무 바꾸기">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select><select class="mini" data-k="kind3" title="절 바꾸기">${KINDS.map(k => `<option ${it.kind3 === k ? 'selected' : ''}>${k}</option>`).join('')}</select></span>`;
   return `<div class="sug doc ${sug ? '' : it.keep ? 'me' : 'off'}" data-id="${it.id}"><div>${body}</div><div class="act">${act}</div></div>`;
 }
 function bindCards(root) {
@@ -227,11 +260,11 @@ function triTable(rows, o) {
     if (ST.info && ST.info.manual && it.cls === '공문' && !it.reflected) chips.push('<span class="chip st">★</span>');
     if (it.src === '모델') chips.push('<span class="chip">AI</span>');
     const act = ro ? (!it.keep && !sug ? '<span class="chip">뺌</span>' : `<label><input type="checkbox" class="seen" ${it.seen ? 'checked' : ''}> 인수 확인</label><input class="text" data-k="question" value="${esc(it.question || '')}" placeholder="물을 것" style="margin-top:3px">`)
-      : sug ? `<button class="y" data-act="in">넣기</button> <button class="n" data-act="out">버리기</button>${it.private ? ' <span class="chip st">개인?</span>' : ''}${it.secret ? ' <span class="chip st">계정</span>' : ''}` : it.keep ? `<button class="n" data-act="out">빼기</button>` : `<button class="y" data-act="in">되살리기</button>`;
+      : sug ? `<button class="y" data-act="in">넣기</button> <button class="n" data-act="out">버리기</button>${it.private ? ' <span class="chip st">개인?</span>' : ''}${it.secret ? ' <span class="chip st">계정</span>' : ''}` : tog(it);
     return `<tr class="trow ${sug ? 'sugrow' : !it.keep ? 'offrow' : ''}" data-id="${it.id}"><td class="d">${esc(dateText(it))}</td><td><input class="text" data-k="title" value="${esc(it.title)}" ${ro ? 'disabled' : ''}><div class="s" title="${esc(it.file || '')}">${it.file ? `<button class="ghost sm doc-open" data-f="${esc(it.file)}">원문 ▸</button> ` : ''}${esc(it.cls || '')}${it.docno ? ' · ' + esc(it.docno) : ''} · ${esc(fileName(it.file))}${it.summary ? '<br>요지: ' + esc(it.summary) : it.quote ? '<br>원문: ' + esc(it.quote) : ''}</div></td>
       <td>${chips.join(' ')}</td>${o.issue ? `<td>${!sug && it.keep && !ro ? `<select class="mini" data-k="status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(it.status || '진행') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>` : esc(STATUS[it.status || '진행'])}<input class="when" data-k="due_next" value="${esc(it.due_next || '')}" placeholder="기한" style="width:100%;margin-top:3px" ${ro ? 'disabled' : ''}></td>` : ''}
       <td>${ro ? esc(it.todo || '') + (it.next ? '<br>다음: ' + esc(it.next) : '') : `<input class="text" data-k="todo" value="${esc(it.todo || '')}" placeholder="할 일">${o.issue ? `<input class="text" data-k="next" value="${esc(it.next || '')}" placeholder="다음에 할 일" style="margin-top:3px">` : ''}`}</td>
-      <td class="act">${act}${!ro && !sug && it.keep ? `<select class="mini" data-k="area" title="업무">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select><select class="mini" data-k="kind3" title="절">${KINDS.map(k => `<option ${it.kind3 === k ? 'selected' : ''}>${k}</option>`).join('')}</select>` : ''}</td></tr>`; };
+      <td class="act">${act}${!ro && !sug && it.keep ? `<div class="mv"><select class="mini" data-k="area" title="업무">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select><select class="mini" data-k="kind3" title="절">${KINDS.map(k => `<option ${it.kind3 === k ? 'selected' : ''}>${k}</option>`).join('')}</select></div>` : ''}</td></tr>`; };
   return `<table class="tri"><tr><th style="width:84px">날짜</th><th style="min-width:38%">문서</th><th style="width:52px"></th>${o.issue ? '<th style="width:124px">상태·기한</th>' : ''}<th style="width:23%">할 일${o.issue ? ' · 다음' : ''}</th><th style="width:118px"></th></tr>${rows.map(tr).join('')}</table>`;
 }
 // 순서: 제안 먼저, 최근 것 먼저. 한 절 안에서는 넣기·버리기를 눌러도 줄이 제자리에 있게(다른 절로 갈 때 다시 정렬)
@@ -253,7 +286,7 @@ function extractMsgHtml() {
 function renderPrep(m) {
   const x = ST.extracting; const f = ST.files || [];
   let h = head('폴더 읽기 · 초안 만들기', '처음 한 번만 하는 준비입니다. 문서 한 건이 카드 한 장이 되고, 왼쪽 서식 차례대로 넣기·버리기만 하면 됩니다.');
-  h += `<div class="sec"><h3>① 업무 폴더</h3><div class="row"><input type="text" id="folder" class="wide" value="${esc(ST.folder || '')}" placeholder="예) C:\\업무\\우편영업실  (주소를 붙여 넣거나 「찾기」)"><button class="ghost" id="btnPick" title="이 화면 안에서 폴더 목록을 눌러 고릅니다">목록에서 고르기</button><button class="ghost" id="btnBrowse" title="윈도 폴더 선택 창을 띄웁니다">윈도 창으로 고르기</button><button class="btn" id="btnExtract" ${x ? 'disabled' : ''}>읽기</button></div>
+  h += `<div class="sec"><h3>① 업무 폴더</h3><div class="row"><button class="btn" id="btnBrowse" title="윈도 폴더 선택 창에서 고르면 바로 읽습니다">폴더 찾아보기…</button><input type="text" id="folder" class="wide" value="${esc(ST.folder || '')}" placeholder="또는 폴더 주소를 붙여 넣고 「읽기」  예) C:\\업무\\우편영업실"><button class="ghost" id="btnPick" title="이 화면 안에서 폴더 목록을 눌러 고릅니다">화면에서 고르기</button>${(ST.recent || []).length ? `<select id="recent" title="최근에 읽은 폴더를 다시 읽습니다"><option value="">최근 폴더</option>${(ST.recent || []).map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('')}</select>` : ''}<button class="btn" id="btnExtract" ${x ? 'disabled' : ''}>읽기</button></div>
     <div id="picker" class="picker" hidden><div class="row"><b>폴더 고르기</b> <span id="pkPath" class="s"></span><button class="ghost sm" id="pkUp">위로</button><button class="btn sm" id="pkUse">이 폴더로</button><button class="ghost sm" id="pkClose">닫기</button></div><div id="pkList"></div></div><div id="extractMsg">${extractMsgHtml()}</div>`;
   const os_ = ST.ocr_status || {}; const engs = ['windows', 'tesseract', 'rapidocr'].filter(k => os_[k] && os_[k].ok);
   const ocrHint = engs.length ? `쓸 수 있는 엔진: ${engs.map(k => k + (os_[k].why ? '(' + os_[k].why + ')' : '')).join(' · ')}` : ['windows', 'rapidocr', 'tesseract'].map(k => os_[k] ? k + ': ' + os_[k].why : '').filter(Boolean).join(' / ');
@@ -268,11 +301,11 @@ function renderPrep(m) {
   if (!f.length) h += '<div class="s">먼저 폴더를 읽으세요.</div>';
   else {
     const p = ST.plan || {};
-    h += `<div class="row"><label>기간 <select id="months">${[6, 12, 18, 24, 36].map(n => `<option value="${n}" ${(+ST.months || 12) === n ? 'selected' : ''}>최근 ${n}개월</option>`).join('')}</select></label><span class="s">업무마다 다르게 두려면 아래 「업무 키워드」 줄 끝에 「| 24개월」처럼 적습니다. 해마다 오는 업무는 기간과 상관없이 지난 3년 파일 날짜로 찾습니다.</span></div>`;
+    h += `<div class="row"><label>기간 <select id="months">${[6, 12, 18, 24, 36].map(n => `<option value="${n}" ${(+ST.months || 12) === n ? 'selected' : ''}>최근 ${n}개월</option>`).join('')}</select></label><label>인계 일자 <input type="text" id="hDate2" value="${esc(ST.handover_date || '')}" placeholder="YYYY-MM-DD" style="width:130px" title="기간과 「(지남)」 표시의 기준일. 1-가의 「일자」와 같은 칸입니다. 비우면 오늘(폴더의 최근 문서가 90일보다 오래됐으면 그 다음 날)"></label><span class="s">업무마다 다르게 두려면 아래 「업무 키워드」 줄 끝에 「| 24개월」처럼 적습니다. 해마다 오는 업무는 기간과 상관없이 지난 3년 파일 날짜로 찾습니다.</span></div>`;
     h += `<div class="s">기간 기준일 <b>${esc(p.base_date || '')}</b>(${esc(p.base_why || '')}). 인계 일자를 1-가에 적으면 그날 기준으로 다시 셉니다.${p.base_warn ? ` <b style="color:var(--fail)">${esc(p.base_warn)}</b>` : ''}${p.n_dupver ? ` 같은 파일 사본·이전 판 ${p.n_dupver}건은 최신 하나만 올립니다.` : ''}${p.n_private ? ` 개인 문서로 보이는 ${p.n_private}건은 현안으로 올리지 않습니다.` : ''}${p.n_secret ? ` <b style="color:var(--fail)">비밀번호·계정 줄이 든 문서 ${p.n_secret}건</b>(발췌에서 가림).` : ''}</div>`;
     h += `<div class="pills"><span class="pill">기간 안 문서 <b>${p.n_items || 0}</b></span><span class="pill">현안 후보 <b>${p.n_issue || 0}</b></span><span class="pill">반복 업무 <b>${p.n_recur || 0}</b></span><span class="pill">연혁 <b>${p.n_hist || 0}</b></span><span class="pill">현황 자료 <b>${p.n_status || 0}</b></span><span class="pill">그 밖의 문서 <b>${p.n_doc || 0}</b></span><span class="pill">기간 밖 <b>${p.n_old || 0}</b></span><span class="pill">붙임 <b>${p.n_attach || 0}</b></span></div>`;
     h += `<div class="row"><div class="seg" id="engineSeg"><button data-e="rules" class="${engine === 'rules' ? 'on' : ''}">규칙만 · 몇 초</button><button data-e="model" class="${engine === 'model' ? 'on' : ''}">AI 모델도 사용 · 요지·할 일 받기</button></div>
-      <span id="modelRow" ${engine === 'model' ? '' : 'hidden'}><select id="model"><option value="">모델 고르기</option>${ST.model ? `<option value="${esc(ST.model)}" selected>${esc(ST.model)}</option>` : ''}</select> <input type="text" id="url" value="${esc(ST.url || '')}" style="width:280px"> <button class="ghost sm" id="btnModels">목록 새로고침</button>
+      <span id="modelRow" ${engine === 'model' ? '' : 'hidden'}><select id="model"><option value="">모델 고르기</option>${ST.model ? `<option value="${esc(ST.model)}" selected>${esc(ST.model)}</option>` : ''}</select> <input type="text" id="url" value="${esc(ST.url || '')}" style="width:280px">${ST.remote_ok ? ` <input type="password" id="key" value="${esc(ST.key || '')}" placeholder="키(기관 서버가 요구할 때만)" style="width:200px" title="실행 옵션 --allow-model-host 로 기관 서버를 허용했을 때만 보입니다. 이 PC 작업 폴더의 세션 파일에 저장됩니다">` : ''} <button class="ghost sm" id="btnModels">목록 새로고침</button>
       <div class="seg" id="scopeSeg" style="display:inline-flex;margin-left:8px"><button data-sc="issues" class="${(ST.model_scope || 'issues') === 'issues' ? 'on' : ''}">현안 후보만</button><button data-sc="all" class="${ST.model_scope === 'all' ? 'on' : ''}">기간 안 전부</button></div></span><span class="s" id="planHint"></span></div>`;
     h += engine === 'model' && ST.model ? `<div class="note">모델 <b>${esc(ST.model)}</b>에 문서 ${p.calls || 0}건(한 건에 한 번). 예상 약 ${secText(p.est_sec || 0)}. 「여기까지만」으로 끊어도 결과는 남고, 모델 응답은 호출마다 저장되어 중간에 꺼져도 이어서 갑니다.${ST.checkpoint && ST.checkpoint.reusable ? ` 저장된 이전 응답 ${ST.checkpoint.reusable}회는 다시 부르지 않습니다.` : ''}</div>` : `<div class="s">규칙만: 문서마다 날짜·문서번호·제목·기한·담당·소관 업무를 읽습니다. 수천 파일도 몇 초입니다. 모델은 현안 후보의 「요지·할 일」 한 줄을 보탭니다(없어도 됩니다).</div>`;
     const pr = ST.progress;
@@ -280,29 +313,38 @@ function renderPrep(m) {
     if (ST.running && pr) h += `<div class="bar"><i style="width:${pr.calls_total ? Math.round(100 * pr.calls_done / pr.calls_total) : 0}%"></i></div>`;
     if (ITEMS.length) h += `<div class="s">다시 만들거나 폴더를 다시 읽어도 넣기·버리기·상태·메모·고친 글·직접 적은 항목은 파일 기준으로 그대로 남습니다.</div>`;
     h += `<div class="row"><label>누적 매뉴얼 파일 <input type="text" id="manualPath" value="${esc(ST.manual_path || '')}" placeholder="비우면 폴더 안에서 자동으로 찾음. 폴더 밖이면 파일 주소(docx·hwpx·md)" style="width:520px"></label>${ST.info && ST.info.manual ? `<span class="s">지금 잡힌 매뉴얼: ${esc(ST.info.manual)}</span>` : ''}</div>`;
-    h += `<details><summary>업무 키워드·기간 설정${ST.areas_src === '폴더' ? ' <span class="chip">폴더 이름으로 나눔</span>' : ''}</summary><div class="s" style="margin-top:8px">한 줄에 「업무 이름: 키워드, 키워드 | 기간」. 맨 위 폴더 이름이 업무 이름과 같으면 그 업무로, 아니면(미분류·서식 폴더 등) 제목·앞부분에 키워드가 많이 든 업무로 분류합니다. 기간을 안 적으면 위 기본 기간.</div><textarea id="areas" style="width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(ST.areas_text || '')}</textarea><div class="row"><button class="ghost sm" id="btnAreas">적용(다시 분류)</button><button class="ghost sm" id="btnAreasDefault">기본값으로</button></div></details>`;
+    h += `<details><summary>업무 키워드·기간 설정${ST.areas_src === '폴더' ? ' <span class="chip">폴더 이름으로 나눔</span>' : ''}</summary><div class="s" style="margin-top:8px">한 줄에 「업무 이름: 키워드, 키워드 | 기간」. 맨 위 폴더 이름이 업무 이름과 같으면 그 업무로, 아니면(미분류·서식 폴더 등) 제목·앞부분에 키워드가 많이 든 업무로 분류합니다. 기간을 안 적으면 위 기본 기간.</div><textarea id="areas" style="width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(ST.areas_text || '')}</textarea><div class="row"><button class="ghost sm" id="btnAreas">적용(다시 분류)</button><button class="ghost sm" id="btnAreasDefault">기본값으로</button><span class="s" style="margin-left:8px">다른 기관 보기:</span>${(ST.presets || []).map(([n]) => `<button class="ghost sm" data-preset="${esc(n)}" title="이 보기의 업무·키워드로 채우고 바로 다시 나눕니다">${esc(n)}</button>`).join('')}</div></details>`;
   }
   h += '</div>';
   if (ITEMS.length) { const nS = ITEMS.filter(isSug).length; h += `<div class="good">초안이 있습니다. 왼쪽 「1-가. 담당 업무」부터 차례로 채우세요. <button class="btn sm" id="goS1">서식으로</button>${nS && mode === 'give' ? ` <button class="ghost sm" id="btnAllIn" style="font-size:.78rem">확인 전 ${nS}건 한꺼번에 넣기</button><span class="s"> (한꺼번에 넣은 것은 결과물에 [일괄 넣음]으로 표시)</span>` : ''}</div>`; }
-  h += `<details><summary>처음 쓰는 분 · 다섯 단계</summary><div class="s" style="margin-top:6px">① 폴더를 읽고 「초안 만들기」(규칙만이면 몇 초). ② 1-가에서 인계자·인수자·입회자와 업무별 한 줄 설명. ③ 1-다 현안에서 넣기·버리기, 미결은 상태를 「미결」로. ④ 3절 물품·예산을 직접 적기. ⑤ 「인계·인수서 내려받기」 → docx는 서식에 맞추고 _온나라.txt는 칸마다 붙여 넣기. 넣기 전 제안도 「확인 전」으로 함께 실립니다.</div></details>`;
+  h += `<details><summary>처음 쓰는 분 · 다섯 단계</summary><div class="s" style="margin-top:6px">① 폴더를 읽고, 인계 일자를 적은 뒤 「초안 만들기」(규칙만이면 몇 초). ② 1-가에서 인계자·인수자·입회자와 업무별 한 줄 설명. ③ 1-다 현안에서 넣기·버리기, 미결은 상태를 「미결」로. ④ 3절 물품·예산을 직접 적기. ⑤ 「인계·인수서 내려받기」 → docx는 서식에 맞추고 _온나라.txt는 칸마다 붙여 넣기. 넣기 전 제안도 「확인 전」으로 함께 실립니다.</div></details>`;
   m.innerHTML = h; bindPrep();
 }
 function bindPrep() {
   const g = $('#goS1'); if (g) g.onclick = () => { sec = 's1a'; rerender(); };
   const kw = $('#btnKeyword'); if (kw) kw.onclick = async () => { try { await settings({areas_mode: 'keyword', areas_text: ''}); await refresh(); alert('업무를 키워드로 다시 나눴습니다. 필요하면 아래 「업무 키워드·기간 설정」에서 업무 이름과 키워드를 고치세요. 초안을 다시 만들면 반영됩니다.'); } catch (e) { alert(e.message); } };
-  const ai = $('#btnAllIn'); if (ai) ai.onclick = async () => { const ids = ITEMS.filter(isSug).map(i => i.id); if (!confirm(`제안 ${ids.length}건을 모두 넣을까요? 필요 없는 것은 각 절에서 「빼기」로 정리하면 됩니다.`)) return;
+  const ai = $('#btnAllIn'); if (ai) ai.onclick = async () => { const ids = ITEMS.filter(isSug).map(i => i.id); if (!confirm(`제안 ${ids.length}건을 모두 넣을까요? 필요 없는 것은 각 절에서 「버리기」로 바꾸면 됩니다.`)) return;
     try { const j = await api('/api/items', {changes: Object.values(pending), bulk: [{ids, keep: true}]}); pending = {}; ITEMS = j.items; sec = 's1c'; rerender(); } catch (e) { alert(e.message); } };
   $('#btnExtract').onclick = () => doExtract($('#folder').value, []);
+  $('#folder').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); doExtract($('#folder').value, []); } };   // 주소를 붙여 넣고 Enter
   ['#ocr', '#ocrPages', '#ocrImages'].forEach(s => { const el = $(s); if (el) el.onchange = () => api('/api/settings', {ocr: $('#ocr').value, ocr_pages: +$('#ocrPages').value, ocr_images: $('#ocrImages').checked}).then(refresh).catch(e => alert(e.message)); });
   $('#btnPick').onclick = () => pkLoad($('#folder').value.trim() || '').catch(e => alert(e.message));
   $('#pkClose').onclick = () => { $('#picker').hidden = true; };
   $('#pkUse').onclick = () => { $('#folder').value = pkCur; $('#picker').hidden = true; doExtract(pkCur, []); };
-  $('#btnBrowse').onclick = async () => { const j = await api('/api/browse', {}); if (j.folder) $('#folder').value = j.folder; else $('#extractMsg').innerHTML = '<div class="note">윈도 폴더 창을 열지 못했습니다. 「찾기…」로 고르거나 주소를 붙여 넣으세요.</div>'; };
+  $('#btnBrowse').onclick = async () => {   // 윈도 폴더 창에서 고르면 바로 읽는다. 창을 못 띄우는 PC(권한·원격 접속 등)는 화면 안 폴더 목록으로
+    const bb = $('#btnBrowse'); bb.disabled = true; $('#extractMsg').innerHTML = '<div class="note">윈도 폴더 창을 띄웠습니다. 안 보이면 작업 표시줄에서 그 창을 누르세요.</div>';
+    let j = {}; try { j = await api('/api/browse', {}); } catch (e) { j = {}; }
+    bb.disabled = false;
+    if (j.folder) { $('#folder').value = j.folder; doExtract(j.folder, []); }
+    else if (j.cancelled) { $('#extractMsg').innerHTML = extractMsgHtml(); }
+    else { $('#extractMsg').innerHTML = '<div class="note">이 PC에서는 윈도 폴더 창을 열지 못해 화면 안 목록으로 고릅니다.</div>'; pkLoad($('#folder').value.trim() || '').catch(e => alert(e.message)); } };
+  const rc = $('#recent'); if (rc) rc.onchange = () => { if (rc.value) { $('#folder').value = rc.value; doExtract(rc.value, []); } };
+  $$('[data-preset]').forEach(b => b.onclick = () => { const p = (ST.presets || []).find(x => x[0] === b.dataset.preset); if (!p) return; $('#areas').value = p[1]; $('#btnAreas').click(); });
   const sa = $('#subAll'); if (sa) { sa.onclick = () => $$('.sub').forEach(c => c.checked = true); $('#subNone').onclick = () => $$('.sub').forEach(c => c.checked = false); $('#btnReread').onclick = () => doExtract($('#folder').value, $$('.sub').filter(c => !c.checked).map(c => c.value)); }
   const seg = $('#engineSeg'); if (seg) {
     seg.querySelectorAll('button').forEach(b => b.onclick = async () => { engine = b.dataset.e; ls('engine', engine); if (engine === 'rules') { await settings({model: ''}); } renderMain(); if (engine === 'model') loadModels(); });
     $('#scopeSeg').querySelectorAll('button').forEach(b => b.onclick = () => settings({model_scope: b.dataset.sc}).then(() => renderMain()).catch(e => alert(e.message)));
-    ['#model', '#url', '#months', '#manualPath'].forEach(s => { const el = $(s); if (el) el.onchange = () => settings().then(() => renderMain()).catch(e => alert(e.message)); });
+    ['#model', '#url', '#key', '#months', '#hDate2', '#manualPath'].forEach(s => { const el = $(s); if (el) el.onchange = () => settings().then(() => renderMain()).catch(e => alert(e.message)); });
     $('#btnModels').onclick = loadModels; if (engine === 'model') loadModels();
     $('#btnDraft').onclick = async () => { try {
       if (engine === 'model') { const j = await api('/api/models'); if (!j.models.length && !confirm('AI 모델(Ollama)에 연결하지 못했습니다. 규칙만으로 초안을 만들까요?')) return; if (!ST.model && !confirm('모델을 고르지 않았습니다. 규칙만으로 초안을 만들까요?')) return; }
@@ -316,7 +358,7 @@ async function settings(extra) {
   const body = Object.assign({}, extra || {});
   if (Object.keys(body).some(k => ['overview', 'assets', 'handover_from', 'handover_to', 'witness', 'handover_date', 'org', 'areas_text'].includes(k))) dirtyAfterExport = true;
   const take = (sel, k, f) => { const el = $(sel); if (el) body[k] = f ? f(el) : el.value; };
-  if (!('model' in body)) take('#model', 'model'); take('#url', 'url', el => el.value.trim()); take('#months', 'months', el => +el.value); take('#manualPath', 'manual_path', el => el.value.trim());
+  if (!('model' in body)) take('#model', 'model'); take('#url', 'url', el => el.value.trim()); take('#key', 'key', el => el.value.trim()); take('#hDate2', 'handover_date', el => el.value.trim()); take('#months', 'months', el => +el.value); take('#manualPath', 'manual_path', el => el.value.trim());
   if (engine === 'rules') body.model = '';
   else if (body.model === '') delete body.model;
   const j = await api('/api/settings', body);
@@ -383,8 +425,8 @@ function renderS1b(m) {
 // --- 1-다. 현안
 function renderS1c(m) {
   const rows = issues().filter(i => isSug(i) || i.status !== '미결' || i.status_by === '규칙');   // 규칙이 미결로 제안한 것은 넣은 뒤에도 여기 남긴다(누르자 사라져 놀라던 것). 사람이 미결로 고르면 1-라로
-  let h = head('1-다. 현안사항 및 문제점', '기한이 남았거나 최근에 온 문서, 미결·보류 같은 말이 든 문서입니다. 넣기 → 상태·다음에 할 일 한 줄. 「미결」로 두면 1-라로 갑니다.', bulkBtns(rows) + viewSeg());
-  for (const a of usedAreas()) { const r = rows.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건${r.filter(isSug).length ? ' · 확인 전 ' + r.filter(isSug).length : ''}</span>${areaOut(a, r)}</h3>` + (view === 'table' ? triTable(sortRows(r), {issue: true}) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
+  let h = head('1-다. 현안사항 및 문제점', '기한이 남았거나 최근에 온 문서, 미결·보류 같은 말이 든 문서입니다. 「원문 ▸」로 근거를 보고 넣기 → 상태·다음에 할 일 한 줄. 넣기·버리기를 누르면 줄은 제자리에 남고 고른 단추가 「✓ 넣음」「✓ 버림」으로 채워집니다(다른 쪽을 누르면 바꿈). 상태를 「미결」로 두면 1-라로 옮겨 갑니다.', bulkBtns(rows) + viewSeg());
+  for (const a of usedAreas()) { const r = rows.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} ${cntChip(r)}${areaOut(a, r)}</h3>` + (view === 'table' ? triTable(sortRows(r), {issue: true}) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
   if (!rows.length) h += '<div class="s">현안 후보가 없습니다. 아래에서 직접 적을 수 있습니다.</div>';
   h += addRow('현안');
   m.innerHTML = h; bindCards(m); bindBulk(m, () => rows); bindAreaOut(m, () => rows); bindAdd('현안'); bindCopy(); bindView(m);
@@ -402,7 +444,7 @@ function renderS2(m) {
   const rows = ITEMS;
   let h = head('2. 관련 문서 현황', `최근 ${ST.months || 12}개월 문서를 업무별로. 결과물 2절에는 「문서」 항목만 실리고, 현안·반복은 1-나·1-다에 실립니다(여기서 버리면 거기서도 빠집니다). ${info.manual ? `누적 매뉴얼 「${esc(fileName(info.manual))}」(문서번호 ${info.manual_refs}개)에 없는 공문은 ★ 표시.` : '폴더에 누적 매뉴얼(이름에 「매뉴얼」)이 있으면 반영 여부를 대조합니다.'} 기간 밖 문서 ${info.n_old || 0}건은 폴더에 그대로 둡니다.`, bulkBtns(rows, '이 절의 제안'));
   h = h.replace('</p>', '</p>' + (mode === 'take' ? '' : `<div class="row">${viewSeg().replace('class="r"', '')}</div>`));
-  for (const a of usedAreas()) { const r = ITEMS.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} <span class="chip">${r.filter(i => i.keep && !isSug(i)).length}건</span>${areaOut(a, r)}</h3>` + (view === 'table' ? triTable(sortRows(r)) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
+  for (const a of usedAreas()) { const r = ITEMS.filter(i => areaOf(i) === a); if (!r.length) continue; h += `<div class="sec"><h3>${esc(a)} ${cntChip(r)}${areaOut(a, r)}</h3>` + (view === 'table' ? triTable(sortRows(r)) : sortRows(r).map(i => card(i)).join('')) + '</div>'; }
   h += addRow('문서');
   m.innerHTML = h; bindCards(m); bindBulk(m, () => rows); bindAreaOut(m, () => ITEMS); bindAdd('문서'); bindCopy(); bindView(m);
 }
@@ -458,6 +500,7 @@ $('#btnExport').onclick = async () => {
   const warn = [];   // 내보내기 전 점검: 서식에 빈칸으로 나갈 것
   const who = [['인계자', ST.handover_from], ['인수자', ST.handover_to], ['입회자', ST.witness]].filter(x => !x[1]).map(x => x[0]);
   if (who.length) warn.push(`· ${who.join('·')} 이름이 비어 있습니다(1-가 맨 위)`);
+  const ib = (ST.info || {}).base_date, pb = (ST.plan || {}).base_date; if (ib && pb && ib !== pb) warn.push(`· 기준일이 바뀌었는데(초안 ${ib} → 지금 ${pb}) 초안을 다시 만들지 않았습니다. 기간·현안·「(지남)」이 옛 기준일로 나갑니다`);
   const nS = ITEMS.filter(i => i.keep && isSug(i)).length; if (nS) warn.push(`· 아직 넣기·버리기를 안 누른 제안 ${nS}건이 「[확인 전]」 표시로 함께 실립니다`);
   const nA = AS.filter(([k]) => !(ASSETS[k] || '').trim()).length; if (nA) warn.push(`· 3절 물품·예산 ${nA}칸이 「(적지 않음)」으로 나갑니다`);
   const nD = usedAreas().filter(a => !((OV[a] || {}).desc || (OV[a] || {}).gone || '').trim()).length; if (nD) warn.push(`· 1-가 업무 설명이 빈 업무 ${nD}개(「(적지 않음)」으로 나감)`);

@@ -40,7 +40,7 @@ import ocr
 import export
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = '3.7.4 (2026-10-23)'
+VERSION = '3.8 (2026-10-26)'
 MAX_CHARS3 = 4000   # 문서 한 건에서 모델에 보내는 글자 상한
 SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '$RECYCLE.BIN', 'System Volume Information'}   # 돌다리 작업 폴더는 이름이 아니라 실제 경로(WORK)로 뺀다(업무 폴더 안 「작업」 폴더는 읽는다)
 SKIP_NAMES = r'^(인수인계서_\d{8}_\d{4,6}(_\d+)?(_원본지문|_온나라)?\.(md|docx|csv|txt)|인수인계_초안\.md|결과\.(md|json)|세션\.json|초안_백업_.*\.json|초안_원본_최근\.json|모델응답_이어하기\.jsonl|정답표\.xlsx|돌다리 v.*\.pdf)$'   # 돌다리 자신의 산출물(화면 인쇄 PDF 포함)은 읽지 않는다
@@ -49,7 +49,7 @@ STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'sug
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
          'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 40.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': [],
          'areas': core.DEFAULT_AREAS, 'overview': {}, 'handover_from': '', 'handover_to': '', 'assets': {}, 'keyfiles': [],
-         'months': 12, 'model_scope': 'issues', 'witness': '', 'handover_date': '', 'org': '', 'info': {}, 'manual_path': '', 'ocr': 'auto', 'ocr_pages': 5, 'ocr_images': False}
+         'months': 12, 'model_scope': 'issues', 'witness': '', 'handover_date': '', 'org': '', 'info': {}, 'manual_path': '', 'ocr': 'auto', 'ocr_pages': 5, 'ocr_images': False, 'key': '', 'recent': []}
 _ocr_status = None   # ocr.available() 결과(시작·설정 때만 다시 센다)
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
 CHECKPOINT = '모델응답_이어하기.jsonl'   # 모델 응답을 호출마다 바로 적어 두는 파일. 같은 폴더·모델이면 다음 「초안 만들기」가 재사용한다(죽어도 한 호출만 잃음)
@@ -300,7 +300,7 @@ def run_draft():
                     log('누적 매뉴얼 파일을 읽지 못했습니다: %s' % (fl[0]['reason'] if fl else mp))
             else:
                 log('누적 매뉴얼 파일이 없습니다: ' + mp)
-        items, calls, errors, info = docs.build_docs(files, STATE.get('areas') or core.DEFAULT_AREAS, int(STATE.get('months') or 12), STATE['model'] or 'none', STATE['url'], '',
+        items, calls, errors, info = docs.build_docs(files, STATE.get('areas') or core.DEFAULT_AREAS, int(STATE.get('months') or 12), STATE['model'] or 'none', STATE['url'], str(STATE.get('key') or ''),
                                                       STATE.get('model_scope') or 'issues', MAX_CHARS3, progress=progress, should_stop=lambda: STATE['stop'],
                                                       checkpoint=os.path.join(WORK, CHECKPOINT), folder=STATE['folder'], prev_items=STATE['items'] or STATE.get('prev_items') or [], manual=manual, today=bd)
         info['base_why'] = bwhy
@@ -328,13 +328,22 @@ def run_draft():
 
 
 def ollama_models(url):
+    """모델 목록: Ollama(/api/tags)를 먼저, 아니면 OpenAI 호환 서버의 /v1/models(기관 모델 서버 등). 허용 목록 밖 주소는 빈 목록."""
     base = urllib.parse.urlsplit(url)
     if not core.is_local_url(url):
         return []
+    root = '%s://%s' % (base.scheme, base.netloc)
     try:
-        with NOPROXY.open('%s://%s/api/tags' % (base.scheme, base.netloc), timeout=3) as r:
+        with NOPROXY.open(root + '/api/tags', timeout=3) as r:
             j = json.loads(r.read().decode('utf-8'))
         return [m['name'] for m in j.get('models', [])]
+    except Exception:
+        pass
+    try:
+        hd = {'Authorization': 'Bearer ' + str(STATE.get('key'))} if STATE.get('key') else {}
+        with NOPROXY.open(urllib.request.Request(root + '/v1/models', headers=hd), timeout=3) as r:
+            j = json.loads(r.read().decode('utf-8'))
+        return [str(m.get('id') or m.get('name')) for m in (j.get('data') or j.get('models') or []) if isinstance(m, dict) and (m.get('id') or m.get('name'))]
     except Exception:
         return []
 
@@ -456,6 +465,8 @@ class H(BaseHTTPRequestHandler):
                 st['n_skip'] = sum(1 for x in STATE['failures'] if x.get('skip')); st['n_fail'] = len(STATE['failures']) - st['n_skip']
                 st['ocr_status'] = ocr_status(); st['ocr_engine'] = EX.OCR_CONFIG.get('engine', '')
                 st['missing'] = MISSING; st.pop('prev_items', None)
+                st['presets'] = [[n, docs.areas_text(a)] for n, a in core.AREA_PRESETS]   # 업무 키워드 보기(다른 기관용)
+                st['allowed_hosts'] = sorted(core.ALLOWED_MODEL_HOSTS); st['remote_ok'] = core.remote_allowed()
             return self._send(200, st)
         if p.path == '/api/items':
             with LOCK:
@@ -543,6 +554,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(409, {'error': '폴더를 읽는 중입니다. 끝날 때까지 기다리세요(큰 폴더는 몇 분).'})
             _extracting = True
             STATE['extracting'] = {'index': 0, 'total': 0, 'file': '', 'sec': 0}; STATE['extract_error'] = ''
+            with LOCK:   # 최근 폴더(화면 ①의 「최근 폴더」 목록, 8개까지)
+                STATE['recent'] = ([folder] + [r for r in (STATE.get('recent') or []) if r != folder])[:8]
             def run():   # 11분 넘는 읽기를 HTTP 요청 안에서 기다리지 않는다(브라우저가 끊어도 서버는 계속, 화면은 진행을 묻는다)
                 global _extracting
                 try:
@@ -556,7 +569,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:
-                for k in ('model', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path', 'ocr', 'ocr_pages', 'ocr_images', 'areas_mode'):
+                for k in ('model', 'key', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path', 'ocr', 'ocr_pages', 'ocr_images', 'areas_mode'):
                     if k in body:
                         STATE[k] = body[k]
                 if 'areas_text' in body:
@@ -566,7 +579,7 @@ class H(BaseHTTPRequestHandler):
                             it['area'] = docs.area_of(it.get('title', ''), '', STATE['areas'], it.get('file', ''))
                 if 'url' in body:
                     if not core.is_local_url(str(body['url'])):
-                        return self._send(400, {'error': '모델 주소는 127.0.0.1 또는 localhost만 허용합니다'})
+                        return self._send(400, {'error': '모델 주소는 이 PC(127.0.0.1·localhost)만 허용합니다. 기관 모델 서버는 「돌다리_실행.bat --allow-model-host 주소:포트」로 실행하면 받습니다'})
                     STATE['url'] = str(body['url'])
                 if STATE['files']:
                     STATE['plan'] = make_plan()
@@ -817,7 +830,12 @@ def main():
     ap.add_argument('--port', type=int, default=8765)
     ap.add_argument('--work', default=os.path.join(HERE, '작업'))
     ap.add_argument('--no-browser', action='store_true')
+    ap.add_argument('--allow-model-host', action='append', default=[], metavar='주소[:포트]',
+                    help='이 PC 밖 모델 서버(OpenAI 호환 주소)를 허용 목록에 더함. 예) --allow-model-host 10.1.2.3:8000 (기관 서버로 옮길 때, 코드 수정 없음)')
     a = ap.parse_args()
+    for h in a.allow_model_host:
+        h2 = core.allow_model_host(h)
+        print('모델 서버 허용: %s (이 PC 밖 주소입니다. 현안 후보 문서의 제목과 본문 앞부분이 그 서버로 갑니다. 기관 개인정보 검토를 거친 서버만 적으세요)' % (h2 or h), flush=True)
     WORK = os.path.abspath(a.work)
     try:
         os.makedirs(WORK, exist_ok=True)

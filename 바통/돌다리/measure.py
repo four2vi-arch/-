@@ -27,6 +27,7 @@
 import os, sys, re, json, time, argparse, datetime, platform
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract as EX
+import core
 from core import TYPES, norm, grams, sim, contain, line_overlap, build_draft, rule_items, grounded, source_lines, best_line, ground_fix, fix_type, parse_json_loose, call_model, name_near_phone, PHONE
 
 
@@ -60,9 +61,12 @@ def main():
     ap.add_argument('--model', required=True); ap.add_argument('--key', default='')
     ap.add_argument('--max-chars', type=int, default=6000)
     ap.add_argument('--label', default='')
+    ap.add_argument('--allow-model-host', action='append', default=[], help='이 PC 밖 모델 서버 주소를 허용(기관 서버로 잴 때)')
     ap.add_argument('--tables', action='store_true', help='표 파일(엑셀·csv)도 모델에 보낸다(기본은 규칙층만)')
     ap.add_argument('--replay', default='', help='이전 결과.json: 모델을 다시 부르지 않고 그때의 모델 답을 새 채점기로 다시 채점')
     a = ap.parse_args()
+    for _h in a.allow_model_host:
+        core.allow_model_host(_h)
     replay = None
     if a.replay:
         with open(a.replay, encoding='utf-8') as fh:
