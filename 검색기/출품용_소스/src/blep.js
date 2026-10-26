@@ -167,7 +167,10 @@
       return dev;
     }, function (e) {
       // 프린터가 아닌 기기(이어폰 등)를 골라 실패하면 그 연결을 놓고 앞서 고른 프린터로 되돌린다(처음 고를 때면 「고른 프린터 없음」으로, 실패 창이 다시 「프린터 고르고 뽑기」가 되게)
-      if (dev === device && prev !== device && (picked || prev)) { dev = prev; drop(device); }   // dev를 먼저 되돌려야 drop이 그사이 붙은 쓰던 프린터의 ch를 지우지 않는다
+      if (dev === device && prev !== device && (picked || prev)) {
+        dev = prev; drop(device);   // dev를 먼저 되돌려야 drop이 그사이 붙은 쓰던 프린터의 ch를 지우지 않는다
+        if (prev && ch && prev.gatt && prev.gatt.connected) { set({ name: prev.name || '' }); }   // 그사이 붙은 프린터로 돌아왔으면 그 이름을 저장(성공 때는 다른 기기를 고르는 중이라 쓰지 못함)
+      }
       throw e;
     });
   }
@@ -176,7 +179,16 @@
   // 사용자가 누른 단추 안에서 불러야 한다(선택 창이 뜬다).
   // opts.pick: 직원이 프린터를 고를 때. 누른 그 자리에서 선택 창을 연다(이전 프린터를 기다리다 몇 초가 지나 선택 창이 막히던 것. 같은 프린터도 목록에 뜬다)
   // opts.noPick: 어르신 화면. 고른 프린터가 없으면 선택 창(주변 기기 전부)을 어르신 앞에 띄우지 않고 직원을 부르게 한다
+  // 선택 창을 연 연결(직원이 프린터를 고르는 중)의 수. 어르신 화면 자리 비움이 이 동안은 한 번 미룬다
+  var picking = 0;
   function connect(opts) {
+    if (!(opts && opts.pick)) { return connect0(opts); }
+    picking++;
+    var done = function () { picking = Math.max(0, picking - 1); };
+    var p; try { p = connect0(opts); } catch (e) { done(); return Promise.reject(e); }
+    return p.then(function (d) { done(); return d; }, function (e) { done(); throw e; });
+  }
+  function connect0(opts) {
     lastErr = '';
     opts = opts || {};
     if (viaUsb()) { return usbConnect(opts); }
@@ -879,7 +891,7 @@
       via0 = c.via; keep0 = c.keep;
       return c;
     }
-    function msg(t) { var e = $('bsMsg'); if (e) { e.textContent = clampNote + t; } }   // 자리 비움으로 창이 닫힌 뒤 늦게 온 결과
+    function msg(t) { var e = $('bsMsg'); if (e) { e.textContent = clampNote + t; } else if (opts.late) { opts.late(t); } }   // 자리 비움으로 창이 닫힌 뒤 늦게 온 결과는 화면 쪽 알림으로
     $('bsConn').onclick = function () {
       read(); msg(viaUsb() ? 'USB 프린터를 찾는 중… 선택 창에서 프린터를 골라 주세요.' : '프린터를 찾는 중… 선택 창에서 프린터를 골라 주세요.');
       connect({ pick: true }).then(function (d) { msg('연결됨: ' + ((d && d.name) || '프린터')); }, function (e) { msg('연결 실패: ' + e.message); });
@@ -908,7 +920,7 @@
     return printed || (what + ' ' + n + '장을 프린터로 보냈어요.');
   }
 
-  window.__ble = { supported: supported, connected: connected, connect: connect, disconnect: disconnect, release: release, print: print, get: get, set: set, openSettings: openSettings, closeSettings: closeSettings,
+  window.__ble = { supported: supported, connected: connected, connect: connect, disconnect: disconnect, release: release, print: print, get: get, set: set, openSettings: openSettings, closeSettings: closeSettings, picking: function () { return picking; },
     render: render, renderRoll: renderRoll, renderMemo: renderMemo, renderRuler: renderRuler, printMemo: printMemo, printRuler: printRuler, isRoll: isRoll, rollWidth: rollWidth, rollCanvas: rollCanvas, rollLen: rollLen, rollSide: rollSide,
     encode: encode, encodeCanvas: encodeCanvas, encodeTspl: encodeTspl, encodeEscpos: encodeEscpos, toBits: toBits, makePdf: makePdf, deviceName: deviceName, via: function () { return get().via; },
     direct: function () { var v = get().via; return (v === 'ble' || v === 'usb' || v === 'app') && supported(); }, lastError: function () { return lastErr; },

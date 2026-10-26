@@ -1132,13 +1132,10 @@
   function bleRoll() { return (paper() === '80' || paper() === '58') && kDirect() && !!__ble.printMemo; }
   function appMode() { return !!(window.__ble && __ble.via && __ble.via() === 'app' && __ble.supported() && paper() !== 'a4'); }
   // 직원만 쓰는 단추: 2초 눌렀다 떼야 한다(어르신이 한 번 눌러 공유 창·선택 창이 열리지 않게). 뗄 때 실행해 크롬이 공유·선택 창을 허락한다
-  // 직원이 선택 창에서 프린터를 고르는 중이면 자리 비움을 한 번만 미룬다(선택 창이 열린 동안은 화면을 눌러도 타이머가 다시 걸리지 않는다)
-  var staffConn = 0, idleDefer = false;
-  function staffConnect() {
-    staffConn++;
-    var done = function () { staffConn = Math.max(0, staffConn - 1); };
-    try { return __ble.connect({ pick: true }).then(function (d) { done(); return d; }, function (e) { done(); throw e; }); } catch (e) { done(); return Promise.reject(e); }
-  }
+  // 직원이 선택 창에서 프린터를 고르는 중이면(블루투스 쪽이 센다) 자리 비움을 한 번만 미룬다(선택 창이 열린 동안은 화면을 눌러도 타이머가 다시 걸리지 않는다)
+  var idleDefer = false;
+  function staffConnect() { return __ble.connect({ pick: true }); }
+  function staffBusy() { return !!(window.__ble && ((__ble.picking && __ble.picking() > 0) || (document.getElementById('bleSet') && __ble.busy && __ble.busy()))); }
   // 자리 비움: 직원 창(직원 설정·프린터 연결 설정)까지 닫는다. 저장하지 않은 직원 설정은 버린다
   function closeStaff() { closeModal(); if (window.__ble && __ble.closeSettings) { __ble.closeSettings(); } }
   function staffHold(b, act) {
@@ -1410,7 +1407,7 @@
       ['프린터 연결 설정(블루투스·USB)', function () {
         if (!window.__ble) { return; }
         var keepVals = { w: $('#kfLblW').value, h: $('#kfLblH').value };
-        __ble.openSettings({ size: function () { return [Number(keepVals.w) || lblSize()[0], Number(keepVals.h) || lblSize()[1]]; }, onClose: function (c) {
+        __ble.openSettings({ late: function (t) { toast('(직원 확인) 프린터 연결 설정: ' + t, 8000); }, size: function () { return [Number(keepVals.w) || lblSize()[0], Number(keepVals.h) || lblSize()[1]]; }, onClose: function (c) {
           if (c.via === 'ble' || c.via === 'usb' || c.via === 'app') {
             // 프린터 용지가 영수증 롤이면 접수 메모(감열 영수증), 라벨지면 주소 스티커로 맞춘다
             var np = c.media === 'cont' ? (Number(c.rollW) <= 60 ? '58' : '80') : 'lbl';
@@ -1465,17 +1462,18 @@
   }
   function idleWarn() {
     if (!root || root.hidden) { return; }
-    if (staffConn > 0 && !idleDefer) { idleDefer = true; touch(); return; }
-    idleDefer = false;
     // 아무도 만지지 않은 채 시간이 지나면 열어 둔 창(직원 설정·프린터 연결 설정·확인 창)을 닫는다(다음 분 앞에 남기지 않게)
+    if (st && st.doneAt && !printing) { closeStaff(); wipe(); return; }   // 뽑고 3분이 지나면 미루지도 묻지도 않고 지운다(다음 분이 눌러 앞 분 내용이 남지 않게)
+    if (staffBusy() && !idleDefer) { idleDefer = true; touch(); return; }   // 선택 창·프린터 설정 창의 시험 인쇄 중이면 한 번만 더 기다린다
+    idleDefer = false;
     if (!hasData()) { closeStaff(); welcome(); return; }
-    if (st && st.doneAt && !printing) { closeStaff(); wipe(); return; }   // 뽑고 3분이 지나면 묻지 않고 지운다(다음 분이 눌러 앞 분 내용이 남지 않게)
     closeStaff();
     var left = 30;
     var m = modal('<div class="k-bubble">계속하시겠어요?<small><b id="kLeft">30</b>초 뒤에 적으신 내용을 지웁니다. 화면 아무 곳이나 누르면 계속해요.</small></div>', [['계속할게요', function () { clearTimeout(warnT); closeModal(); touch(); }, 'pri']]);
     speak('계속하시려면 화면을 눌러 주세요.');
     m.addEventListener('pointerdown', function () { clearTimeout(warnT); closeModal(); touch(); });
-    (function tick() { var el = document.getElementById('kLeft'); if (!el) { return; } if (left <= 0) { closeModal(); wipe(); return; } el.textContent = left; left--; warnT = setTimeout(tick, 1000); })();
+    // 늦게 뜬 다른 창(실패 창 등)이 확인 창을 덮었으면 자리 비움을 다시 건다
+    (function tick() { var el = document.getElementById('kLeft'); if (!el) { touch(); return; } if (left <= 0) { closeModal(); wipe(); return; } el.textContent = left; left--; warnT = setTimeout(tick, 1000); })();
   }
   function wipe(silent) {
     clearTimeout(warnT);

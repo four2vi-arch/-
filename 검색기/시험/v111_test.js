@@ -508,6 +508,64 @@ async function toFinish(p, sender) {
   ok('페이지 오류 없음(11라)', p.errs.length === 0, p.errs.join(' / '));
   await p.context().close();
 
+  // ---- 12. 자리 비움 마무리(선택 창과 겹칠 때)
+  const PICKBTN = () => { const x = document.createElement('button'); x.id = 'tPick'; x.textContent = 'pick'; x.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;width:60px;height:40px';
+    x.onclick = () => { __ble.connect({ pick: true }).catch(() => { }); }; document.body.appendChild(x); };
+  // (가) 「계속하시겠어요?」 사이에 늦게 뜬 실패 창이 확인 창을 덮어도 자리 비움을 다시 걸어 결국 지움
+  p = await open(browser, { hash: '#kiosk', init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80', idle: 4, autoPrint: false }) });
+  await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+  await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
+  await p.click('#kPrintBtn'); await p.waitForSelector('#kModal', { timeout: 5000 });
+  await p.evaluate(() => { window.__idleMs2 = 4000; window.__bt.reqMs = 9000; window.__bt.reqErr = ['NotFoundError', 'User cancelled the requestDevice() chooser.']; });
+  await longPress(p, (await p.$$('#kModalBtns button'))[1], 2200);
+  await p.waitForTimeout(15500);
+  { const s = await p.evaluate(() => ({ left: !!document.getElementById('kLeft'), n: __kiosk.state().entries.length }));
+    ok('확인 창 사이에 늦게 뜬 실패 창이 덮어도 자리 비움을 다시 걸어 「계속하시겠어요?」가 다시 뜸', s.left && s.n === 2, JSON.stringify(s)); }
+  ok('페이지 오류 없음(12가)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+  // (나) 뽑은 뒤 3분 지우기는 선택 창이 열려 있어도 미루지 않음
+  p = await open(browser, { hash: '#kiosk', init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80', autoPrint: false }) });
+  await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+  await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  await p.waitForSelector('#kfPrn', { timeout: 4000 }); await p.click('#kfPrn');
+  await p.waitForFunction(() => /연결됨/.test(document.getElementById('kfMsg').textContent), null, { timeout: 5000 });
+  await p.evaluate(() => { document.getElementById('kModal').remove(); });
+  await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
+  await p.click('#kPrintBtn'); await p.waitForFunction(() => !!__kiosk.state().doneAt, null, { timeout: 20000 }).catch(() => null);
+  await p.evaluate(PICKBTN);
+  await p.evaluate(() => { window.__idleMs = 4000; window.__bt.dev.gatt.connected = false; window.__bt.reqMs = 1e9; });
+  await p.click('#tPick', { force: true });
+  await p.waitForTimeout(5500);
+  { const s = await p.evaluate(() => ({ picking: __ble.picking(), n: __kiosk.state().entries.length, start: !!document.getElementById('kStart') }));
+    ok('뽑은 뒤 3분 지우기는 선택 창이 열려 있어도 미루지 않음', s.picking === 1 && s.n === 0 && s.start, JSON.stringify(s)); }
+  await p.context().close();
+  // (다) 프린터 연결 설정 창 안의 「프린터 연결」 선택 창도 한 번 미루고, 창이 닫힌 뒤 온 결과는 알림으로
+  p = await open(browser, { hash: '#kiosk', init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80', idle: 4 }) });
+  await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+  await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  await p.waitForSelector('#kfExit', { timeout: 4000 });
+  await p.locator('#kModalBtns button', { hasText: '프린터 연결 설정' }).click();
+  await p.waitForSelector('#bleSet', { timeout: 4000 });
+  await p.evaluate(() => { window.__bt.reqMs = 10000; });
+  await p.click('#bsConn');
+  await p.waitForTimeout(6000);
+  const keptSet = await p.evaluate(() => !!document.getElementById('bleSet'));
+  await p.waitForTimeout(5500);
+  { const s = await p.evaluate(() => ({ bleSet: !!document.getElementById('bleSet'), start: !!document.getElementById('kStart'), conn: __ble.connected() })); const tt = await toasts(p);
+    ok('프린터 연결 설정의 선택 창도 한 번 미룸 → 닫힌 뒤 온 결과는 「(직원 확인) 프린터 연결 설정: 연결됨」 알림', keptSet && !s.bleSet && s.start && s.conn && /프린터 연결 설정: 연결됨/.test(tt) && p.errs.length === 0, JSON.stringify(s) + ' ' + tt.slice(0, 60) + ' ' + p.errs.join(' / ')); }
+  await p.context().close();
+  // (라) 처음 고르는 사이 다시 눌러 이어폰을 골라 실패하면, 먼저 붙은 프린터로 되돌리며 그 이름을 저장
+  p = await open(browser, { init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80' }) });
+  await p.evaluate(PICKBTN);
+  await p.evaluate(() => { const bt = window.__bt; bt.connMs = 300; bt.earMs = 2500; });
+  await p.click('#tPick', { force: true }); await p.waitForTimeout(150);
+  await p.evaluate(() => { window.__bt.pickEar = true; }); await p.click('#tPick', { force: true });
+  await p.waitForTimeout(3300);
+  { const s = await p.evaluate(() => ({ saved: __ble.get().name, now: __ble.deviceName(), conn: __ble.connected(), ear: window.__bt.ear.gatt.connected }));
+    ok('처음 고르는 사이 이어폰을 골라 실패 → 먼저 붙은 프린터로 되돌리고 이름 저장', s.saved === 'Bluetooth Printer' && s.now === 'Bluetooth Printer' && s.conn && !s.ear, JSON.stringify(s)); }
+  ok('페이지 오류 없음(12라)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
   // ---- 6. 엑셀 파일 정보 작성자 = 물어물어
   p = await open(browser, {});
   await p.evaluate(() => { window.__sh.passDl = true; });   // 이 시험은 실제 내려받기를 받는다
