@@ -21,7 +21,7 @@
   var SERVICES = [0x18f0, 0xff00, 0xffe0, 0xffe5, 0xfff0, 0xfee7, 0xae30, 0xff12,
     '49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', 'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
     '6e400001-b5a3-f393-e0a9-e50e24dcca9e', 0xff10, 0xffb0];
-  var dev = null, ch = null, busy = false, lastErr = '', lastRes = '';
+  var dev = null, ch = null, chDev = null, busy = false, lastErr = '', lastRes = '';   // chDev: ch(쓰기 특성)를 준 기기
   var status = 'none', listeners = [], rcT = 0, rcN = 0, gen = 0;   // 연결 상태: none · connected · reconnecting · lost · gen: 놓기·방식 바꾸기 때 올려 진행 중인 다시 연결을 버린다
   function emit(st) { if (st === status) { return; } status = st; listeners.forEach(function (f) { try { f(st); } catch (e) { } }); }
   // 끊기면(프린터 절전·거리·전원) 같은 프린터에 저절로 다시 붙는다. 선택 창이 필요 없어 화면을 누르지 않아도 된다.
@@ -45,7 +45,7 @@
       p0.then(pickChar).then(function (c) {
         // 그사이 놓았거나 다른 프린터를 골랐으면 되살리지 않는다. 같은 프린터에 그 뒤 새 시도(인쇄·시험 인쇄)가 있으면 그 연결을 쓰므로 끊지 않는다
         if (my !== gen || get().via !== 'ble' || d0 !== dev) { if (d0 !== dev || mine === tries) { drop(d0); } return; }
-        ch = c; rcN = 0; emit('connected');
+        ch = c; chDev = d0; rcN = 0; emit('connected');
       }, function () {
         if (my !== gen) { return; }
         rcN++;
@@ -161,7 +161,7 @@
     return gattConnect(device).then(pickChar).then(function (c) {
       // 붙는 사이 놓기·방식 바꾸기가 있었으면 붙은 연결을 버린다
       if (my !== gen || get().via !== v0) { drop(device); var x = new Error('설정이 바뀌어 연결을 놓았어요. 다시 눌러 주세요.'); x.code = 'DROPPED'; throw x; }
-      ch = c;
+      ch = c; chDev = device;
       if (dev === device) { set({ name: device.name || '' }); }   // 그사이 다른 기기를 골랐으면 그 기기 이름을 덮지 않는다
       clearTimeout(rcT); rcN = 0; emit('connected');
       return dev;
@@ -169,7 +169,7 @@
       // 프린터가 아닌 기기(이어폰 등)를 골라 실패하면 그 연결을 놓고 앞서 고른 프린터로 되돌린다(처음 고를 때면 「고른 프린터 없음」으로, 실패 창이 다시 「프린터 고르고 뽑기」가 되게)
       if (dev === device && prev !== device && (picked || prev)) {
         dev = prev; drop(device);   // dev를 먼저 되돌려야 drop이 그사이 붙은 쓰던 프린터의 ch를 지우지 않는다
-        if (prev && ch && prev.gatt && prev.gatt.connected) { set({ name: prev.name || '' }); }   // 그사이 붙은 프린터로 돌아왔으면 그 이름을 저장(성공 때는 다른 기기를 고르는 중이라 쓰지 못함)
+        if (prev && ch && chDev === prev && prev.gatt && prev.gatt.connected) { set({ name: prev.name || '' }); }   // 그사이 붙은 프린터로 돌아왔으면 그 이름을 저장(성공 때는 다른 기기를 고르는 중이라 쓰지 못함)
       }
       throw e;
     });

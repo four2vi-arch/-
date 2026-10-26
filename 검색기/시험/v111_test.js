@@ -24,7 +24,7 @@ const MOCK = `(() => {
     gatt: { connected: false, connect: async function () { if (bt.earMs) { await new Promise(r => setTimeout(r, bt.earMs)); } ear.gatt.connected = true; return ear.gatt; }, disconnect() { ear.gatt.connected = false; },
       getPrimaryServices: async () => { const e = new Error('No Services found in device.'); e.name = 'NotFoundError'; throw e; } } };
   // 다른 이름의 프린터 B(빨리 붙음). bt.pickB 이면 선택 창에서 이것을 고른 것으로 한다
-  const devB = bt.devB = { name: 'Printer B', addEventListener() { }, gatt: { connected: false, connect: async function () { devB.gatt.connected = true; return devB.gatt; }, disconnect() { devB.gatt.connected = false; }, getPrimaryServices: async () => [svc] } };
+  const devB = bt.devB = { name: 'Printer B', addEventListener() { }, gatt: { connected: false, connect: async function () { if (bt.bMs) { await new Promise(r => setTimeout(r, bt.bMs)); } if (bt.bFail) { const e = new Error('Connection failed for unknown reason.'); e.name = 'NetworkError'; throw e; } devB.gatt.connected = true; return devB.gatt; }, disconnect() { devB.gatt.connected = false; }, getPrimaryServices: async () => [svc] } };
   Object.defineProperty(navigator, 'bluetooth', { configurable: true, value: { requestDevice: async () => { bt.reqs++; if (bt.reqMs) { await new Promise(r => setTimeout(r, bt.reqMs)); } if (bt.reqErr) { const e = new Error(bt.reqErr[1]); e.name = bt.reqErr[0]; throw e; } return bt.pickEar ? ear : (bt.pickB ? devB : dev); } } });
   // 공유: 부른 횟수와 넘긴 파일. shareErr 가 있으면 그 이름의 오류
   const sh = window.__sh = { calls: [], err: null, can: true, dl: [] };
@@ -564,6 +564,18 @@ async function toFinish(p, sender) {
   { const s = await p.evaluate(() => ({ saved: __ble.get().name, now: __ble.deviceName(), conn: __ble.connected(), ear: window.__bt.ear.gatt.connected }));
     ok('처음 고르는 사이 이어폰을 골라 실패 → 먼저 붙은 프린터로 되돌리고 이름 저장', s.saved === 'Bluetooth Printer' && s.now === 'Bluetooth Printer' && s.conn && !s.ear, JSON.stringify(s)); }
   ok('페이지 오류 없음(12라)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+  // (마) 고르기 셋이 겹쳐도(프린터 → 이어폰 → 붙지 않는 프린터 B) 이어폰 이름을 저장하지 않음
+  p = await open(browser, { init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80' }) });
+  await p.evaluate(PICKBTN);
+  await p.evaluate(() => { const bt = window.__bt; bt.connMs = 2000; bt.earMs = 1000; bt.bMs = 3000; bt.bFail = true; });
+  await p.click('#tPick', { force: true }); await p.waitForTimeout(150);
+  await p.evaluate(() => { window.__bt.pickEar = true; }); await p.click('#tPick', { force: true }); await p.waitForTimeout(150);
+  await p.evaluate(() => { window.__bt.pickEar = false; window.__bt.pickB = true; }); await p.click('#tPick', { force: true });
+  await p.waitForTimeout(4500);
+  { const s = await p.evaluate(() => ({ saved: __ble.get().name }));
+    ok('고르기 셋이 겹쳐도 이어폰 이름은 저장하지 않음', s.saved !== 'Galaxy Buds', JSON.stringify(s)); }
+  ok('페이지 오류 없음(12마)', p.errs.length === 0, p.errs.join(' / '));
   await p.context().close();
 
   // ---- 6. 엑셀 파일 정보 작성자 = 물어물어
