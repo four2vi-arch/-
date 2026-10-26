@@ -22,12 +22,14 @@
     '49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', 'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
     '6e400001-b5a3-f393-e0a9-e50e24dcca9e', 0xff10, 0xffb0];
   var dev = null, ch = null, busy = false, lastErr = '', lastRes = '';
-  var status = 'none', listeners = [], dropping = false, rcT = 0, rcN = 0, gen = 0;   // 연결 상태: none · connected · reconnecting · lost · gen: 놓기·방식 바꾸기 때 올려 진행 중인 다시 연결을 버린다
+  var status = 'none', listeners = [], rcT = 0, rcN = 0, gen = 0;   // 연결 상태: none · connected · reconnecting · lost · gen: 놓기·방식 바꾸기 때 올려 진행 중인 다시 연결을 버린다
   function emit(st) { if (st === status) { return; } status = st; listeners.forEach(function (f) { try { f(st); } catch (e) { } }); }
   // 끊기면(프린터 절전·거리·전원) 같은 프린터에 저절로 다시 붙는다. 선택 창이 필요 없어 화면을 누르지 않아도 된다.
-  function onDrop() {
+  function onDrop(ev) {
+    var d = (ev && ev.target) || dev;
+    if (d && d.__zfDrop) { d.__zfDrop = false; if (d === dev) { ch = null; } return; }   // 우리가 일부러 놓은 것(기기마다 표시)
+    if (d && dev && d !== dev) { return; }   // 앞서 고른 다른 기기의 끊김은 지금 프린터와 상관없다
     ch = null;
-    if (dropping) { dropping = false; return; }       // 우리가 일부러 놓은 것
     if (!get().keep || get().via !== 'ble' || !dev) { emit('none'); return; }
     rcN = 0; emit('reconnecting'); retry();
   }
@@ -39,9 +41,10 @@
       if (my !== gen) { return; }
       if (!dev || !get().keep || get().via !== 'ble') { emit('none'); return; }   // 인쇄 방식을 바꾸면 다시 붙지 않는다
       if (dev.gatt && dev.gatt.connected && ch) { emit('connected'); return; }
-      var d0 = dev;
-      gattConnect(d0).then(pickChar).then(function (c) {
-        if (my !== gen || get().via !== 'ble') { drop(d0); return; }   // 그사이 놓았으면 되살리지 않는다
+      var d0 = dev, p0 = gattConnect(d0), mine = tries;
+      p0.then(pickChar).then(function (c) {
+        // 그사이 놓았거나 다른 프린터를 골랐으면 되살리지 않는다. 같은 프린터에 그 뒤 새 시도(인쇄·시험 인쇄)가 있으면 그 연결을 쓰므로 끊지 않는다
+        if (my !== gen || get().via !== 'ble' || d0 !== dev) { if (d0 !== dev || mine === tries) { drop(d0); } return; }
         ch = c; rcN = 0; emit('connected');
       }, function () {
         if (my !== gen) { return; }
@@ -142,7 +145,7 @@
   var POWER = '프린터에 다시 연결하지 못했어요. 프린터 전원이 켜져 있는지, 태블릿 가까이 있는지 확인하고 다시 눌러 주세요.';
   var NEED_STAFF = '프린터가 아직 연결되지 않았어요. 직원을 불러 주세요(직원: 「직원」 2초 → 「프린터 연결」로 「Bluetooth Printer」를 고르기).';
   // 우리가 붙인 연결을 놓는다(놓을 때 오는 끊김 알림은 다시 연결로 보지 않음)
-  function drop(device) { if (device && device.gatt && device.gatt.connected) { dropping = true; try { device.gatt.disconnect(); } catch (e) { } } ch = null; }
+  function drop(device) { if (device && device.gatt && device.gatt.connected) { device.__zfDrop = true; try { device.gatt.disconnect(); } catch (e) { } } if (device === dev) { ch = null; } }
   // 연결 한 번(12초 제한). 시간이 지난 뒤 늦게 붙은 연결은, 그사이 다른 시도가 없으면 끊어 크롬이 프린터를 쥐고 있지 않게 한다
   var tries = 0;
   function gattConnect(device) {
@@ -151,16 +154,19 @@
     return timeout(cp, 12000, POWER).catch(function (e) { if (e && e.name === 'TimeoutError') { late = true; } throw e; });
   }
   function attach(device) {
-    var my = gen, v0 = get().via;
+    var my = gen, v0 = get().via, prev = dev;
     dev = device; ch = null;
     if (!dev.__zfHook) { dev.__zfHook = true; dev.addEventListener('gattserverdisconnected', onDrop); }
     return gattConnect(device).then(pickChar).then(function (c) {
       // 붙는 사이 놓기·방식 바꾸기가 있었으면 붙은 연결을 버린다
-      if (my !== gen || get().via !== v0) { drop(device); var x = new Error('인쇄 방식이 바뀌어 연결을 놓았어요.'); x.code = 'DROPPED'; throw x; }
+      if (my !== gen || get().via !== v0) { drop(device); var x = new Error('설정이 바뀌어 연결을 놓았어요. 다시 눌러 주세요.'); x.code = 'DROPPED'; throw x; }
       ch = c;
       set({ name: dev.name || '' });
       clearTimeout(rcT); rcN = 0; emit('connected');
       return dev;
+    }, function (e) {
+      if (prev && prev !== device && dev === device) { dev = prev; }   // 프린터가 아닌 기기(이어폰 등)를 골라 실패하면 앞서 고른 프린터로 되돌린다
+      throw e;
     });
   }
   function active() { return !(navigator.userActivation && navigator.userActivation.isActive === false); }
@@ -205,7 +211,7 @@
   function disconnect() {
     if (udev) { try { udev.close(); } catch (e) { } udev = null; uep = 0; }
     clearTimeout(rcT); gen++;
-    try { if (dev && dev.gatt && dev.gatt.connected) { dropping = true; dev.gatt.disconnect(); } } catch (e) { }
+    drop(dev);
     ch = null; emit('none');
   }
   var BT_PERM = '블루투스 사용이 막혀 있어요. ① 태블릿 설정 → 애플리케이션 → Chrome → 권한에서 「근처 기기」(안드로이드 11 이하는 「위치」)를 허용하고, ② 크롬 주소창 왼쪽 ⓘ → 권한에서 블루투스를 허용한 뒤 다시 눌러 주세요.';
@@ -227,9 +233,10 @@
     }
     // 블루투스: 크롬은 선택 취소·서비스 번호 없음·블루투스 꺼짐·권한 거부를 모두 NotFoundError로 낸다(문구로 나눈다)
     if (/permission|denied/i.test(m)) { return BT_PERM; }
-    if (/globally disabled|enterprise|not supported|low energy not available/i.test(m)) { return '이 태블릿·브라우저에서는 블루투스 인쇄를 쓸 수 없어요(정책이나 기기 사양). USB 선(OTG)으로 연결해 보세요.'; }
+    if (/GATT Server is disconnected|Cannot retrieve services/i.test(m)) { return '프린터와 연결이 끊겼어요. 프린터 전원과 거리를 확인하고 다시 연결해 주세요.'; }
+    if (/globally disabled|enterprise|not supported on this platform|web bluetooth is not supported|low energy not available/i.test(m)) { return '이 태블릿·브라우저에서는 블루투스 인쇄를 쓸 수 없어요(정책이나 기기 사양). USB 선(OTG)으로 연결해 보세요.'; }
     if (/adapter/i.test(m)) { return '태블릿의 블루투스가 꺼져 있어요. 화면 위에서 아래로 내려 블루투스를 켠 뒤 다시 눌러 주세요.'; }
-    if (/service/i.test(m)) { return '이 프린터의 서비스 번호를 몰라 연결하지 못했어요. 프린터 연결 설정 → 고급 설정의 「추가 서비스 번호」에 제조사 자료의 번호를 넣어 주세요.'; }
+    if (/no services|service.*uuid|optionalServices/i.test(m)) { return '이 프린터의 서비스 번호를 몰라 연결하지 못했어요. 프린터 연결 설정 → 고급 설정의 「추가 서비스 번호」에 제조사 자료의 번호를 넣어 주세요.'; }
     if (n === 'NotFoundError' || /cancel|chooser/i.test(m)) { return '프린터를 고르지 않았어요. 다시 눌러 프린터를 골라 주세요(선택 창에 「블루투스 꺼짐」이 보였으면 블루투스를 켜고 다시 눌러 주세요).'; }
     if (/GATT|disconnected/i.test(m)) { return '프린터와 연결이 끊겼어요. 프린터 전원과 거리를 확인하고 다시 연결해 주세요.'; }
     if (n === 'NetworkError' || /connection failed|unknown reason/i.test(m)) { return POWER; }
@@ -275,19 +282,20 @@
     opts = opts || {};
     if (!usbOk()) { return Promise.reject(new Error(whyNot('USB'))); }
     if (connected()) { return Promise.resolve({ name: deviceName() }); }
-    var saved = get().usbId, again = Promise.resolve(null);
+    var saved = get().usbId, again = Promise.resolve(null), lost = null;
     if (udev) {
-      again = usbAttach(udev).catch(function () { return null; });
+      again = usbAttach(udev).catch(function (e) { lost = e; return null; });
     } else if (saved && navigator.usb.getDevices) {
       // 한 번 허용한 프린터는 선택 창 없이 다시 붙는다
       again = navigator.usb.getDevices().then(function (ds) {
         var d = ds.filter(function (x) { return x.vendorId + ':' + x.productId === saved; })[0];
-        return d ? usbAttach(d).catch(function () { return null; }) : null;
+        return d ? usbAttach(d).catch(function (e) { lost = e; return null; }) : null;
       }, function () { return null; });
     }
     return again.then(function (r) {
       if (r) { return r; }
-      if (opts.noPick) { var se = new Error(NEED_STAFF.replace(/「Bluetooth Printer」/g, 'USB 프린터')); se.code = 'NEED_STAFF'; throw se; }
+      if (lost && opts.noPick) { throw lost; }   // 허용해 둔 프린터가 안 열림: 그 까닭(다른 앱이 잡음 등)을 그대로
+      if (opts.noPick) { var se = new Error('USB 프린터를 찾지 못했어요. 직원을 불러 주세요(직원: USB 선(OTG)과 프린터 전원을 확인하고, 처음이면 「직원」 2초 → 「프린터 연결」로 고르기).'); se.code = 'NEED_STAFF'; throw se; }
       if (navigator.userActivation && navigator.userActivation.isActive === false) { var ne = new Error(NEED_TAP.replace(/「Bluetooth Printer」/g, 'USB 프린터')); ne.code = 'NEED_TAP_USB'; throw ne; }
       return navigator.usb.requestDevice({ filters: [] }).then(usbAttach);
     }).catch(function (e) {
@@ -646,7 +654,7 @@
   // 블루투스 연결만 놓는다(같은 화면에서 다시 누르면 선택 창 없이 다시 붙는다)
   function release() {
     clearTimeout(rcT); gen++;
-    try { if (dev && dev.gatt && dev.gatt.connected) { dropping = true; dev.gatt.disconnect(); } } catch (e) { }
+    drop(dev);
     ch = null;
   }
 

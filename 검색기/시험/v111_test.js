@@ -131,7 +131,7 @@ async function toFinish(p, sender) {
   await p.evaluate(() => { window.__copt = undefined; });
   await p.context().close(); p = await open(browser, { init: SET({ via: 'ble', cfgv: 2 }, { paper: 'lbl' }) });
   await p.evaluate(() => { const b = document.createElement('button'); b.id = 'tConn'; b.textContent = 'c'; b.onclick = () => { window.__r = null; __ble.connect(window.__copt).then(() => { window.__r = 'ok'; }, e => { window.__r = e.message; }); }; document.body.appendChild(b); });
-  for (const [name, msg, want] of [['NotFoundError', 'No Services found in device.', /서비스 번호/], ['NotFoundError', 'Bluetooth adapter not available.', /블루투스가 꺼져/], ['NotFoundError', 'User cancelled the requestDevice() chooser.', /고르지 않았어요/], ['NetworkError', 'Connection failed for unknown reason.', /전원/], ['NotFoundError', 'User denied the browser permission to scan for Bluetooth devices.', /근처 기기/], ['NotFoundError', 'Web Bluetooth API globally disabled.', /쓸 수 없어요/]]) {
+  for (const [name, msg, want] of [['NotFoundError', 'No Services found in device.', /서비스 번호/], ['NotFoundError', 'Bluetooth adapter not available.', /블루투스가 꺼져/], ['NotFoundError', 'User cancelled the requestDevice() chooser.', /고르지 않았어요/], ['NetworkError', 'Connection failed for unknown reason.', /전원/], ['NotFoundError', 'User denied the browser permission to scan for Bluetooth devices.', /근처 기기/], ['NotFoundError', 'Web Bluetooth API globally disabled.', /쓸 수 없어요/], ['NetworkError', 'GATT Server is disconnected. Cannot retrieve services. (Re)connect first with `device.gatt.connect`.', /끊겼어요/]]) {
     await p.evaluate(([a, b]) => { window.__bt.reqErr = [a, b]; window.__copt = { pick: true }; }, [name, msg]);
     await p.evaluate(() => { location.hash = ''; });
     const r = await (async () => { await p.evaluate(() => { window.__r = null; }); await p.click('#tConn'); await p.waitForFunction(() => window.__r, null, { timeout: 5000 }); return p.evaluate(() => window.__r); })();
@@ -199,8 +199,10 @@ async function toFinish(p, sender) {
   ok('공유 막힘 → PDF를 내려받지 않고 「한 번 더 누르면」', (await p.evaluate(() => window.__sh.dl.length)) === 0 && /한 번 더 누르면/.test(await p.textContent('#kModal')), (await p.textContent('#kModal')).slice(0, 80));
   await p.evaluate(() => { window.__sh.err = null; });
   const n0 = await p.evaluate(() => window.__sh.calls.length);
-  ok('실패 창 단추 「직원: 다시 보내기」', (await p.textContent('#kModal button.k-btn.pri')).trim() === '직원: 다시 보내기');
-  await p.click('#kModal button.k-btn.pri');   // 직원: 다시 보내기
+  ok('실패 창: 주 단추 「닫기」, 직원 단추 「직원: 다시 보내기(2초)」', (await p.textContent('#kModal button.k-btn.pri')).trim() === '닫기' && /직원: 다시 보내기\(2초\)/.test(await (await staffBtn()).textContent()));
+  await (await staffBtn()).click(); await p.waitForTimeout(200);
+  ok('실패 창 직원 단추도 짧게 누르면 공유 안 함', (await p.evaluate(() => window.__sh.calls.length)) === n0);
+  await longPress(p, await staffBtn(), 2200);   // 직원: 다시 보내기
   await p.waitForFunction((n) => window.__sh.calls.length === n + 1, n0, { timeout: 10000 });
   ok('다시 누르면 같은 PDF를 곧바로 공유', (await p.evaluate(() => window.__sh.calls[window.__sh.calls.length - 1].name)) === (await p.evaluate(() => window.__sh.calls[window.__sh.calls.length - 2].name)));
   // 잠금: 공유 중 또 누르면 거절
@@ -284,7 +286,8 @@ async function toFinish(p, sender) {
   await toFinish(p, { name: '가상발송', phone: '010-0000-9999', zip: '56180', addr1: '전북특별자치도 정읍시 충정로 234-1', addr2: '' });
   await p.click('#kPrintBtn'); await p.waitForSelector('#kModal', { timeout: 5000 });
   ok('연결 전 어르신 뽑기 → 선택 창 없이 「직원을 불러 주세요(직원: …프린터 연결)」', (await p.evaluate(() => window.__bt.reqs)) === 0 && /프린터 연결/.test(await p.textContent('#kModal')), (await p.textContent('#kModal')).slice(0, 90));
-  ok('실패한 뒤에는 「뽑으셨으면 지워도」라고 하지 않음', await (async () => { await p.click('#kModal .k-btn.sub'); await p.click('#kDone'); const t = await p.textContent('#kModal'); await p.click('#kModal .k-btn.pri'); return /뽑지 않으셨어요/.test(t); })());
+  ok('연결 전 실패 창: 직원 단추 「프린터 고르고 뽑기(2초)」', /프린터 고르고 뽑기\(2초\)/.test(await (await p.$$('#kModalBtns button'))[1].textContent()));
+  ok('실패한 뒤에는 「뽑으셨으면 지워도」라고 하지 않음', await (async () => { await p.locator('#kModalBtns button', { hasText: /^닫기$/ }).click(); await p.click('#kDone'); const t = await p.textContent('#kModal'); await p.click('#kModal .k-btn.pri'); return /뽑지 않으셨어요/.test(t); })());
   await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
   await p.waitForSelector('#kfPrn', { timeout: 4000 });
   ok('직원 설정 맨 위 「프린터 연결」', await p.evaluate(() => document.querySelector('#kModal > div').firstElementChild.contains(document.getElementById('kfPrn'))));
@@ -326,6 +329,18 @@ async function toFinish(p, sender) {
   await p.click('#kDone'); await p.waitForTimeout(300);
   ok('직원 도움만: 「처음 화면으로」는 확인 없이 바로', !(await p.$('#kModal')) && !!(await p.$('#kStart')));
   ok('페이지 오류 없음(7)', p.errs.length === 0, p.errs.join(' / '));
+  await p.context().close();
+
+  // ---- 8. 연결 전 실패 창에서 직원이 「프린터 고르고 뽑기」를 2초 눌렀다 떼면 선택 창 → 연결 → 그 분 쪽지가 나옴
+  p = await open(browser, { hash: '#kiosk', init: SET({ via: 'ble', media: 'cont', rollW: 80, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80' }) });
+  await p.waitForSelector('#kiosk:not([hidden])', { timeout: 60000 }); await p.waitForTimeout(600);
+  await toFinish(p, { name: '가상발송', phone: '010-0000-9999' });
+  await p.click('#kPrintBtn'); await p.waitForSelector('#kModal', { timeout: 5000 });
+  await longPress(p, (await p.$$('#kModalBtns button'))[1], 2200);
+  await p.waitForFunction(() => /다 됐어요! 뽑은/.test(document.getElementById('kFinMsg').textContent), null, { timeout: 30000 }).catch(() => null);
+  ok('실패 창 직원 단추(2초) → 선택 창 1번 → 그 분 쪽지 인쇄', (await p.evaluate(() => window.__bt.reqs)) === 1 && /다 됐어요! 뽑은/.test(await p.textContent('#kFinMsg')), (await p.textContent('#kFinMsg')).slice(0, 40));
+  ok('뽑은 뒤 표시(doneAt)', await p.evaluate(() => !!__kiosk.state().doneAt));
+  ok('페이지 오류 없음(8)', p.errs.length === 0, p.errs.join(' / '));
   await p.context().close();
 
   // ---- 6. 엑셀 파일 정보 작성자 = 물어물어
