@@ -162,7 +162,7 @@
       // 붙는 사이 놓기·방식 바꾸기가 있었으면 붙은 연결을 버린다
       if (my !== gen || get().via !== v0) { drop(device); var x = new Error('설정이 바뀌어 연결을 놓았어요. 다시 눌러 주세요.'); x.code = 'DROPPED'; throw x; }
       ch = c;
-      set({ name: device.name || '' });
+      if (dev === device) { set({ name: device.name || '' }); }   // 그사이 다른 기기를 골랐으면 그 기기 이름을 덮지 않는다
       clearTimeout(rcT); rcN = 0; emit('connected');
       return dev;
     }, function (e) {
@@ -879,7 +879,7 @@
       via0 = c.via; keep0 = c.keep;
       return c;
     }
-    function msg(t) { $('bsMsg').textContent = clampNote + t; }
+    function msg(t) { var e = $('bsMsg'); if (e) { e.textContent = clampNote + t; } }   // 자리 비움으로 창이 닫힌 뒤 늦게 온 결과
     $('bsConn').onclick = function () {
       read(); msg(viaUsb() ? 'USB 프린터를 찾는 중… 선택 창에서 프린터를 골라 주세요.' : '프린터를 찾는 중… 선택 창에서 프린터를 골라 주세요.');
       connect({ pick: true }).then(function (d) { msg('연결됨: ' + ((d && d.name) || '프린터')); }, function (e) { msg('연결 실패: ' + e.message); });
@@ -897,6 +897,9 @@
     $('bsSave').onclick = function () { read(); m.remove(); if (clampNote) { try { alert(clampNote); } catch (e) { } } if (opts.onClose) { opts.onClose(get()); } };
   }
 
+  // 프린터 연결 설정 창을 저장하지 않고 닫는다(어르신 화면 자리 비움)
+  function closeSettings() { var m = $('bleSet'); if (m) { m.remove(); } }
+
   // 인쇄 결과 안내 문구(앱으로 보내기는 공유했는지·내려받았는지에 따라 다르다)
   function resultText(n, printed, what) {
     what = what || '스티커';
@@ -905,7 +908,7 @@
     return printed || (what + ' ' + n + '장을 프린터로 보냈어요.');
   }
 
-  window.__ble = { supported: supported, connected: connected, connect: connect, disconnect: disconnect, release: release, print: print, get: get, set: set, openSettings: openSettings,
+  window.__ble = { supported: supported, connected: connected, connect: connect, disconnect: disconnect, release: release, print: print, get: get, set: set, openSettings: openSettings, closeSettings: closeSettings,
     render: render, renderRoll: renderRoll, renderMemo: renderMemo, renderRuler: renderRuler, printMemo: printMemo, printRuler: printRuler, isRoll: isRoll, rollWidth: rollWidth, rollCanvas: rollCanvas, rollLen: rollLen, rollSide: rollSide,
     encode: encode, encodeCanvas: encodeCanvas, encodeTspl: encodeTspl, encodeEscpos: encodeEscpos, toBits: toBits, makePdf: makePdf, deviceName: deviceName, via: function () { return get().via; },
     direct: function () { var v = get().via; return (v === 'ble' || v === 'usb' || v === 'app') && supported(); }, lastError: function () { return lastErr; },

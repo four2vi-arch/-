@@ -1132,13 +1132,15 @@
   function bleRoll() { return (paper() === '80' || paper() === '58') && kDirect() && !!__ble.printMemo; }
   function appMode() { return !!(window.__ble && __ble.via && __ble.via() === 'app' && __ble.supported() && paper() !== 'a4'); }
   // 직원만 쓰는 단추: 2초 눌렀다 떼야 한다(어르신이 한 번 눌러 공유 창·선택 창이 열리지 않게). 뗄 때 실행해 크롬이 공유·선택 창을 허락한다
-  // 직원이 프린터를 고르는 중(선택 창·연결)이거나 프린터 연결 설정 창이 열려 있으면 자리 비움이 창을 닫지 않는다
-  var staffConn = 0;
+  // 직원이 선택 창에서 프린터를 고르는 중이면 자리 비움을 한 번만 미룬다(선택 창이 열린 동안은 화면을 눌러도 타이머가 다시 걸리지 않는다)
+  var staffConn = 0, idleDefer = false;
   function staffConnect() {
     staffConn++;
-    return __ble.connect({ pick: true }).then(function (d) { staffConn--; return d; }, function (e) { staffConn--; throw e; });
+    var done = function () { staffConn = Math.max(0, staffConn - 1); };
+    try { return __ble.connect({ pick: true }).then(function (d) { done(); return d; }, function (e) { done(); throw e; }); } catch (e) { done(); return Promise.reject(e); }
   }
-  function staffBusy() { return staffConn > 0 || !!document.getElementById('bleSet'); }
+  // 자리 비움: 직원 창(직원 설정·프린터 연결 설정)까지 닫는다. 저장하지 않은 직원 설정은 버린다
+  function closeStaff() { closeModal(); if (window.__ble && __ble.closeSettings) { __ble.closeSettings(); } }
   function staffHold(b, act) {
     var t0 = 0;
     b.style.userSelect = 'none'; b.style.webkitUserSelect = 'none'; b.style.webkitTouchCallout = 'none'; b.style.touchAction = 'none';
@@ -1197,7 +1199,7 @@
       closeModal();
       if (job !== st) { return; }
       if (!pick) { again(); return; }
-      staffConnect().then(function () { prnHint(); again(); }, function (e) { failBox(what, e.message, again, job); });
+      staffConnect().then(function () { prnHint(); if (job !== st) { toast('(직원 확인) 프린터를 연결했어요. 앞 분 내용은 자리 비움으로 지워졌어요.', 8000); return; } again(); }, function (e) { failBox(what, e.message, again, job); });
     });
   }
   // 어르신 화면에서는 선택 창(주변 기기 전부)을 열지 않는다(고른 프린터가 없으면 직원을 부르게). 앱 방식은 직원이 누른 것이라 해당 없음
@@ -1370,7 +1372,7 @@
     }, 60);
   }
   function staffPanel() {
-    var c = cfg(), a = c.ai || {};
+    var c = cfg(), a = c.ai || {}, job0 = st;
     var m = modal('<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 6px"><h3 style="margin:0">직원 설정</h3>' +
       '<div class="k-row" style="margin:0"><button type="button" class="k-btn sub sm" id="kfExit">어르신 화면 끝내기(직원 화면으로)</button>' +
       (window.__ble && (__ble.via() === 'ble' || __ble.via() === 'usb') && (bleOn() || bleRoll()) && __ble.ready && !__ble.ready() ? '<button type="button" class="k-btn pri sm" id="kfPrn">프린터 연결</button>' : '') + '</div></div>' +
@@ -1418,7 +1420,7 @@
           prnHint(); bleBar(__ble.status());
         } });
       }, 'sub'],
-      ['닫기', closeModal, 'sub']].concat(st && st.entries && st.entries.length && !(st.entries.length === 1 && st.entries[0].why === '직원 도움 요청') ? [['이 어르신 입력을 접수 화면으로 넘기기', function () { closeModal(); handOff(); }, 'sub']] : []));
+      ['닫기', closeModal, 'sub']].concat(st && st.entries && st.entries.length && !(st.entries.length === 1 && st.entries[0].why === '직원 도움 요청') ? [['이 어르신 입력을 접수 화면으로 넘기기', function () { closeModal(); if (job0 !== st) { toast('(직원 확인) 자리 비움으로 입력이 지워져 넘길 내용이 없어요.', 6000); return; } handOff(); }, 'sub']] : []));
     // 직원 화면으로 돌아가는 길은 맨 위에 둔다(맨 아래에 있어 찾기 어렵던 것)
     if ($('#kfPrn')) {
       $('#kfPrn').onclick = function () {
@@ -1451,8 +1453,9 @@
   }
 
   // ------------------------------------------------------------------ 자리 비움·지우기
-  function touch() {
+  function touch(ev) {
     if (!root || root.hidden) { return; }
+    if (ev) { idleDefer = false; }   // 사람이 누르거나 글쇠를 치면 미룸을 풂
     clearTimeout(idleT);
     if (document.getElementById('kLeft')) { clearTimeout(warnT); closeModal(); }   // 「계속하시겠어요?」 중 글쇠를 눌러도 계속(숨은 칸에 글자가 들어가며 지워지던 것)
     var sec = Number(cfg().idle) || 120;
@@ -1462,11 +1465,12 @@
   }
   function idleWarn() {
     if (!root || root.hidden) { return; }
-    var busy = staffBusy();
-    // 뽑고 3분이 지나면 묻지 않고 지운다(다음 분이 눌러 앞 분 내용이 남지 않게). 열어 둔 창도 닫되, 직원이 프린터 설정·고르기 중이면 창은 그대로 둔다
-    if (st && st.doneAt && !printing) { if (!busy) { closeModal(); } wipe(); if (busy) { touch(); } return; }
-    if (busy) { touch(); return; }
-    if (!hasData()) { closeModal(); welcome(); return; }   // 직원 설정 등 열어 둔 창을 다음 분 앞에 남기지 않는다
+    if (staffConn > 0 && !idleDefer) { idleDefer = true; touch(); return; }
+    idleDefer = false;
+    // 아무도 만지지 않은 채 시간이 지나면 열어 둔 창(직원 설정·프린터 연결 설정·확인 창)을 닫는다(다음 분 앞에 남기지 않게)
+    if (!hasData()) { closeStaff(); welcome(); return; }
+    if (st && st.doneAt && !printing) { closeStaff(); wipe(); return; }   // 뽑고 3분이 지나면 묻지 않고 지운다(다음 분이 눌러 앞 분 내용이 남지 않게)
+    closeStaff();
     var left = 30;
     var m = modal('<div class="k-bubble">계속하시겠어요?<small><b id="kLeft">30</b>초 뒤에 적으신 내용을 지웁니다. 화면 아무 곳이나 누르면 계속해요.</small></div>', [['계속할게요', function () { clearTimeout(warnT); closeModal(); touch(); }, 'pri']]);
     speak('계속하시려면 화면을 눌러 주세요.');
