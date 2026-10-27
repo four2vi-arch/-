@@ -1,6 +1,6 @@
 // 물어물어 v1.7(v1.11 갱신) 블루투스(BLE) 직접 인쇄 시험 — 가짜 BLE 프린터(navigator.bluetooth 대역)로 보낸 바이트를 받아 스티커 그림을 되살려 확인한다.
 // 사용: node ble_test.js <출품본.html> <주소록.xlsx> <결과 폴더>   (가상 자료만)
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('playwright');
 const fs = require('fs'); const path = require('path'); const cp = require('child_process');
 const [HTML, INPUT, OUT] = process.argv.slice(2);
 fs.mkdirSync(OUT, { recursive: true });
@@ -41,7 +41,7 @@ async function open(browser, mock, extra) {
   return page;
 }
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--allow-file-access-from-files'] });
+  const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
   // ---- 1. 어르신 화면: 블루투스로 스티커 3장
   let page = await open(browser, MOCK(512));
   ok('무결성 · 블루투스 모듈 포함', /원본/.test(await page.textContent('#intChip')));

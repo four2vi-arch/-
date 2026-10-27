@@ -32,7 +32,9 @@ def cell(md, head, key):
 m = docs.mask_secret
 ok('주민등록번호 뒷자리 가림', m('청구인 홍가상(주민등록번호 801231-1000000) 서류 보완') == '청구인 홍가상(주민등록번호 801231-●●●●●●●) 서류 보완')
 ok('외국인등록번호도 가림', '5000000' not in m('외국인등록번호 801231-5000000 청구 건') and docs.has_secret('801231-5000000'))
-ok('전화·계좌·날짜는 그대로', m('☎ 063-000-1235 · 계좌 123456-78-901234 · 2026-03-02') == '☎ 063-000-1235 · 계좌 123456-78-901234 · 2026-03-02')
+ok('사무실 전화·날짜는 그대로, 「계좌」 뒤 번호는 가림', m('☎ 063-000-1235 · 2026-03-02 · 계좌 123456-78-901234') == '☎ 063-000-1235 · 2026-03-02 · 계좌 ●●●' and m('문의 063-000-1235, 12.3 통화') == '문의 063-000-1235, 12.3 통화', m('☎ 063-000-1235 · 2026-03-02 · 계좌 123456-78-901234'))
+ok('하이픈 없는 13자리·띄어 쓴 주민번호, 카드·여권·면허·생년월일 가림', m('주민번호 8012311000000') == '주민번호 801231-●●●●●●●' and m('801231 1000000') == '801231-●●●●●●●' and m('카드 1234-5678-9012-3456') == '카드 1234-●●●●-●●●●-3456' and 'M12345678' not in m('여권번호 M12345678 발급') and '11-23-456789-01' not in m('면허 11-23-456789-01') and '1980' not in m('생년월일: 1980.12.31'), (m('주민번호 8012311000000'), m('여권번호 M12345678 발급'), m('생년월일: 1980.12.31')))
+ok('발췌·할 일의 휴대전화는 가운데 가림(010-****-5678), 사무실 번호는 그대로', docs.mask_mobile('박세진 010-0000-0303, 사무실 063-000-0101') == '박세진 010-****-0303, 사무실 063-000-0101')
 two = m('비밀번호 바꿈(기존 gaon2025 → 신규 Gaon2026!), 11월 5일까지 알림')
 ok('「기존 → 신규」 두 값 모두 가림, 날짜는 남김', 'gaon2025' not in two and 'Gaon2026' not in two and '11월 5일까지' in two, two)
 ok('「로그인: 아이디」도 가림', 'gaon_kim' not in m('로그인: gaon_kim, 비밀번호: kim!2026') and 'kim!2026' not in m('로그인: gaon_kim, 비밀번호: kim!2026'))
@@ -57,7 +59,7 @@ it_memo = next(i for i in items if i['file'] == memo['file'])
 ok('「결론 못 냄」 메모는 미결 제안, 할 일은 「결정해야 함」 줄', it_memo['status'] == '미결' and '결정해야' in it_memo['todo'], (it_memo['status'], it_memo['todo']))
 md = export.to_markdown(session(items, info, handover_date='2026-03-02'))
 row = cell(md, '라. 주요 미결사항', '메모 매대')
-ok('1-라 줄에 다음·할 일·원문이 모두', '다음:' in row and '할 일: - 2월 중 교환' in row and '원문:' in row, row)
+ok('1-라 줄에 다음·할 일·원문이 모두(규칙이 가져온 줄은 「(원문)」 표시, 글머리 기호 뗌)', '다음(원문):' in row and '할 일(원문): 2월 중 교환' in row and '원문:' in row, row)
 it_g = next(i for i in items if i['file'] == gong['file'])
 ok('현안 근거 줄 「재협의 필요」가 원문 발췌에', '재협의 필요' in it_g.get('quote', ''), it_g.get('quote'))
 it_h = next(i for i in items if i['file'] == hoe['file'])
@@ -70,17 +72,17 @@ def fake(f):
     if '추석' in f['file']:
         return json.dumps({'요지': '추석 특별소통 대책 안내', '할 일': '12월 31일까지 계약 해지 공문 발송', '기한': '2026-12-31', '담당': '홍가짜 주무관 063-000-0202', '상태': '진행 중'}, ensure_ascii=False)
     return json.dumps({'요지': '우수사례 서식 재제출 요청', '할 일': '', '기한': '', '담당': '서진우 주무관 063-999-0000', '상태': '진행 중'}, ensure_ascii=False)
-items, calls, errors, info = build([plain, mail], model='fake-model', fake=fake, today=datetime.date(2026, 3, 2))
+items, calls, errors, info = build([plain, mail], model='fake-model', fake=fake, today=datetime.date(2026, 9, 1))   # 기준일은 두 문서보다 뒤(인계 일자 이후 날짜 문서는 현안이 아님)
 a = next(i for i in items if '추석' in i['file']); b = next(i for i in items if '우수사례' in i['file'])
 ok('모델이 문서 전화에 다른 이름을 붙이면 담당 버림', a.get('owner', '') == '' and a['src'] == '모델', a.get('owner'))
 ok('모델이 문서 이름에 다른 전화를 붙이면 담당 버림', b.get('owner', '') == '', b.get('owner'))
 ok('문서에 없는 날짜(12월 31일)가 든 모델 할 일은 버리고 규칙 할 일 유지', '해지' not in a['todo'] and '9월 11일까지' in a['todo'] and a.get('todo_src') == '원문', a['todo'])
 ok('모델이 할 일을 비우면 규칙 할 일 그대로', '10월 17일까지' in b['todo'], b['todo'])
 ok('지어낸 기한(2026-12-31)은 채택되지 않음', a['due_next'] != '2026-12-31')
-md = export.to_markdown(session(items, info, handover_date='2026-03-02'))
+md = export.to_markdown(session(items, info, handover_date='2026-09-01'))
 row = cell(md, '다. 현안사항', '추석 특별소통 (영업과-1510)')
 ok('1-다 줄에 「요지(AI):」와 「원문:」이 함께, 담당은 규칙 연락처', '요지(AI):' in row and '원문:' in row and '김도현 063-000-0202' in row and '(AI)' not in row.split('|')[5], row)
-b0 = build([plain], today=datetime.date(2026, 3, 2))
+b0 = build([plain], today=datetime.date(2026, 9, 1))
 ok('규칙만 항목에는 (AI) 표시가 없다', '(AI)' not in cell(export.to_markdown(session(b0[0], b0[3])), '다. 현안사항', '추석 특별소통 (영업과-1510)'))
 
 # 5. 「매년 N월」은 문장 속 달, 달이 없으면 「매년」, 반복 문장의 업무는 줄 위의 제목·줄 속 꼬리표
@@ -98,10 +100,10 @@ items, _, _, info = build([plan], today=datetime.date(2026, 3, 2))
 rT = next((i for i in items if i.get('rkey') and '특산품' in i['title']), None); rM = next((i for i in items if i.get('rkey') and '전월 실적' in i['title']), None)
 doc_area = next(i for i in items if not i.get('rkey'))['area']
 ok('줄 앞 「(창구전시판매)」 꼬리표면 그 업무, 꼬리표 없는 줄은 문서 업무', rT and rT['area'] == '창구전시판매' and rM and rM['area'] == doc_area, (rT and rT['area'], rM and rM['area'], doc_area))
-long_line = '2. 2026년도 우편매출액 목표를 붙임과 같이 배정하니 관서별 실적표와 세부추진계획을 붙임 서식(엑셀)에 따라 수립하여 지방우정청 우편영업과로 2026. 3. 13.(금)까지 제출하여 주시기 바랍니다.'
+long_line = '2. 2026년도 우편매출액 목표를 붙임과 같이 배정하니 관서별 실적표와 세부추진계획을 붙임 서식(엑셀 양식 2종)에 따라 빠짐없이 수립하여 지방우정청 우편영업과로 2026. 3. 13.(금)까지 제출하여 주시기 바랍니다.'
 items, _, _, info = build([F('공문/목표 배정.txt', '수신 내부결재\n제목 2026년도 우편매출액 목표 배정 알림\n시행 우편영업과-658 (2026. 2. 18.)\n' + long_line, '2026-02-18')], today=datetime.date(2026, 3, 2))
 it = next(i for i in items if not i.get('rkey'))
-ok('110자가 넘는 원문 줄의 할 일은 「…」로 끝난다(말없이 끊기지 않음)', len(long_line) > 110 and it['todo'].endswith('…') and len(it['todo']) <= 110, (len(long_line), it['todo'][-20:]))
+ok('110자가 넘는 원문 줄의 할 일은 「…」로 끝난다(말없이 끊기지 않음)', len(long_line) > 113 and it['todo'].endswith('…') and len(it['todo']) <= 110, (len(long_line), it['todo'][-20:]))
 
 # 6. 끝줄은 본문 항목 기준, 인수 직후 할 일 「외 n건」, 직접 적은 현안의 시기, 문서·연혁·현황 메모
 items, _, _, info = build([F('공문/기한 %02d.txt' % i, '기한 공문 %d\n시행 영업과-%d (2026. 10. 1.)\n자료를 11월 %d일까지 제출 바랍니다.' % (i, 1000 + i, i), '2026-10-01') for i in range(1, 26)] +
@@ -138,6 +140,42 @@ export._REF = None   # 서버를 막 켠 상태(내려받기 전)
 on = '\n'.join(t for _, t in export.onnara_sections(s))
 l1 = next((l for l in on.split('\n') if '2026-01-12' in l), ''); l2 = next((l for l in on.split('\n') if '2026-03-13' in l), '')
 ok('복사 글: 1월 12일은 (지남), 3월 13일은 지남 아님(인계 일자 2026-03-02 기준)', '(지남)' in l1 and '(지남)' not in l2, (l1[:80], l2[:80]))
+
+# 8-2. 인계 일자보다 뒤 날짜의 문서는 현안·인수 직후 할 일에서 빼고 「확인」 표시(모의 자료의 2026-08-13 공문이 2026-03-02 인계서에 오르던 것)
+fut = F('공문/20260813_03_2026년 추석 특별소통.txt', '2026년 추석 명절 소포우편물 특별소통 대책 추진\n시행 영업과-1510 (2026. 8. 13.)\n다. 계약소포 : 발송 예정 물량을 9월 11일까지 통보하도록 안내', '2026-08-13')
+items, _, _, info = build([fut, F('공문/계획 제출.txt', '목표 배정 알림\n시행 영업과-658 (2026. 2. 18.)\n세부추진계획을 3월 13일까지 제출하여 주시기 바랍니다.', '2026-02-18')], today=datetime.date(2026, 3, 2))
+itf = next(i for i in items if '추석' in i['file'])
+ok('인계 일자(3.2.) 뒤 날짜(8.13.) 문서는 현안이 아니고 future 표시', itf['kind3'] != '현안' and itf.get('future') is True, (itf['kind3'], itf.get('future')))
+md = export.to_markdown(session(items, info, handover_date='2026-03-02'))
+ok('그 문서는 1-다·인수 직후 할 일에 없고 2절·붙임 1에 「인계 일자 이후 날짜 · 확인」 표시', '추석' not in md.split('다. 현안사항', 1)[1].split('라. 주요', 1)[0] and '2026-09-11' not in md.split('인수 직후 할 일', 1)[1].split('되풀이', 1)[0] and '인계 일자 이후 날짜 · 확인' in cell(md, '2. 관련 문서 현황', '추석'), cell(md, '2. 관련 문서 현황', '추석'))
+
+# 8-3. 기한 연도: 지난 일을 말하는 줄은 이듬해로 넘기지 않는다
+dd = docs.due_dates('9월 30일까지 제출하였다.\n내년 1월 12일까지 실적 제출 바람', '2026-11-10', '본문(시행)')
+ok('11월 문서의 「9월 30일까지 제출하였다」는 올해(지남), 「1월 12일까지 … 바람」은 이듬해', {x['date'] for x in dd} == {'2026-09-30', '2027-01-12'}, dd)
+
+# 8-4. 기한만으로 현안이 된 문서도 원문 줄이 있다
+items, _, _, info = build([F('메일/마감시간 변경.txt', 'RE: 연말연시 소포 접수 마감시간 변경 안내\n2025. 12. 10.\n특별소통기간(12. 15. ~ 1. 9.) 중 소포 접수 마감시간을 평일 16:30으로 조정합니다.', '2025-12-10')], today=datetime.date(2026, 3, 2))
+it = next((i for i in items if '마감시간' in i['file']), None)
+ok('기한만 있는 현안의 원문 줄은 기한을 뽑은 줄', it is not None and it['kind3'] == '현안' and '마감시간을 평일 16:30으로' in (it.get('quote') or ''), it and (it['kind3'], it.get('quote')))
+
+# 8-5. 1-나 반복 표: 같은 업무·같은 시기·같은 일은 한 줄로
+rows3 = []
+for n, src in enumerate(['공문', '보고서', '매뉴얼']):
+    rows3.append({'id': 900 + n, 'file': '%s.txt' % src, 'cls': src, 'date': '2026-01-0%d' % (n + 1), 'title': '매월 5일까지 전월 실적을 집계하여 과장 보고', 'area': '매출·실적', 'due': [], 'due_next': '', 'contacts': [], 'kind3': '반복', 'recur': {'cycle': '매월'}, 'when': '매월 5일', 'todo': '매월 5일까지 전월 실적을 집계하여 과장에게 보고한다', 'src': '규칙(반복 문장)', 'rkey': 'R:%d' % n, 'keep': True, 'decided': True, 'status': '진행', 'note': '', 'quote': ''})
+rows3.append({'id': 950, 'file': '다른.txt', 'cls': '공문', 'date': '2026-01-05', 'title': '익월 10일까지 공급업체에 정산', 'area': '매출·실적', 'due': [], 'due_next': '', 'contacts': [], 'kind3': '반복', 'recur': {'cycle': '매월'}, 'when': '익월 10일', 'todo': '판매대금은 익월 10일까지 공급업체에 정산한다', 'src': '규칙(반복 문장)', 'rkey': 'R:9', 'keep': True, 'decided': True, 'status': '진행', 'note': '', 'quote': ''})
+md = export.to_markdown(session(rows3, {}, handover_date='2026-03-02'))
+rr = [l for l in md.split('되풀이되는 업무', 1)[1].split('### 다.', 1)[0].split('\n') if l.startswith('| 매월 5일') or l.startswith('| 익월 10일')]
+ok('같은 일 3건은 한 줄(「(같은 일 3건)」·근거 문서 3개), 다른 일은 따로', len(rr) == 2 and '(같은 일 3건)' in rr[0] and rr[0].count('.txt') == 3, rr)
+
+# 8-6. 날짜로 읽지 못한 기한 글은 「(날짜 확인)」, (지남)·인수 직후 할 일에 안 섞임
+bad = dict(rows3[0], id=960, kind3='현안', due_next='미정', title='기한 미정 현안', rkey=None)
+bad.pop('rkey')
+md = export.to_markdown(session([bad], {}, handover_date='2026-03-02'))
+ok('기한 「미정」은 「(날짜 확인)」으로 적고 (지남)·인수 직후에 안 섞임', '(날짜 확인)' in cell(md, '다. 현안사항', '기한 미정 현안') and '(지남)' not in cell(md, '다. 현안사항', '기한 미정 현안') and '미정' not in md.split('인수 직후 할 일', 1)[1].split('되풀이', 1)[0])
+
+# 8-7. 모델 주소 허용 목록: 「*」·빈 값 거부, http·https만
+import core as _c
+ok('allow_model_host는 「*」·빈 값을 받지 않고 is_local_url은 http·https만', _c.allow_model_host('*') == '' and _c.allow_model_host('') == '' and not _c.is_local_url('ftp://127.0.0.1/x') and _c.is_local_url('http://127.0.0.1:11434/v1/chat/completions'))
 
 # 9. 연도 없는 기한(「11월 30일」「12.1」「3/20」)은 인계 일자의 연도로
 try:

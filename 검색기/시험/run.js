@@ -1,6 +1,6 @@
 // 물어물어(우편번호 자동검색기) v1.6 출품본 구동 시험 — 헤드리스 크로미움
 // 사용: node run.js <출품본.html 절대경로> [AI포트]
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('playwright');
 const fs = require('fs'); const path = require('path');
 const HTML = process.argv[2]; const AIPORT = process.argv[3] || '11434';
 const OUT = path.resolve('out'); fs.mkdirSync(OUT, { recursive: true });
@@ -9,7 +9,7 @@ function log(k, v) { report.push([k, v]); console.log(k + ': ' + (typeof v === '
 function parseCsv(p) { const t = fs.readFileSync(p, 'utf8').replace(/^﻿/, ''); return t.split(/\r?\n/).filter(Boolean).map(l => l.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map(c => c.replace(/,$/, '').replace(/^"|"$/g, '').replace(/""/g, '"'))); }
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--allow-file-access-from-files'] });
+  const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
   const ctx = await browser.newContext({ acceptDownloads: true, locale: 'ko-KR', viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') consoleMsgs.push(m.type() + ': ' + m.text()); });
@@ -115,7 +115,10 @@ function parseCsv(p) { const t = fs.readFileSync(p, 'utf8').replace(/^﻿/, '');
     await kBtn('창구에서 적을게요');
     log('키오스크 마침 화면', (await kText()).slice(0, 200));
     await page.screenshot({ path: path.join(OUT, '04_kiosk_finish.png') });
-    await kBtn('직원 확인');
+    // v1.11: 마침 화면의 「직원 확인」 단추는 없고, 직원이 「직원」을 2초 눌러 연 설정 창에서 「이 어르신 입력을 접수 화면으로 넘기기」를 누른다
+    { const sb = await page.$('#kStaff'); const bx = await sb.boundingBox(); await page.mouse.move(bx.x + bx.width / 2, bx.y + bx.height / 2); await page.mouse.down(); await page.waitForTimeout(2400); await page.mouse.up();
+      await page.waitForFunction(() => Array.from(document.querySelectorAll('#kModalBtns button, #kiosk button')).some(b => /접수 화면으로 넘기기/.test(b.textContent)), null, { timeout: 8000 });
+      await page.evaluate(() => { Array.from(document.querySelectorAll('#kModalBtns button, #kiosk button')).find(b => /접수 화면으로 넘기기/.test(b.textContent)).click(); }); }
     await page.waitForTimeout(800);
     log('넘기기 뒤 키오스크 닫힘', await page.evaluate(() => document.querySelector('#kiosk').hidden));
     log('넘기기 뒤 step2 보임', await page.evaluate(() => !document.querySelector('#step2').hidden));

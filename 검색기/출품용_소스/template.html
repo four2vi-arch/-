@@ -155,6 +155,8 @@ dialog::backdrop{background:rgba(10,15,25,.5)}
 .dlg-h{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
 .dlg-b{padding:16px 20px 22px;max-height:70vh;overflow:auto;font-size:15px}
 .dlg-b h3{font-size:15px;margin:16px 0 8px} .dlg-b h3:first-child{margin-top:0}
+#privacyDlg .dlg-b{max-height:calc(92vh - 110px);padding-bottom:0}
+#privacyDlg .dlg-foot{position:sticky;bottom:0;background:var(--card);padding:12px 0 16px;margin-top:8px;border-top:1px solid var(--line)}   /* 1024x768에서 「알겠습니다」가 접힘선 아래로 가던 것 */
 .dlg-b ul{margin:0;padding-left:18px} .dlg-b li{margin:4px 0}
 .help th{width:84px;white-space:nowrap}
 
@@ -916,7 +918,7 @@ Copyright (C) SheetJS LLC, (C) gitbrent
       <li>자리를 뜰 때는 「끝내고 지우기」를 누르거나 화면을 닫아 주세요.</li>
     </ul>
     <p class="hint">개인정보를 업무 목적 밖으로 이용하거나 제3자에게 준 경우 「개인정보 보호법」에 따라 형사처벌·징계 대상이 됩니다.</p>
-    <div class="row-r"><button type="button" class="btn primary" id="btnPrivacyOk">알겠습니다</button></div>
+    <div class="row-r dlg-foot"><button type="button" class="btn primary" id="btnPrivacyOk">알겠습니다</button></div>
   </div>
 </dialog>
 
@@ -943,6 +945,7 @@ Copyright (C) SheetJS LLC, (C) gitbrent
 (function () {
   'use strict';
   var EXPECTED = '@@EXPECTED@@';
+  var EXPECTED_DATA = '@@EXPECTED_DATA@@';   // 내장 우편번호 DB 블록(zipdb, zipextra)의 SHA-256. 코드 지문과 따로 대조한다(DB만 바꿔치기한 파일이 「원본 확인됨」으로 보이던 것)
 
   // ---- SHA-256 (순수 JS, 외부 의존 없음) ----
   function sha256hex(str) {
@@ -1013,11 +1016,47 @@ Copyright (C) SheetJS LLC, (C) gitbrent
     return parts.join('\n');
   }
 
+  function checkData() {   // 데이터 블록은 크기(약 24MB)가 커서 브라우저 내장 SHA-256(crypto.subtle)으로 센다. 없으면 「대조 불가」
+    try {
+      if (!window.crypto || !crypto.subtle || !window.TextEncoder || /^@@/.test(EXPECTED_DATA)) { return Promise.resolve(null); }
+      var exp = EXPECTED_DATA.split(',');
+      return Promise.all(['zipdb', 'zipextra'].map(function (id, i) {
+        var el = document.getElementById(id);
+        if (!el) { return false; }
+        return crypto.subtle.digest('SHA-256', new TextEncoder().encode(el.textContent)).then(function (buf) {
+          var h = '', u = new Uint8Array(buf);
+          for (var k = 0; k < u.length; k++) { h += ('0' + u[k].toString(16)).slice(-2); }
+          return h === exp[i];
+        });
+      })).then(function (rs) { return rs.every(function (x) { return x === true; }); }).catch(function () { return null; });
+    } catch (e) { return Promise.resolve(null); }
+  }
+
   function run() {
     var got, ok;
     try { got = sha256hex(payload()); ok = (got === EXPECTED); }
     catch (e) { got = ''; ok = null; }          // 계산 자체가 안 되면 판정 보류
-    window.__integrity = { ok: ok, expected: EXPECTED, got: got };
+    window.__integrity = { ok: ok, expected: EXPECTED, got: got, data: undefined };
+    checkData().then(function (d) {
+      window.__integrity.data = d;
+      var chip2 = document.getElementById('intChip'), ai2 = document.getElementById('aboutInt');
+      if (d === false) {
+        if (chip2) { chip2.textContent = '⚠ 변경됨(우편번호 DB)'; chip2.className = 'chip bad'; chip2.title = '내장 우편번호 DB가 원본과 다릅니다. 배포처의 원본을 다시 받으세요.'; }
+        if (ai2) { ai2.textContent = '변경됨 · 내장 우편번호 DB가 원본과 다릅니다'; }
+        try {
+          if (!document.getElementById('intBar')) {
+            var bar2 = document.createElement('div'); bar2.id = 'intBar'; bar2.setAttribute('role', 'alert');
+            bar2.style.cssText = 'position:sticky;top:0;z-index:9999;background:#b00020;color:#fff;padding:10px 16px;font-weight:700;text-align:center;font-size:15px';
+            bar2.textContent = '⚠ 이 파일의 우편번호 DB가 원본에서 변경되었습니다. 배포처가 안내한 원본(과 SHA-256 값)을 사용하세요.';
+            document.body.insertBefore(bar2, document.body.firstChild);
+          }
+        } catch (e) { }
+        try { if (window.__zip && window.__zip.log) window.__zip.log('무결성 경고', 0, '우편번호 DB 지문 불일치'); } catch (e) { }
+      } else if (chip2 && ok === true) {
+        chip2.title += d === true ? ' · 우편번호 DB 지문 일치' : ' · 우편번호 DB는 대조 불가(이 브라우저)';
+        if (ai2) { ai2.textContent = d === true ? '원본 확인됨 (핵심 코드·우편번호 DB 지문 일치)' : '원본 확인됨 (핵심 코드 지문 일치 · DB는 이 브라우저에서 대조 불가, 파일 SHA-256으로 확인)'; }
+      }
+    });
 
     var chip = document.getElementById('intChip');
     if (chip) {

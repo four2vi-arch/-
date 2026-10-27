@@ -162,6 +162,7 @@
   function aiReason(e) {
     var m = String(e && e.message || e || '');
     if (/^abort/i.test(m) || (e && e.name === 'AbortError')) { return '시간 초과(25초). 모델이 너무 느리거나 멈춰 있어요.'; }
+    if (/Invalid value|not a valid HTTP header|HeaderValue|ISO-8859|Invalid name/i.test(m)) { return '키나 주소에 쓸 수 없는 글자(한글·공백)가 있어요.'; }
     if (/^HTTP 404/.test(m)) { return '모델 이름을 찾지 못했어요(404). ollama pull 로 받은 이름과 같은지 확인하세요.'; }
     if (/^HTTP 401|^HTTP 403/.test(m)) { return '키가 없거나 틀렸어요(' + m + ').'; }
     if (/^HTTP/.test(m)) { return '모델 실행기가 오류를 냈어요(' + m + ').'; }
@@ -207,6 +208,9 @@
   function aiExtract(text, override) {
     return aiExtractRaw(text, override).catch(function () { return null; });
   }
+  function stripPerson(t) {   // 모델에 보내기 전: 전화번호와 「김○○ 씨」처럼 호칭이 붙은 이름을 뺀다(문장 원문이 그대로 가던 것)
+    return clean(String(t || '').replace(/0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}/g, ' ').replace(/[가-힣]{2,4}\s*(씨|님|할머니|할아버지|어르신|선생님|주무관|과장|팀장|사장)(?=\s|$)/g, ' '));
+  }
   function aiAssist(t) {
     return aiExtract(t).then(function (o) {
       if (!o) { return null; }
@@ -221,13 +225,13 @@
         if (!best || rank(r) > rank(best.r)) { best = { r: r, c: c }; }
       });
       if (!best || !rank(best.r)) { return null; }
-      best.detail = clean([o.buildingName && best.c.indexOf(o.buildingName) < 0 ? o.buildingName : '', o.detail].join(' '));
+      best.detail = clean([o.buildingName && best.c.indexOf(o.buildingName) < 0 ? o.buildingName : '', o.detail].join(' ')).slice(0, 60);   // 모델이 지어낸 긴 글이 스티커에 찍히지 않게
       return best;
     });
   }
 
   // ------------------------------------------------------------------ 상태
-  var st, hist, root, main, idleT, warnT;
+  var st, hist, root, main, idleT, warnT, micAgreed = false;
   // 접수 메모 번호: 그날 001부터 차례로(같은 날 번호가 겹치지 않게). 저장이 막힌 브라우저는 무작위로
   function nextNo() {
     var KEY = 'zipfinder.kiosk.no', d = new Date(), day = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
@@ -241,12 +245,16 @@
   function fresh() {
     st = { entries: [], sender: null, cur: null, no: '', trail: [] };
     hist = [];
+    micAgreed = false;   // 말로 하기 안내·동의는 사람마다 한 번(앞 분의 동의가 다음 분에게 남지 않게)
   }
   function newCur(kind) {
     st.cur = { kind: kind, raw: '', text: '', region: '', regionToks: [], res: null, check: false, ai: false, triedAI: false, detail: '', name: '', phone: '', tries: 0 };
     st.trail = [];
   }
-  function hasData() { return st && (st.entries.length || (st.cur && st.cur.raw) || st.sender); }
+  function setInert(on) {   // 어르신 화면이 떠 있는 동안 뒷화면(직원 화면)은 Tab·클릭에서 뺀다(숨은 단추에 포커스가 가던 것)
+    try { Array.prototype.forEach.call(document.body.children, function (el) { if (el !== root && el.id !== 'kPrint' && el.tagName !== 'SCRIPT') { el.inert = on; } }); } catch (e) { }
+  }
+  function hasData() { var inp = main && main.querySelector('#kIn'); return st && (st.entries.length || (st.cur && st.cur.raw) || st.sender || (inp && clean(inp.value))); }   // 적다 만 글이 있어도 「계속하시겠어요?」를 묻는다
 
   // ------------------------------------------------------------------ 화면 틀
   var CSS = '#kiosk{position:fixed;inset:0;z-index:5000;background:#fffdf8;color:#1d1d1d;display:flex;flex-direction:column;font-family:"맑은 고딕","Malgun Gothic",sans-serif;font-size:calc(22px*var(--kf,1))}' +
@@ -284,7 +292,7 @@
     '@media (min-width:900px){.k-padwrap{flex-wrap:nowrap}.k-padl{flex:0 1 540px}.k-padr{flex:1 1 260px}.k-padr .k-row{flex-direction:column}.k-padr .k-btn{flex:0 0 auto;width:100%}}' +
     '@media (max-width:899px){.k-keys button{min-height:66px}.k-num{min-height:1.15em}.k-padr .k-row{margin-top:10px}}' +
     '@media (max-width:760px){.k-brand{font-size:1.02em}.k-tools button{padding:6px 10px}}' +
-    '@media (max-height:820px){.k-trail{font-size:.66em;max-height:1.6em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.k-foot>span{display:none}.k-foot{padding:4px 22px !important;justify-content:flex-end}.k-main{padding-top:12px}.k-keys{gap:8px;margin-top:6px}.k-keys button{min-height:50px;font-size:1.2em}.k-num{font-size:1.4em;padding:2px 0}.k-bubble{padding:10px 16px;margin:2px 0 8px;font-size:1.12em}.k-btn{min-height:64px}.k-foot{padding:6px 22px}}' +
+    '@media (max-height:820px){.k-trail{font-size:.66em;max-height:1.6em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.k-foot>span{font-size:.58em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:72vw}.k-foot{padding:4px 22px !important;justify-content:flex-end}.k-main{padding-top:12px}.k-keys{gap:8px;margin-top:6px}.k-keys button{min-height:50px;font-size:1.2em}.k-num{font-size:1.4em;padding:2px 0}.k-bubble{padding:10px 16px;margin:2px 0 8px;font-size:1.12em}.k-btn{min-height:64px}.k-foot{padding:6px 22px}}' +
     '.k-cam{position:relative;background:#111;border-radius:18px;overflow:hidden;margin:6px 0 4px;min-height:220px}.k-cam video,.k-cam canvas{display:block;width:100%;max-height:min(36vh,400px);object-fit:contain;background:#111}' +
     '.k-guide{position:absolute;inset:7% 10%;border:4px dashed rgba(255,255,255,.85);border-radius:20px;pointer-events:none;display:flex;align-items:flex-end;justify-content:center}.k-guide span{background:rgba(0,0,0,.65);color:#fff;font-size:1em;font-weight:700;padding:4px 12px;border-radius:10px 10px 0 0}' +
     '.k-prog{height:16px;background:#eee;border-radius:10px;overflow:hidden;margin:12px 0}.k-prog i{display:block;height:100%;width:6%;background:#c8102e;transition:width .4s}' +
@@ -379,6 +387,11 @@
       speechSynthesis.cancel();
       var u = new SpeechSynthesisUtterance(String(t).replace(/<[^>]+>/g, ' '));
       u.lang = 'ko-KR'; u.rate = 0.9;
+      try {   // 이 기기 안에서 소리를 내는 음성을 먼저 고른다(네트워크 음성은 읽을 글이 제작사 서버로 갈 수 있음)
+        var vs = (speechSynthesis.getVoices && speechSynthesis.getVoices()) || [];
+        var local = vs.filter(function (v) { return /^ko/i.test(v.lang) && v.localService; });
+        if (local.length) { u.voice = local[0]; }
+      } catch (e2) { }
       speechSynthesis.speak(u);
     } catch (e) { }
   }
@@ -492,6 +505,11 @@
     Array.prototype.forEach.call(document.querySelectorAll('#kMic'), function (b) { b.remove(); });
   }
   function listen(target, onText) {
+    if (!micAgreed) {   // 처음 한 번: 말소리가 인터넷 음성 인식으로 보내지는 것을 어르신 본인에게 알리고 동의를 받는다
+      modal('<div class="k-bubble">말소리는 인터넷 음성 인식으로 보내져 글자로 바뀌어요.<small>이 기기에는 소리가 남지 않아요. 괜찮으시면 「네」를, 아니면 글자로 적어 주세요.</small></div>',
+        [['네, 말로 할게요', function () { closeModal(); micAgreed = true; listen(target, onText); }, 'pri'], ['아니요, 글자로 적을게요', closeModal, 'sub']]);
+      return;
+    }
     stopMic();
     var r, got = false, failed = false;
     try { r = new SR(); } catch (e) { log('말로 하기 오류', 0, 'start'); toast('이 기기에서는 말로 하기가 안 돼요. 글자로 적어 주세요. (직원 확인: 시작 못 함)'); return; }
@@ -560,7 +578,7 @@
       var skipBtn = [btn('기다리지 않고 진행', 'sub', function () { c.aiSkip = true; decide(r, q); })];
       main.innerHTML = '<div class="k-bubble">주소를 정리하고 있어요… 잠시만요.<small>AI가 말씀을 주소로 정리하는 중이에요(최대 25초).</small></div>' + row(skipBtn);
       bindRow(skipBtn);
-      return aiAssist(c.raw).then(function (b) {
+      return aiAssist(stripPerson(c.text || normalize(c.raw))).then(function (b) {
         if (c.aiSkip) { return; }
         if (b && rank(b.r) > rank(r)) {
           c.ai = true;
@@ -628,7 +646,7 @@
     order.sort(function (a, b) { return (sido[b] === mine) - (sido[a] === mine) || a - b; });
     var body = '<div class="k-grid">' + order.map(function (i) { return '<button type="button" class="k-choice" data-s="' + i + '">' + esc(sido[i]) + '</button>'; }).join('') + '</div>' +
       row([btn('이전으로', 'sub', back)]);
-    frame('보내실 곳이 어느 시·도인가요?', typeof why === 'string' ? esc(why) : '', body);
+    frame('보내실 곳이 어느 시·도인가요?', (typeof why === 'string' ? esc(why) + ' ' : '') + (sido.length > 8 ? '아래로 밀면 더 있어요.' : ''), body);
     bindRow([btn('이전으로', 'sub', back)]);
     Array.prototype.forEach.call(main.querySelectorAll('[data-s]'), function (el) {
       el.onclick = function () { screen(pickSgg, [Number(el.getAttribute('data-s'))]); };
@@ -642,7 +660,7 @@
     if (list.length === 1) { return setRegion(list[0].g, ''); }
     var body = '<div class="k-grid">' + list.map(function (x, i) { return '<button type="button" class="k-choice" data-g="' + i + '">' + esc(x.n) + '</button>'; }).join('') + '</div>' +
       row([btn('이전으로', 'sub', back)]);
-    frame('어느 시·군·구인가요?', esc(db.sido[si] || ''), body);
+    frame('어느 시·군·구인가요?', esc(db.sido[si] || '') + (list.length > 8 ? ' · 아래로 밀면 더 있어요.' : ''), body);
     bindRow([btn('이전으로', 'sub', back)]);
     Array.prototype.forEach.call(main.querySelectorAll('[data-g]'), function (el) {
       el.onclick = function () { setRegion(list[Number(el.getAttribute('data-g'))].g, ''); };
@@ -751,7 +769,7 @@
       c.why = guess ? '번지 없음: 동 안 우편번호 여러 개' : (check ? '비슷한 주소로 찾음' : '');
       st.trail.push(['확인', (guess ? '우편번호 창구 확인' : (r.zip || '')) + ' ' + sp.base]);
       screen(askDetail);
-    }), btn('아니요, 다시 할게요', 'sub', function () { newCurKeep(); screen(askAddress, ['다시 적어 주세요. 길 이름과 번호, 또는 동네와 번지를 적으면 정확해요.']); })];
+    }), btn('아니요, 다시 할게요', 'sub', function () { var keep = c.raw; newCurKeep(); screen(askAddress, ['고쳐 적어 주세요. 길 이름과 번호, 또는 동네와 번지를 적으면 정확해요.', keep]); })];   // 적은 글을 남긴 채(한 글자만 틀려도 처음부터 다시 적던 것)
     frame('이 주소가 맞으세요?', (guess ? '' : '우편번호 ' + esc(r.zip || '') + '. ') + esc(sp.base), body + row(b));
     bindRow(b);
   }
@@ -793,6 +811,11 @@
       screen(askPhone);
     })];
     if (mic) { b.unshift(mic); }
+    b.push(btn('모르겠어요(창구에서 적을게요)', 'sub', function () {   // 성함을 몰라도 넘어가고 창구 확인으로 남긴다(성함 없이는 끝낼 수 없던 것)
+      st.trail.push([send ? '보내시는 분' : '받으실 분', '창구에서']);
+      if (send) { st.sender = st.sender || {}; st.sender.name = ''; st.sender.check = true; } else { c.name = ''; c.nameCheck = true; }
+      screen(askPhone);
+    }));
     b.push(btn('이전으로', 'sub', back));
     frame(send ? '보내시는 분(어르신) 성함은요?' : '받으실 분 성함은요?', send ? '택배·소포에 보내는 분으로 적혀요.' : (c.ocr && c.ocr.name ? '사진에서 읽은 이름이에요. 맞는지 확인해 주세요.' : ''), '<input class="k-input" id="kIn" autocomplete="off" placeholder="예) 홍길동" value="' + esc(send ? (st.sender && st.sender.name || '') : (c.name || (c.ocr && c.ocr.name) || '')) + '">' + row(b));
     bindRow(b);
@@ -834,7 +857,7 @@
     if (!st.no) { st.no = nextNo(); }   // 접수 번호는 첫 받는 곳을 저장할 때 받는다(지울 때마다 번호가 건너뛰던 것)
     var why = [c.why, c.nameCheck ? '받는 분 성함 창구 확인' : ''].filter(Boolean).join(' · ');
     var at = c.saved && st.entries.indexOf(c.saved) >= 0 ? st.entries.indexOf(c.saved) : st.entries.length;   // 뒤로 가기로 다시 저장하면 고쳐 쓴다(같은 곳이 두 번 들어가던 것)
-    st.entries[at] = c.saved = ({ name: c.name, phone: c.phone, zip: r.zip || '', zipGuess: r.zipGuess || '', addr1: c.base || r.addr1 || '', addr2: c.detail, check: !!(c.check || c.nameCheck), why: why, note: [c.ai ? 'AI 정리' : '', why].filter(Boolean).join(' · ') });
+    st.entries[at] = c.saved = ({ ai: !!c.ai, name: c.name, phone: c.phone, zip: r.zip || '', zipGuess: r.zipGuess || '', addr1: c.base || r.addr1 || '', addr2: c.detail, check: !!(c.check || c.nameCheck), why: why, note: [c.ai ? 'AI 정리' : '', why].filter(Boolean).join(' · ') });
     log('어르신 직접 입력', 1, '접수번호 ' + st.no + ' · ' + st.entries.length + '번째');
     screen(listView);
   }
@@ -864,6 +887,7 @@
       var denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
       box.innerHTML = '<div class="k-bubble" style="margin:0;border-color:#eee">' + (denied ? '카메라 사용이 허용되지 않았어요.' : '카메라를 켤 수 없어요.') +
         '<small>직원에게 말씀해 주시거나, 글자로 적어 주세요.</small></div>';
+      shot.hidden = true; if (flip) { flip.hidden = true; }   // 안 되는 단추는 숨긴다
     });
     shot.onclick = function () {
       if (__cam.busy()) { return; }
@@ -956,7 +980,7 @@
     var s = st.sender || {};
     if (!st.no) { st.no = nextNo(); }
     var what = paper() === 'lbl' ? '주소 스티커' : (paper() === '80' || paper() === '58' ? '주소 쪽지' : '접수 메모');
-    var helpOnly = st.entries.length === 1 && st.entries[0].why === '직원 도움 요청';
+    var helpOnly = st.entries.length >= 1 && st.entries.every(function (x) { return x.why === '직원 도움 요청' || x.why === '주소 찾기 실패'; });   // 못 찾아 포기한 것뿐이면 뽑을 것이 없다: 창구 안내만(화면 넷을 더 묻던 것)
     var list = helpOnly ? '<div class="k-card"><b>주소는 창구에서 직원이 함께 찾아 드려요.</b></div>' : st.entries.map(function (x) {
       var sub = [esc(x.name), x.phone ? esc(x.phone) : '', x.check ? '<span class="k-warn">창구에서 한 번 더 확인</span>' : ''].filter(Boolean).join(' · ');   // 이름이 없을 때 앞에 「· 」가 붙던 것
       return '<div class="k-card"><b>' + esc(x.zip || '우편번호 창구 확인') + '</b> ' + esc(x.addr1) + ' ' + esc(x.addr2) + (sub ? '<div class="k-sub">' + sub + '</div>' : '') + '</div>';
@@ -1252,6 +1276,9 @@
     setTimeout(function () {
       try { window.print(); } catch (e) { }
       cleanupPrint();
+      st.doneAt = Date.now(); touch();   // 뽑은 뒤에는 화면을 오래 두지 않는다(A4·인쇄 창 경로는 10분 남던 것)
+      var fm = document.getElementById('kFinMsg');
+      if (fm) { fm.innerHTML = '뽑았어요. 들고 창구로 오세요.<small>한 장 더 필요하면 빨간 단추를 다시 누르세요. 이 화면은 3분 뒤 지워져요.</small>'; }
     }, 60);
   }
   function handOff() {
@@ -1262,7 +1289,7 @@
       .concat(['받는 분', '받는 분 전화', '우편번호', '주소', '상세주소', '비고(접수 확인)']);   // 「비고」가 들어가야 메모 열로 알아보고 양식 비고에 「창구 확인 필요」가 남는다
     var memo = full ? '' : '보내는 분 ' + (s.name || '') + (s.phone ? ' ' + s.phone : '') + ' · 주소 창구 확인';
     var rows = st.entries.map(function (x) {
-      var note = [x.check ? '창구 확인 필요' + (x.why ? '(' + x.why + ')' : '') : '', memo, s.check ? '보내는 분 주소 창구 확인' : ''].filter(Boolean).join(' / ');
+      var note = [x.check ? '창구 확인 필요' + (x.why ? '(' + x.why + ')' : '') : '', x.ai ? 'AI 도움(주소 정리) · 접수 전 확인' : '', memo, s.check ? '보내는 분 주소 창구 확인' : ''].filter(Boolean).join(' / ');
       return (full ? [s.name || '', s.phone || '', s.zip || '', s.addr1 || '', s.addr2 || ''] : []).concat([x.name, x.phone, x.zip, x.addr1, x.addr2, note]);
     });
     var ws = XLSX.utils.aoa_to_sheet([head].concat(rows));
@@ -1334,6 +1361,7 @@
     var a = { url: clean($('#kfUrl').value), model: clean($('#kfModel').value), key: $('#kfKey').value };
     var m = $('#kfMsg');
     if (!a.url || !a.model) { m.textContent = '주소와 모델 이름을 먼저 넣어 주세요.'; return; }
+    if (/[^\x21-\x7e]/.test(a.key || '')) { m.textContent = '키에 쓸 수 없는 글자(한글·공백)가 있어요. 영문·숫자만 적어 주세요.'; return; }
     if (!isLocalUrl(a.url)) { m.textContent = '이 PC의 모델 주소만 연결됩니다. http://127.0.0.1:포트/… 또는 http://localhost:포트/… 로 적어 주세요(외부 주소는 접속 허용 목록에서 막힙니다).'; return; }
     m.textContent = '시험 중…';
     var t0 = Date.now();
@@ -1391,7 +1419,7 @@
       '<label class="k-field"><b>AI 주소 정리 연결(선택) · 주소</b><input id="kfUrl" value="' + esc(a.url || '') + '" placeholder="예) http://127.0.0.1:11434/v1/chat/completions"></label>' +
       '<label class="k-field"><b>모델 이름</b><input id="kfModel" value="' + esc(a.model || '') + '" placeholder="예) gemma3:4b · exaone3.5:7.8b"></label>' +
       '<label class="k-field"><b>키(필요한 곳만)</b><input id="kfKey" type="password" value="' + esc(a.key || '') + '"></label>' +
-      '<p class="k-note">이 PC에서 돌리는 로컬 모델(127.0.0.1)만 연결할 수 있습니다. AI에는 주소 문장만 보내고 이름·전화는 보내지 않으며, 우편번호는 언제나 고시 자료로 확정합니다.</p></details>' +
+      '<p class="k-note">이 PC에서 돌리는 로컬 모델(127.0.0.1)만 연결할 수 있습니다. AI에는 전화번호와 호칭 붙은 이름을 뺀 주소 문장만 보내고(따로 받는 이름·전화는 보내지 않음), 우편번호는 언제나 고시 자료로 확정합니다.</p></details>' +
       '<p class="k-note" id="kfMsg"></p>',
       [['저장', function () {
         var u = clean($('#kfUrl').value);
@@ -1616,7 +1644,8 @@
     document.documentElement.classList.add('k-on');
     welcome();
     touch();
-    if (!regionOpts()) { setTimeout(function () { toast('직원 안내: 「직원」 단추를 2초 누르고 「우리 동네(기본 지역)」를 정해 두세요. 동 이름만 말씀하셔도 이 지역에서 먼저 찾습니다.', 9000); }, 600); }
+    if (!auto && !regionOpts()) { setTimeout(function () { toast('직원 안내: 「직원」 단추를 2초 누르고 「우리 동네(기본 지역)」를 정해 두세요. 동 이름만 말씀하셔도 이 지역에서 먼저 찾습니다.', 9000); }, 600); }   // #kiosk로 바로 연 화면에는 어르신이 보므로 띄우지 않는다
+    setInert(true);
     try { history.pushState({ kiosk: 1 }, ''); } catch (e) { }   // 안드로이드 「뒤로」가 프로그램을 닫지 않고 앞 화면으로 가게
     log('어르신 직접 입력 화면 열기', 0, '');
     wakeSync();
@@ -1645,7 +1674,7 @@
     var ph = document.getElementById('kPrnHint'); if (ph) { ph.remove(); }
     clearTimeout(idleT); clearTimeout(warnT);
     closeModal();
-    root.hidden = true;
+    root.hidden = true; setInert(false);
     document.documentElement.classList.remove('k-on');
     wakeSync();
   }

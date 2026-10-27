@@ -1,11 +1,12 @@
-const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const path=require('path');
-(async()=>{const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});const ctx=await b.newContext({locale:'ko-KR',viewport:{width:1280,height:900}});const p=await ctx.newPage();
+const { chromium } = require('playwright'); const path=require('path');
+(async()=>{const b=await chromium.launch();const ctx=await b.newContext({locale:'ko-KR',viewport:{width:1280,height:900}});const p=await ctx.newPage();
 const errs=[];p.on('console',m=>{if(m.type()==='error')errs.push(m.text())});p.on('pageerror',e=>errs.push('pageerror '+e.message));
 await p.goto('file://'+process.argv[2]);await p.waitForFunction(()=>/구간/.test(document.querySelector('#dbInfo').textContent));
 if(await p.isVisible('#btnPrivacyOk'))await p.click('#btnPrivacyOk');
 await p.click('#btnKiosk');await p.waitForSelector('#kiosk:not([hidden])');
 const sb=await p.$('#kStaff');const box=await sb.boundingBox();await p.mouse.move(box.x+box.width/2,box.y+box.height/2);await p.mouse.down();await p.waitForTimeout(2400);await p.mouse.up();
 await p.waitForSelector('#kfUrl',{timeout:5000}).catch(()=>{});
+await p.evaluate(()=>{document.querySelectorAll('#kiosk details').forEach(d=>{d.open=true;});});   // v1.11: AI 주소 정리는 「고급 설정」 펼침 안에 있다(검사가 조용히 빠지던 것)
 console.log('직원 설정 열림:',await p.isVisible('#kfUrl'));
 if(await p.isVisible('#kfUrl')){
   await p.fill('#kfUrl','http://127.0.0.1:11434/v1/chat/completions');await p.fill('#kfModel','mock-exaone');

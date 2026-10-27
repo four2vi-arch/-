@@ -177,6 +177,7 @@
     if (!privacyMask.on) {
       return str(a);
     }
+    b = String(b || "").replace(/^s(?=[A-Z])/, "").toLowerCase();   // 보내는 분 열(sName·sTel·sAddr)도 받는 분과 같은 규칙으로 가린다
     if (b === "name") {
       return maskName(a);
     }
@@ -236,6 +237,7 @@
   }
   function addLog(a, b, c) {
     try {
+      c = String(c == null ? "" : c).replace(/(^|[^가-힣])([가-힣])([가-힣]{1,2})(?![가-힣])/g, function (m, p, q, r) { return p + q + "*".repeat(r.length); });   // 파일 이름의 2~3자 한글 낱말(사람 이름일 수 있음)은 가려 적는다
       var d = loadLog();
       var now = new Date();
       function f(g) {
@@ -473,7 +475,7 @@
           c.date = r;
         }
         d.road = 1;
-      } else if (q.indexOf("시작주번지") >= 0) {
+      } else if (q.indexOf("시작주번지") >= 0 && q.indexOf("사서함명") < 0) {   // 사서함 파일 머리글에 「시작주번지」가 있어도 지번으로 보지 않는다
         c.jibun = new TextDecoder("utf-8").decode(p);
         if (r && !c.date) {
           c.date = r;
@@ -795,6 +797,9 @@
       setBusy(false);
     }).catch(function (b) {
       setBusy(false);
+      S.wb = null; S.aoa = []; S.rows = []; S.fileName = "";   // 읽기에 실패하면 앞서 올린 주소록·결과를 지운다(앞 사람 명단으로 내려받히던 것)
+      ["#step2", "#step3", "#step4"].forEach(function (id) { var el = qs(id); if (el) { el.hidden = true; } });
+      var fl = qs("#fileLabel"); if (fl) { fl.textContent = ""; }
       var c = /password|encrypt/i.test(String(b && b.message)) ? "암호가 걸린 파일입니다. 암호를 풀고 다시 넣어 주세요." : "이 파일은 읽지 못했습니다. 문서보안(DRM)이 걸려 있거나 한셀 옛 형식일 수 있습니다. 엑셀·한셀에서 「다른 이름으로 저장 ▸ xlsx」로 저장한 뒤 다시 넣어 주세요.";
       setMsg(qs("#fileMsg"), c, "err");
     });
@@ -1574,7 +1579,9 @@
   }
   function runSearch() {
     if (!S.cols.addr.length) {
-      return setMsg(qs("#fileMsg"), "「주소」 열을 먼저 골라 주세요.", "warn");
+      setMsg(qs("#fileMsg"), "「주소」 열을 먼저 골라 주세요.", "warn");
+      try { qs("#fileMsg").scrollIntoView({ block: "center", behavior: "smooth" }); } catch (err) { }   // 경고가 화면 밖에 떠 단추가 안 눌리는 듯 보이던 것
+      return;
     }
     setMsg(qs("#fileMsg"), "");
     var a = S.aoa;
@@ -1621,6 +1628,8 @@
             score: 0
           };
           v.r = w;
+        } else if (/^[\d\-\s()+.]+$/.test(s) && !/^\d{5}$/.test(s)) {   // 전화번호처럼 숫자·기호뿐인 줄에 앞뒤 행 지역으로 번호가 붙던 것
+          v.r = { zip: "", grade: "실패", conf: "", note: "주소가 아님(숫자·기호만)", addr1: "", addr2: "", score: 0 };
         } else if (!t || s.indexOf(t) >= 0) {
           v.r = S.engine.lookup(s, c);
         } else {
@@ -2556,10 +2565,10 @@
       } else if (u) {
         v = (a ? [u.edited ? "수정" : u.status + (u.conf ? "·" + u.conf : ""), u.note] : []).concat(b ? [u.status === "실패" ? "" : [u.r.addr1, u.r.addr2].filter(Boolean).join(" ")] : []).concat(c ? [deliveryOffice(u.zip)] : []);
       }
-      var w = i === f ? "우편번호" : u && !u.self ? u.zip : "";
+      var w = i === f ? "우편번호" : u ? u.zip : "";   // 본인 수령(받는 분 칸이 빈 행)도 보내는 분 주소로 찾은 번호를 넣는다(빈칸이던 것)
       if (h >= 0) {
         t.splice(h, 0, w);
-      } else if (u && !u.self) {
+      } else if (u) {
         t[g] = u.zip || (u.status === "실패" ? t[g] : u.zip);   // 못 찾은 행은 원본의 우편번호를 그대로 둔다(「원본 + 우편번호」)
       }
       var x = S.cols.sZip;
@@ -3980,7 +3989,7 @@
     } else {
       updDlgEl.setAttribute("open", "");
     }
-    if (settings.get().autoProbe) {
+    if (settings.get().autoProbe && a !== true) {   // 저절로 열린 창(고시 교체 알림)에서는 사용자가 누를 때만 밖으로 연결한다
       checkNetwork();
     }
   }
@@ -4053,6 +4062,10 @@
     openUpdateDialog(true);
   }
   function init() {
+    setTimeout(function () {   // 검증기(#sig)가 빠진 파일은 「확인 중…」이 영원히 남던 것
+      var ch = qs("#intChip");
+      if (ch && !window.__integrity) { ch.textContent = "⚠ 무결성 확인 불가(검증기 없음)"; ch.className = "chip bad"; ch.title = "파일에서 무결성 검증기가 빠졌습니다. 배포처의 원본을 다시 받으세요."; }
+    }, 4000);
     var a = settings.get();
     S.preset = a.preset && PRESETS[a.preset] ? a.preset : "reg";   // 처음엔 양식1(등기용), 그 뒤로는 마지막에 쓴 양식
     if (PRESETS[S.preset].custom) {

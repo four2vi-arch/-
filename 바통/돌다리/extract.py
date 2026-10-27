@@ -507,6 +507,8 @@ NON_DOC = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tif', '.tiff', '.webp', '.
            '.exe', '.dll', '.msi', '.bat', '.cmd', '.lnk', '.url', '.ini', '.db', '.dat', '.pia', '.fnt', '.ttf', '.otf', '.woff',
            '.tmp', '.bak', '.backup', '.log', '.json', '.xml', '.js', '.css', '.py', '.pyc', '.iso', '.7z', '.rar', '.egg', '.alz'}
 MAX_BYTES = 200 * 1024 * 1024
+MAX_ZIP_ENTRIES = 2000           # 압축 하나에서 읽는 항목 수 상한
+MAX_ZIP_TOTAL = 1024 * 1024 * 1024   # 압축 하나를 풀어 쓰는 총량 상한(1GB)
 
 
 CTRL_BREAK = re.compile(r'[\x0b\x0c\x1c-\x1e\x85\u2028\u2029]')   # 한글·워드의 강제 줄바꿈·쪽 나눔 → 줄바꿈
@@ -537,6 +539,7 @@ def extract_file(path, rel, results, failures, depth=0):
             return
         try:
             with zipfile.ZipFile(path) as z, tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+                total, n_entries = 0, 0
                 for info in z.infolist():
                     if info.is_dir():
                         continue
@@ -545,9 +548,32 @@ def extract_file(path, rel, results, failures, depth=0):
                         name = name.encode('cp437').decode('cp949') if not (info.flag_bits & 0x800) else name
                     except Exception:
                         pass
+                    n_entries += 1
+                    if n_entries > MAX_ZIP_ENTRIES:   # 항목 수 상한(1만 항목짜리 압축이 항목을 다 만들던 것)
+                        failures.append({'file': rel, 'reason': '압축 안 항목이 %d개를 넘어 나머지는 읽지 않음 · 직접 열어 볼 것' % MAX_ZIP_ENTRIES}); break
+                    if info.file_size > MAX_BYTES:   # 풀기 전에 크기로 거른다(풀어 본 뒤 거르면 메모리·임시 폴더를 다 쓰던 것)
+                        failures.append({'file': rel + ' ▸ ' + name, 'reason': '너무 커서 건너뜀(200MB 넘음) · 직접 열어 볼 것'}); continue
+                    if total + info.file_size > MAX_ZIP_TOTAL:
+                        failures.append({'file': rel + ' ▸ ' + name, 'reason': '압축을 푼 크기가 1GB를 넘어 나머지는 읽지 않음(압축 폭탄 의심) · 직접 열어 볼 것'}); break
                     out = os.path.join(td, os.path.basename(name))
-                    with open(out, 'wb') as f:
-                        f.write(z.read(info))
+                    written = 0
+                    with z.open(info) as src, open(out, 'wb') as f:   # 1MB씩 옮기며 누적 상한
+                        while True:
+                            chunk = src.read(1 << 20)
+                            if not chunk:
+                                break
+                            written += len(chunk)
+                            if written > MAX_BYTES or total + written > MAX_ZIP_TOTAL:
+                                break
+                            f.write(chunk)
+                    total += written
+                    if written > MAX_BYTES or total > MAX_ZIP_TOTAL:
+                        failures.append({'file': rel + ' ▸ ' + name, 'reason': '압축을 푼 크기가 상한을 넘어 건너뜀(압축 폭탄 의심) · 직접 열어 볼 것'})
+                        try:
+                            os.remove(out)
+                        except OSError:
+                            pass
+                        continue
                     extract_file(out, rel + ' ▸ ' + name, results, failures, depth + 1)
         except zipfile.BadZipFile:
             failures.append({'file': rel, 'reason': '손상된 압축 파일'})
@@ -616,6 +642,9 @@ def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=Fals
         except Exception:
             pass
     for root, dirs, files in os.walk(walk_root, onerror=walk_err):
+        for d in list(dirs):   # 폴더 바로가기(링크)는 따라가지 않고 못 읽음에 남긴다(폴더 밖 자료를 끌어오거나 말없이 빠지던 것)
+            if os.path.islink(os.path.join(root, d)):
+                failures.append({'file': clean_text(os.path.relpath(os.path.join(root, d), walk_root)), 'reason': '폴더 바로가기(링크)는 읽지 않음 · 원래 폴더를 직접 고를 것', 'skip': True}); dirs.remove(d)
         dirs[:] = sorted(d for d in dirs if keep_dir(root, d))
         if skip_root_files and os.path.normcase(os.path.abspath(root)) == os.path.normcase(os.path.abspath(walk_root)):
             continue   # 프로그램 폴더를 골랐을 때: 최상위의 README·설정 파일은 업무 문서가 아니다
@@ -624,6 +653,9 @@ def extract_folder(folder, skip_dirs=None, skip_names=None, skip_root_files=Fals
             rel = os.path.relpath(p, walk_root)
             if skip_names and re.search(skip_names, name):
                 failures.append({'file': clean_text(rel), 'reason': '돌다리가 만든 파일과 이름이 같아 읽지 않음(업무 문서라면 이름을 바꿔 다시 읽기)', 'skip': True})
+                continue
+            if os.path.islink(p):   # 파일 바로가기(링크)는 폴더 밖 파일을 끌어오므로 읽지 않는다
+                failures.append({'file': clean_text(rel), 'reason': '바로가기(링크)는 읽지 않음 · 원래 파일을 폴더에 둘 것', 'skip': True})
                 continue
             done += 1
             if progress and (done % 5 == 0 or done == total):

@@ -45,7 +45,13 @@ SECRET_KEY = r'(?:비밀\s*번호|비번|패스\s*워드|password|passwd|(?<![A-
 SECRET_VAL = re.compile('(' + SECRET_KEY + r'[^A-Za-z0-9\n]{0,15}?)(?!20\d{2}\s*[.\-/년]|0\d{1,2}-\d{3,4}-\d)([A-Za-z0-9!@#$%^&*_+=.~\-]{4,})(?![년월일])', re.I)   # 열쇠 말 뒤 15자 안의 값(「비밀번호는 매월 바뀜(현재 Gaon#77)」)
 SECRET_ID = re.compile(r'((?:아이디|(?<![A-Za-z])ID(?![A-Za-z])|계정|로그인|접속\s*(?:아이디|ID|계정))(?:\s*정보)?(?:은|는|이|가)?(?:\s*[:：=]\s*|\s+))([A-Za-z][A-Za-z0-9_.@\-]{2,})(\s*/\s*[^\s,)]+)?', re.I)   # 「계정.txt」의 확장자는 값이 아님
 SECRET_AFTER = re.compile(r'((?:→|->|⇒|=>|신규|변경\s*후|새로|현재|기존|에서)\s*[:：]?\s*)(?!20\d{2}\s*[.\-/년]|0\d{1,2}-\d{3,4}-\d)([A-Za-z0-9!@#$%^&*_+=.~\-]{4,})(?![년월일])')   # 「기존 ●●● → 신규 Gaon2026!」처럼 한 줄에 값이 둘일 때 뒤 값(열쇠 말이 든 줄에서만)
-RRN = re.compile(r'(?<![\d\-])(\d{6})\s*-\s*([1-8]\d{6})(?![\d\-])')   # 주민등록·외국인등록번호: 뒷자리를 가린다(손해배상·사고조사·요금후납 문서에 흔함)
+RRN = re.compile(r'(?<![\d\-])(\d{6})\s*-?\s*([1-8]\d{6})(?![\d\-])')   # 주민등록·외국인등록번호: 뒷자리를 가린다(하이픈 없는 13자리·띄어 쓴 꼴 포함)
+CARD = re.compile(r'(?<!\d)(\d{4})[\- ](\d{4})[\- ](\d{4})[\- ](\d{4})(?!\d)')   # 카드번호
+ACCT = re.compile(r'((?:계좌|예금주|입금|송금|이체)[^\n]{0,15}?)(\d{2,6}-\d{2,6}(?:-\d{2,6}){1,2})')   # 계좌번호(열쇠 말 뒤)
+PASSPORT = re.compile(r'((?:여권)[^\n]{0,12}?)([A-Z]{1,2}\d{7,8})(?![A-Za-z0-9])')
+LICENSE = re.compile(r'(?<!\d)\d{2}-\d{2}-\d{6}-\d{2}(?!\d)')   # 운전면허번호
+BIRTH = re.compile(r'((?:생년월일|생일)\s*[:：]?\s*)(\d{4}\s*[.\-/년]\s*\d{1,2}\s*[.\-/월]\s*\d{1,2}\s*일?|\d{6,8})')
+MOBILE = re.compile(r'(?<!\d)(01[016789])-?(\d{3,4})-?(\d{4})(?!\d)')   # 발췌·할 일 줄의 휴대전화는 가운데를 가린다(번호 자체는 4절 연락처에서 넣기·빼기)
 ID_LIKE = re.compile(r'(?<![A-Za-z0-9_])(?=[A-Za-z0-9_.@\-]*[0-9_])[A-Za-z][A-Za-z0-9_.@\-]{4,}(?![A-Za-z0-9_])')   # 계정 목록 표의 아이디 칸(영문+숫자·밑줄)
 DATE_FOLDER = re.compile(r'^(\d{2,4}([.\-_ ]\d{1,2}){0,2}\s*(월|년|년도)?|\d{1,2}\s*월|다운로드|downloads?|바탕\s*화면|desktop|새\s*폴더|new folder|임시|temp|tmp|백업|backup|문서|documents?)$', re.I)
 YY_DATE = re.compile(r"[’'‘`]\s?(\d{2})\.\s?(\d{1,2})\.\s?(\d{1,2})")
@@ -58,8 +64,13 @@ NOT_PENDING = re.compile(r'없음|없다|없습니다|완료|받음|받았|종�
 
 
 def mask_secret(s):
-    """비밀번호·아이디 값과 주민등록번호를 가린다(줄 자체는 남겨야 할 때)."""
+    """비밀번호·아이디 값과 주민등록·카드·계좌·여권·면허번호·생년월일을 가린다(줄 자체는 남겨야 할 때)."""
     s = RRN.sub(lambda m: m.group(1) + '-●●●●●●●', str(s or ''))
+    s = CARD.sub(lambda m: m.group(1) + '-●●●●-●●●●-' + m.group(4), s)
+    s = ACCT.sub(lambda m: m.group(1) + '●●●', s)
+    s = PASSPORT.sub(lambda m: m.group(1) + '●●●', s)
+    s = LICENSE.sub('●●●', s)
+    s = BIRTH.sub(lambda m: m.group(1) + '●●●', s)
     s = SECRET_VAL.sub(lambda m: m.group(1) + '●●●', s)
     if re.search(SECRET_KEY, s, re.I):
         s = SECRET_AFTER.sub(lambda m: m.group(1) + '●●●', s)
@@ -100,6 +111,11 @@ def area_by_tag(line, areas):
         if i >= 0 and (pos is None or i < pos):
             best, pos = a['name'], i
     return best
+
+
+def mask_mobile(s):
+    """발췌·할 일 줄의 휴대전화 가운데 자리 가림(010-****-5678). 연락처 절의 번호는 사람이 넣기·빼기로 정한다."""
+    return MOBILE.sub(lambda m: m.group(1) + '-****-' + m.group(3), str(s or ''))
 
 
 def cut(s, n):
@@ -279,13 +295,14 @@ def due_dates(text, base, base_src=''):
                     continue
                 spans.append((m.start(), m.end()))
                 g = m.groups()
+                past = bool(re.search(r'하였|했습|했다|했음|완료|마감됨|제출함|받음|받았|지남|지났|끝남', s))   # 「9월 30일까지 제출하였다」는 지난 기한(이듬해로 넘기지 않음)
                 if len(g) == 3:
                     y, mo, d = g
                     if y is None:
-                        y = by + (1 if int(mo) < bm - 1 else 0)
+                        y = by + (1 if int(mo) < bm - 1 and not past else 0)
                 else:
                     mo, d = g
-                    y = by + (1 if int(mo) < bm - 1 else 0)
+                    y = by + (1 if int(mo) < bm - 1 and not past else 0)
                 dt = iso(y, mo, d)
                 if dt and dt not in seen:
                     seen.add(dt)
@@ -629,6 +646,13 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
     if today is None:
         today, base_why = base_date(files)
     docs = plan_docs(files, areas, months, model_scope, today=today)
+    base_iso = today.isoformat() if hasattr(today, 'isoformat') else str(today or '')[:10]
+    for d in docs:   # 인계 일자보다 뒤 날짜의 문서(기준일을 과거로 잡았거나 날짜가 잘못 읽힘): 현안·인수 직후 할 일로 올리지 않고 「확인」 표시만
+        if base_iso and d.get('date') and d['date'][:10] > base_iso and d.get('date_src') not in ('수정일', '연도만', ''):
+            d['future'] = True
+            if d['kind3'] == '현안':
+                d['kind3'] = '반복' if d.get('recur') else '문서'
+                d['to_model'] = False
     if manual is None:
         manual = find_manual(files)
     nos, lines = (set(), [])
@@ -666,7 +690,7 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
         n += 1
         it = {'id': n, 'file': d['file'], 'kind': d['kind'], 'cls': d['cls'], 'date': d['date'], 'date_src': d.get('date_src', ''), 'docno': d['docno'], 'title': d['title'], 'area': d['area'],
               'due': d['due'], 'due_next': d['due_next'], 'contacts': d['contacts'], 'recur': d['recur'], 'attachments': d['attachments'], 'kind3': d['kind3'],
-              'reflected': reflected(d, nos, line_grams) if manual is not None else '', 'hist': d.get('hist', False), 'is_status': d.get('is_status', False), 'summary': '', 'todo': '', 'owner': '', 'model_status': '',
+              'reflected': reflected(d, nos, line_grams) if manual is not None else '', 'hist': d.get('hist', False), 'is_status': d.get('is_status', False), 'summary': '', 'todo': '', 'owner': '', 'model_status': '', 'future': bool(d.get('future')),
               'src': '규칙', 'keep': True, 'decided': False, 'status': '진행', 'next': '', 'note': '', 'seen': False, 'quote': ''}
         if manual is not None and it['reflected'] and d['kind3'] == '연혁':
             it['hist'] = True
@@ -682,13 +706,15 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                 pri = lambda l: (0 if re.search(r'후임|지시|해야|결정|미결', l) else 1 if (ISSUE.search(l) or MIGYEOL.search(l)) else 2)
                 qs = sorted(cand_l, key=pri)[:3]   # 후임자·지시·해야·미결 줄을 먼저, 3줄까지
                 it['quote'] = ' / '.join(mask_secret(l if len(l) <= 110 else l[:108] + '…') for l in sorted(qs, key=cand_l.index))
+                if not it['quote'] and d.get('due'):   # 기한만으로 현안이 된 문서: 기한을 뽑은 줄을 근거로(요지·할 일·원문이 모두 비던 것)
+                    it['quote'] = ' / '.join(mask_secret(cut(x.get('line', ''), 110)) for x in d['due'][:2] if x.get('line'))
                 if d['kind3'] == '현안':
                     mig = [l for l in cand_l if MIGYEOL.search(l) and not NOT_PENDING.search(l)]
                     if mig:   # 「결론 못 냄」「회신 부탁」「아직 안 옴」: 미결로 제안(전임자가 확인), 기다리는 것을 다음 칸에
-                        it['status'] = '미결'; it['next'] = mask_secret(cut(mig[0], 110)); it['status_by'] = '규칙'
+                        it['status'] = '미결'; it['next'] = mask_secret(cut(BULLET.sub('', mig[0]).strip(), 110)); it['status_by'] = '규칙'; it['next_src'] = '원문'
                     td = [l for l in cand_l if TODO_LINE.search(l) and (re.search(r'후임|지시|해야|할\s*것', l) or DUE_PATS[2].search(l) or DUE_PATS[1].search(l))]
                     if td:
-                        it['todo'] = mask_secret(cut(td[0], 110)); it['todo_src'] = '원문'
+                        it['todo'] = mask_secret(cut(BULLET.sub('', td[0]).strip(), 110)); it['todo_src'] = '원문'
                         td_due = [x['date'] for x in d['due'] if x.get('line') and core.norm(x['line']) in core.norm(td[0])]   # 할 일 줄의 「9월 11일까지」가 있으면 그 날이 기한(기간 끝 날짜보다)
                         if td_due and it['due_next'] and it['due_next'] not in td_due:
                             it['due_next'] = td_due[0]
@@ -720,8 +746,11 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                             continue
                         if not re.search(r'(?<!\d)%d\s*\.?\s*월?\s*%d\s*일|(?<!\d)%d\s*\.\s*%d\s*\.|-%02d-%02d|(?<!\d)%d/%d(?!\d)' % (mo, dd, mo, dd, mo, dd, mo, dd), text):
                             mt = ''; break
-                    if mt:   # 모델이 할 일을 비우면 규칙이 원문에서 찾은 할 일을 그대로 둔다
-                        it['todo'] = mt; it['todo_src'] = '모델'
+                    if mt:   # 모델이 할 일을 비우면 규칙이 원문에서 찾은 할 일을 그대로 둔다. 규칙 할 일이 있으면 모델 할 일은 「AI 제안」으로 따로(원문 할 일을 일반 문장이 덮던 것)
+                        if it.get('todo') and it.get('todo_src') == '원문':
+                            it['todo_ai'] = mt
+                        else:
+                            it['todo'] = mt; it['todo_src'] = '모델'
                     due = str(obj.get('기한') or '').strip()[:10]
                     if due and any(x['date'] == due for x in d['due']):
                         it['due_next'] = due
@@ -871,9 +900,12 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
             n += 1
             items.append(dict(p, id=n, carried=True))
     for it in items:   # 비밀번호·아이디 값은 어느 칸에도 남기지 않는다(제목·할 일·요지·다음·발췌·담당·연락처 줄·기한 줄)
-        for k in ('title', 'todo', 'summary', 'next', 'quote', 'owner', 'note', 'question', 'answer'):
+        for k in ('title', 'todo', 'todo_ai', 'summary', 'next', 'quote', 'owner', 'note', 'question', 'answer'):
             if it.get(k):
                 it[k] = mask_secret(it[k])
+        for k in ('todo', 'todo_ai', 'summary', 'next', 'quote'):   # 발췌·할 일 줄의 휴대전화는 가운데를 가린다(연락처 절은 따로)
+            if it.get(k) and it.get(k + '_by') != '사람':
+                it[k] = mask_mobile(it[k])
         for c in it.get('contacts') or []:
             c['line'] = mask_secret(c.get('line', ''))
         for x in it.get('due') or []:

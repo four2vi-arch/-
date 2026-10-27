@@ -57,9 +57,11 @@ def dwhen(it, n=10):
 def todo_cell(it):
     """1-다·1-라의 「요지·할 일」 칸. 모델이 쓴 글은 (AI)로 표시하고, 규칙이 원문에서 그대로 가져온 근거 줄은 언제나 함께 둔다(요지가 있으면 원문이 사라지던 것)."""
     ai = it.get('src') == '모델'
+    todo_lab = '할 일: ' if it.get('todo_by') == '사람' else ('할 일(AI): ' if ai and it.get('todo_src') == '모델' else ('할 일(원문): ' if it.get('todo_src') == '원문' else '할 일: '))
+    next_lab = '다음: ' if it.get('status_by') == '사람' or it.get('next_src') != '원문' else '다음(원문): '
     lines = {'summary': (('요지(AI): ' if ai and it.get('summary_by') != '사람' else '요지: ') + it['summary']) if it.get('summary') else '',
-             'todo': (('할 일(AI): ' if ai and it.get('todo_src') == '모델' and it.get('todo_by') != '사람' else '할 일: ') + it['todo']) if it.get('todo') else '',
-             'next': ('다음: ' + it['next']) if it.get('next') else '',
+             'todo': (todo_lab + it['todo'] + ((' / 할 일(AI 제안): ' + it['todo_ai']) if it.get('todo_ai') and it.get('todo_by') != '사람' else '')) if it.get('todo') else '',
+             'next': (next_lab + it['next']) if it.get('next') else '',
              'quote': ('원문: ' + it['quote']) if it.get('quote') else '',
              'note': ('메모: ' + it['note']) if it.get('note') else ''}
     order = ['next', 'summary', 'todo', 'quote', 'note'] if (it.get('status') or '진행') == '미결' else ['summary', 'todo', 'next', 'quote', 'note']
@@ -85,11 +87,29 @@ def note_tail(it, sep='\n'):
     return (sep + sep.join(out)) if out else ''
 
 
+ISO = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
 def due_show(it):
     d = it.get('due_next') or ''
     if not d:
         return ''
+    if not ISO.match(d):   # 날짜로 읽지 못한 기한 글(「미정」)은 그대로 적고 「(지남)」 판정을 하지 않는다
+        return '기한\n%s\n(날짜 확인)' % d
     return '기한\n%s%s' % (d, '\n(지남)' if d < today_iso() else '')   # 날짜가 칸 안에서 중간에 끊기지 않게 줄을 나눈다
+
+
+def _bigrams(s):
+    s = re.sub(r'[\s\W_]+', '', str(s or ''))
+    return {s[i:i + 2] for i in range(len(s) - 1)}
+
+
+def same_task(a, b):
+    """두 반복 문장이 같은 일을 말하는지(짧은 쪽 2-gram의 60% 이상이 긴 쪽에 담김)."""
+    A, B = _bigrams(a), _bigrams(b)
+    if min(len(A), len(B)) < 4:
+        return False
+    return len(A & B) / min(len(A), len(B)) >= 0.6
 
 
 def kept_items(session):
@@ -255,7 +275,7 @@ def chapters(session):
     assets = session.get('assets') or {}
     info = session.get('info') or {}
     used = area_list(session, items)
-    issues = [it for it in items if it.get('kind3') == '현안']
+    issues = [it for it in items if it.get('kind3') == '현안' and not it.get('future')]
     recur = [it for it in items if it.get('kind3') == '반복' or (it.get('kind3') == '현안' and it.get('recur'))]
     n_und = sum(1 for it in items if undecided(it))
     n_bulk = sum(1 for it in items if it.get('bulk') and not undecided(it))
@@ -292,7 +312,7 @@ def chapters(session):
     out.append(('h2', '나. 주요 업무계획 및 진행사항'))
     base = str(info.get('base_date') or today_iso())
     soon_lim = (datetime.date.fromisoformat(base[:10]) - datetime.timedelta(days=14)).isoformat() if re.match(r'^\d{4}-\d{2}-\d{2}', base) else ''
-    soon = sorted([it for it in items if it.get('due_next') and it['due_next'] >= soon_lim and (it.get('status') or '진행') != '완료'], key=lambda it: it['due_next'])
+    soon = sorted([it for it in items if it.get('due_next') and ISO.match(it['due_next']) and it['due_next'] >= soon_lim and (it.get('status') or '진행') != '완료' and not it.get('future')], key=lambda it: it['due_next'])
     out.append(('h3', '인수 직후 할 일(기한 순)'))
     if soon:
         out.append(T(['기한', '업무', '할 일·문서', '상태'], [[it['due_next'] + (' (지남)' if it['due_next'] < today_iso() else ''), it.get('area') or '기타', ((it.get('todo') or it.get('next') or '') + '\n' if (it.get('todo') or it.get('next')) else '') + it.get('title', '') + und(it), STATUS_LABEL.get(it.get('status') or '진행', '진행 중')] for it in soon[:20]] + ([['', '', '외 %d건(1-다 현안 표 참고)' % (len(soon) - 20), '']] if len(soon) > 20 else []), [15, 15, 55, 15]))
@@ -301,11 +321,24 @@ def chapters(session):
     out.append(('h3', '해마다·매월·매주 되풀이되는 업무'))
     out.append(('p', '같은 제목으로 해마다·매월 오는 문서(지난 3년 파일 날짜)와 본문의 「매월 ○일까지」「매주 ○요일」「익월」 줄, 옛 인수인계서·연간 일정표의 「○월 ○일까지」 줄에서 찾음.'))
     if recur:
-        rows = []
+        groups = []   # 같은 업무·같은 시기에 같은 일을 말하는 줄(공문·보고서·매뉴얼에 되풀이된 문장)은 한 줄로 묶고 근거 문서를 모은다
         for it in sorted(recur, key=lambda it: (0 if (it.get('recur') or {}).get('cycle') == '매월' else 1, (it.get('recur') or {}).get('month') or month_of(it.get('date') or ''), it.get('date') or '')):
-            r = it.get('recur') or {}
-            ev = (' · %s년' % '·'.join(r['years'])) if r.get('years') and r.get('cycle') != '매월' else ((' · %d개월 %d회' % (len(r['months']), r['n'])) if r.get('months') else '')
-            rows.append([cycle_label(it), it.get('area') or '기타', (it.get('todo') or it.get('summary') or (('원문: ' + it['quote']) if it.get('quote') else '') or '(할 일 적지 않음)') + ((' / 메모: ' + it['note']) if it.get('note') else ''), '%s%s%s' % (it.get('title', '') if it.get('src') != '규칙(반복 문장)' else fname(it), ev, und(it))])
+            text = it.get('todo') or it.get('summary') or it.get('quote') or ''
+            g = next((g for g in groups if g['label'] == cycle_label(it) and g['area'] == (it.get('area') or '기타') and same_task(g['text'], text)), None)
+            if g is None:
+                groups.append({'label': cycle_label(it), 'area': it.get('area') or '기타', 'text': text, 'items': [it]})
+            else:
+                g['items'].append(it)
+        rows = []
+        for g in groups:
+            it = g['items'][0]
+            todo = (it.get('todo') or it.get('summary') or (('원문: ' + it['quote']) if it.get('quote') else '') or '(할 일 적지 않음)') + ''.join((' / 메모: ' + x['note']) for x in g['items'] if x.get('note'))
+            docs_cell = []
+            for x in g['items']:
+                r = x.get('recur') or {}
+                ev = (' · %s년' % '·'.join(r['years'])) if r.get('years') and r.get('cycle') != '매월' else ((' · %d개월 %d회' % (len(r['months']), r['n'])) if r.get('months') else '')
+                docs_cell.append('%s%s%s%s' % (x.get('title', '') if x.get('src') != '규칙(반복 문장)' else fname(x), ev, und(x), ' (인계 일자 이후 날짜 · 확인)' if x.get('future') else ''))
+            rows.append([g['label'], g['area'], (('(같은 일 %d건) ' % len(g['items'])) if len(g['items']) > 1 else '') + todo, '\n'.join(docs_cell)])
         out.append(T(['시기', '업무', '할 일', '근거 문서'], rows, [9, 16, 40, 35]))
     else:
         out.append(('p', '(없음)'))
@@ -330,15 +363,15 @@ def chapters(session):
         out.append(('p', '(없음)'))
     # 2. 관련 문서 현황
     out.append(('h1', '2. 관련 문서 현황'))
-    in_sec1 = [it for it in items if it.get('kind3') != '문서']
     items2 = [it for it in items if it.get('kind3') == '문서']
+    in_sec1 = [it for it in items if it not in items2]
     n_direct = sum(1 for it in items2 if it.get('src') == '직접 입력')
     out.append(('p', '1절에 실은 문서(현안·반복·연혁·현황) %d건을 뺀 그 밖의 문서 %d건(최근 %d개월%s). 오래된 문서 %d건과 확인 전 문서는 붙임 1. 날짜에 「(수정일)」이 붙은 것은 문서에 날짜가 없어 파일 수정일로 대신한 것.%s' % (len(in_sec1), len(items2), int(session.get('months') or 12), (', 전임자가 직접 적은 %d건 포함' % n_direct) if n_direct else '', info.get('n_old', 0),
                      (' 누적 매뉴얼 「%s」에 아직 반영되지 않은 공문은 「★ 미반영」.' % fname({'file': info['manual']})) if info.get('manual') else '')))
     for a in area_order(session, items2):
         r = sorted([it for it in items2 if (it.get('area') or '기타') == a], key=lambda it: it.get('date') or '', reverse=True)
         out.append(('h3', '%s (%d건)' % (a, len(r))))
-        out.append(T(['날짜', '문서(파일)', '종류', '구분', '매뉴얼'], [[dwhen(it), '%s%s%s\n%s%s' % (it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', und(it), fname(it), note_tail(it)), it.get('cls', ''), {'현안': '현안', '반복': '반복', '연혁': '연혁', '현황': '현황 자료'}.get(it.get('kind3'), ''), ('★ 미반영' if (info.get('manual') and it.get('cls') == '공문' and not it.get('reflected')) else ('반영' if it.get('reflected') else ''))] for it in r], [15, 52, 11, 11, 11]))
+        out.append(T(['날짜', '문서(파일)', '종류', '구분', '매뉴얼'], [[dwhen(it) + (' (인계 일자 이후 날짜 · 확인)' if it.get('future') else ''), '%s%s%s\n%s%s' % (it.get('title', ''), (' (%s)' % it['docno']) if it.get('docno') else '', und(it), fname(it), note_tail(it)), it.get('cls', ''), {'현안': '현안', '반복': '반복', '연혁': '연혁', '현황': '현황 자료'}.get(it.get('kind3'), ''), ('★ 미반영' if (info.get('manual') and it.get('cls') == '공문' and not it.get('reflected')) else ('반영' if it.get('reflected') else ''))] for it in r], [15, 52, 11, 11, 11]))
     # 3. 주요 물품 및 예산 등
     out.append(('h1', '3. 주요 물품 및 예산 등'))
     AS = [('acct', '계정·비밀번호 보관처(비밀번호 자체는 적지 않음)'), ('goods', '열쇠·물품·비품'), ('budget', '예산·미지급·정산'), ('etc', '그 밖의 당부')]
@@ -381,7 +414,7 @@ def chapters(session):
         rest = [it for it in pend_docs if not it.get('private')]
         out.append(('h3', '확인 전 문서 %d건(전임자가 넣기·버리기를 하지 않아 본문에 싣지 않음)' % len(pend_docs)))
         if rest:
-            out.append(('li', ' / '.join('%s(%s)' % (it.get('title', '')[:40], it.get('kind3', '')) for it in rest[:40]) + ((' / 외 %d건' % (len(rest) - 40)) if len(rest) > 40 else '')))
+            out.append(('li', ' / '.join('%s(%s%s)' % (it.get('title', '')[:40], it.get('kind3', ''), ' · 인계 일자 이후 날짜 · 확인' if it.get('future') else '') for it in rest[:40]) + ((' / 외 %d건' % (len(rest) - 40)) if len(rest) > 40 else '')))
         if priv:
             out.append(('li', '개인 문서로 보이는 %d건(멘토 면담·교육과제 등)은 제목도 싣지 않음' % len(priv)))
     other = info.get('docs_other') or []

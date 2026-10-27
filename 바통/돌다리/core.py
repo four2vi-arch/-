@@ -33,8 +33,9 @@ def allow_model_host(host):
         h = (urllib.parse.urlsplit(h).hostname or '').lower()
     except Exception:
         h = ''
-    if h:
-        ALLOWED_MODEL_HOSTS.add(h)
+    if not h or '*' in h or not re.match(r'^[a-z0-9.\-:]+$', h):   # 「*」·빈 값·이상한 글자는 허용 목록에 넣지 않는다
+        return ''
+    ALLOWED_MODEL_HOSTS.add(h)
     return h
 
 
@@ -46,10 +47,11 @@ def remote_allowed():
 def is_local_url(url):
     """모델 주소가 허용 목록(기본: 이 PC 127.0.0.1·localhost·::1)에 든 곳인지. 호출처가 많아 이름은 그대로 둔다."""
     try:
-        h = (urllib.parse.urlsplit(url).hostname or '').lower()
+        u = urllib.parse.urlsplit(url)
+        h = (u.hostname or '').lower()
     except Exception:
         return False
-    return h in ALLOWED_MODEL_HOSTS
+    return u.scheme in ('http', 'https') and h in ALLOWED_MODEL_HOSTS
 
 
 TYPES = ['월별 할 일', '협의할 사람', '진행 중 현안']
@@ -221,9 +223,12 @@ def call_model(url, model, key, text, timeout=600, json_mode=True, system=None):
     req = urllib.request.Request(url, data=json.dumps(body).encode('utf-8'), headers=headers)
     try:
         with NOPROXY.open(req, timeout=timeout) as r:
-            j = json.loads(r.read().decode('utf-8'))
+            raw = r.read(4_000_000)   # 응답 크기 상한(잘못 설정된 서버·프록시가 큰 본문을 돌려줘도 메모리를 다 쓰지 않게)
+            if len(raw) >= 4_000_000:
+                raise ValueError('모델 응답이 너무 큼(4MB 넘음)')
+            j = json.loads(raw.decode('utf-8'))
     except urllib.error.HTTPError as e:
-        if json_mode and e.code >= 500:  # 젬마 2차에서 HTTP 500 2건: JSON 강제 없이 한 번 더
+        if json_mode and (e.code >= 500 or e.code in (400, 404, 415, 422)):  # 젬마 2차에서 HTTP 500 2건, JSON 모드를 모르는 OpenAI 호환 서버(400·415·422): JSON 강제 없이 한 번 더
             return call_model(url, model, key, text, timeout, json_mode=False, system=system)
         raise
     c = (j.get('choices') or [{}])[0].get('message', {}).get('content') or j.get('message', {}).get('content') or ''

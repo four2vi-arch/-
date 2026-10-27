@@ -32,6 +32,8 @@ for slot, text in zip(slots, texts):
     i = html.index(slot)
     html = html[:i] + text + html[i + len(slot):]
 html = html.replace("@@EXPECTED@@", expected)
+data_sha = ",".join(sha(read(p)) for p in ("data/zipdb.b64", "data/zipextra.b64"))   # 내장 우편번호 DB 블록 2개의 지문(검증기가 crypto.subtle로 대조)
+html = html.replace("@@EXPECTED_DATA@@", data_sha)
 hashes = []
 for m in re.finditer(r"<script([^>]*)>", html):
     if "type=" in m.group(1):

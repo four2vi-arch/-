@@ -99,11 +99,23 @@ def log(msg):
     _LOGQ.put(msg)
 
 
+_SAVE_LOCK = threading.Lock()
+
+
 def save_session():
     keep = {k: v for k, v in STATE.items() if k not in ('running', 'stop', 'log', 'reloading', 'extracting', 'extract_error', 'key')}   # 모델 키는 메모리에만(세션 파일에 평문으로 남지 않게)
     try:
-        with open(os.path.join(WORK, '세션.json'), 'w', encoding='utf-8', errors='replace') as f:
-            json.dump(keep, f, ensure_ascii=False, indent=1)
+        with _SAVE_LOCK:
+            data = json.dumps(keep, ensure_ascii=False, indent=1)   # 먼저 글로 만든 뒤 임시 파일에 쓰고 바꿔 넣는다(쓰는 도중 창을 닫아도 세션이 잘리지 않게)
+            p = os.path.join(WORK, '세션.json'); tmp = p + '.tmp'
+            with open(tmp, 'w', encoding='utf-8', errors='replace') as f:
+                f.write(data); f.flush(); os.fsync(f.fileno())
+            if os.path.exists(p):
+                try:
+                    os.replace(p, os.path.join(WORK, '세션_이전.json'))   # 바로 앞 판 하나는 남긴다
+                except OSError:
+                    pass
+            os.replace(tmp, p)
     except Exception as e:
         log('세션 저장 실패(화면은 계속 됨): %s' % str(e)[:120])
 
@@ -145,7 +157,24 @@ def load_session():
                 threading.Thread(target=_reload_units, daemon=True).start()   # 화면은 바로 열고, 글자 되읽기는 뒤에서(큰 폴더는 몇 분 걸림)
             log('이전 작업을 이어서 엽니다: ' + STATE['folder'])
         except Exception as e:
+            kept = '세션_손상_%s.json' % datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            try:
+                os.replace(p, os.path.join(WORK, kept))   # 깨진 파일은 덮어쓰지 않고 보관(복구할 수 있게)
+            except OSError:
+                kept = ''
+            prev = os.path.join(WORK, '세션_이전.json')
+            if os.path.exists(prev):
+                try:
+                    with open(prev, encoding='utf-8') as f:
+                        STATE.update(json.load(f))
+                    STATE['running'] = False; STATE['stop'] = False
+                    log('세션 파일이 깨져 바로 앞 판(세션_이전.json)으로 엽니다. 깨진 파일은 %s' % (kept or '(보관 실패)'))
+                    STATE['warn'] = '이전 세션 파일이 깨져 바로 앞에 저장된 판으로 열었습니다. 마지막에 고친 것이 빠졌을 수 있으니 1-다·3절을 한 번 훑어보세요.' + ((' 깨진 파일은 작업 폴더의 %s에 두었습니다.' % kept) if kept else '')
+                    return
+                except Exception:
+                    pass
             log('세션 파일을 읽지 못해 새로 시작합니다: %s' % e)
+            STATE['warn'] = '이전 세션 파일을 읽지 못해 새로 시작합니다.' + ((' 읽지 못한 파일은 작업 폴더의 %s에 두었습니다(담당자가 복구할 수 있음).' % kept) if kept else '')
 
 
 def year_of(f):
@@ -160,6 +189,12 @@ def backup_draft():
         with open(os.path.join(WORK, name), 'w', encoding='utf-8') as f:
             json.dump({'folder': STATE['folder'], 'model': STATE['model'], 'items': STATE['items'], 'dropped': STATE['dropped']}, f, ensure_ascii=False, indent=1)
         log('이전 초안 %d항목을 %s에 남기고 폴더를 다시 읽습니다' % (len(STATE['items']), name))
+        try:   # 백업은 최근 5개만(작업 폴더에 연락처가 든 판이 끝없이 쌓이지 않게)
+            olds = sorted(f for f in os.listdir(WORK) if f.startswith('초안_백업_') and f.endswith('.json'))
+            for f in olds[:-5]:
+                os.remove(os.path.join(WORK, f))
+        except OSError:
+            pass
 
 
 def recheck_originals():
@@ -428,6 +463,8 @@ class H(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Security-Policy', "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'")
         self.send_header('X-Frame-Options', 'DENY')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Referrer-Policy', 'no-referrer')
         for k, v in (extra or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -435,7 +472,19 @@ class H(BaseHTTPRequestHandler):
 
     def _ok_host(self):
         h = (self.headers.get('Host') or '').split(':')[0]
-        return h in ('127.0.0.1', 'localhost')
+        if h not in ('127.0.0.1', 'localhost'):
+            return False
+        o = self.headers.get('Origin') or ''
+        if o:   # 브라우저에 열린 다른 사이트가 보낸 요청(CSRF): Origin이 이 PC가 아니면 거절
+            try:
+                oh = (urllib.parse.urlsplit(o).hostname or '').lower()
+            except Exception:
+                oh = ''
+            if oh not in ('127.0.0.1', 'localhost'):
+                return False
+        if (self.headers.get('Sec-Fetch-Site') or '').lower() == 'cross-site':
+            return False
+        return True
 
     def do_GET(self):
         try:
@@ -481,6 +530,9 @@ class H(BaseHTTPRequestHandler):
         if p.path == '/api/items':
             with LOCK:
                 return self._send(200, {'items': STATE['items'], 'dropped': STATE['dropped']})
+        if p.path == '/api/folder_ok':   # 읽기 전에 폴더가 있는지만(없는 폴더에 「새 인계서로 시작」 확인 창부터 뜨던 것)
+            q = urllib.parse.parse_qs(p.query).get('path', [''])[0].strip().strip('"')
+            return self._send(200, {'ok': bool(q) and os.path.isdir(os.path.abspath(os.path.expanduser(q)))})
         if p.path == '/api/doc':   # 원문 보기: 앞부분과 기한·미결 같은 말이 든 줄(이 PC 안에서만)
             name = urllib.parse.parse_qs(p.query).get('file', [''])[0]
             units = _units.get(name)
@@ -545,19 +597,27 @@ class H(BaseHTTPRequestHandler):
     def _post(self):
         if not self._ok_host():
             return self._send(403, {'error': 'localhost만'})
-        n = int(self.headers.get('Content-Length') or 0)
+        try:
+            n = int(self.headers.get('Content-Length') or 0)
+        except ValueError:
+            n = 0
+        if n > 32 * 1024 * 1024:
+            return self._send(413, {'error': '요청이 너무 큽니다'})
         try:
             body = json.loads(self.rfile.read(n).decode('utf-8') or '{}')
         except Exception:
+            body = {}
+        if not isinstance(body, dict):
             body = {}
         p = urllib.parse.urlsplit(self.path).path
         if p == '/api/browse':
             return self._send(200, {'folder': browse_folder()})
         if p == '/api/extract':
             global _extracting
-            folder = os.path.abspath(os.path.expanduser(str(body.get('folder', '')).strip().strip('"')))
+            raw_folder = str(body.get('folder', '')).strip().strip('"')
+            folder = os.path.abspath(os.path.expanduser(raw_folder))
             if not os.path.isdir(folder):
-                return self._send(400, {'error': '폴더를 찾지 못했습니다: ' + folder})
+                return self._send(400, {'error': '폴더를 찾지 못했습니다: %s (주소를 다시 확인하세요)' % raw_folder[:200]})
             if STATE['running']:
                 return self._send(409, {'error': '초안을 만드는 중입니다'})
             if _extracting:
@@ -578,6 +638,9 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True, 'started': True})
             return self._send(200, {'ok': True})
         if p == '/api/settings':
+            bad = check_settings(body)   # 값 꼴 검사(「months: abc」가 저장돼 이후 읽기·내보내기가 500으로 막히던 것)
+            if bad:
+                return self._send(400, {'error': bad})
             with LOCK:
                 for k in ('model', 'key', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path', 'ocr', 'ocr_pages', 'ocr_images', 'areas_mode', 'contact_excl'):
                     if k in body:
@@ -645,6 +708,14 @@ class H(BaseHTTPRequestHandler):
                     for k in ('due_next', 'date'):   # 「2026.11.3」「2026. 11. 3.」도 ISO로(정렬·「(지남)」 판정이 어긋나던 것)
                         if k in ch:
                             ch[k] = iso_date(ch[k])
+                    if 'status' in ch and ch['status'] not in ('진행', '미결', '완료'):
+                        ch.pop('status')
+                    for k in ('next', 'note', 'question', 'answer', 'title', 'todo', 'summary', 'when', 'area', 'due_next', 'date'):
+                        if k in ch:
+                            ch[k] = str(ch[k] if ch[k] is not None else '')[:4000]   # 글 칸은 글만(사전·목록이 들어오면 내보내기가 깨지던 것)
+                    for k in ('keep', 'decided', 'seen'):
+                        if k in ch:
+                            ch[k] = bool(ch[k])
                     for k in ('keep', 'decided', 'status', 'next', 'note', 'seen', 'question', 'answer'):
                         if k in ch:
                             it[k] = ch[k]
@@ -711,6 +782,60 @@ class H(BaseHTTPRequestHandler):
             log('내보내기: ' + ', '.join(STATE['exports']))
             return self._send(200, {'ok': True, 'files': STATE['exports'], 'work': WORK})
         return self._send(404, {'error': '없는 주소'})
+
+
+def norm_date(v):
+    """인계 일자: 「2026-03-02」「2026.3.2」「2026. 3. 2.」「20260302」「3월 2일」을 ISO로. 못 읽으면 None."""
+    s = str(v or '').strip()
+    if not s:
+        return ''
+    m = re.match(r'^(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*일?\.?\s*$', s) or re.match(r'^(20\d{2})(\d{2})(\d{2})$', s)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    else:
+        m = re.match(r'^(\d{1,2})\s*[.월/\-]\s*(\d{1,2})\s*일?\.?\s*$', s)
+        if not m:
+            return None
+        y, mo, d = datetime.date.today().year, int(m.group(1)), int(m.group(2))
+    try:
+        return datetime.date(y, mo, d).isoformat()
+    except ValueError:
+        return None
+
+
+def check_settings(body):
+    """설정 값의 꼴을 본다. 틀리면 그 까닭(화면에 그대로 보임), 맞으면 ''. 고칠 수 있는 값은 고쳐 넣는다(인계 일자 → ISO)."""
+    if 'months' in body:
+        try:
+            body['months'] = int(body['months'])
+        except (TypeError, ValueError):
+            return '기간은 숫자(개월)여야 합니다'
+        if not 1 <= body['months'] <= 120:
+            return '기간은 1~120개월 사이여야 합니다'
+    if 'ocr_pages' in body:
+        try:
+            body['ocr_pages'] = int(body['ocr_pages'])
+        except (TypeError, ValueError):
+            return 'OCR 쪽수는 숫자여야 합니다'
+        if not 1 <= body['ocr_pages'] <= 30:
+            return 'OCR 쪽수는 1~30 사이여야 합니다'
+    for k, n in (('model', 200), ('url', 500), ('key', 500), ('title', 200), ('handover_from', 100), ('handover_to', 100), ('witness', 100), ('org', 200), ('manual_path', 1000), ('areas_text', 20000), ('ocr', 20), ('model_scope', 20), ('areas_mode', 20)):
+        if k in body:
+            if not isinstance(body[k], str):
+                return '「%s」 값은 글이어야 합니다' % k
+            body[k] = body[k][:n]
+    if 'handover_date' in body:
+        d = norm_date(body['handover_date'])
+        if d is None:
+            return '인계 일자를 읽지 못했습니다. 2026-03-02처럼 적어 주세요(「2026.3.2」「3월 2일」도 됩니다)'
+        body['handover_date'] = d
+    for k in ('overview', 'assets'):
+        if k in body and not isinstance(body[k], dict):
+            return '「%s」 값의 꼴이 맞지 않습니다' % k
+    for k in ('keyfiles', 'contact_excl'):
+        if k in body and not isinstance(body[k], list):
+            return '「%s」 값의 꼴이 맞지 않습니다' % k
+    return ''
 
 
 def ref_date():

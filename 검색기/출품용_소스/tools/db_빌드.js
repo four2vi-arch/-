@@ -23,8 +23,8 @@ function decode(buf) {   // UTF-8이 아니면(옛 자료) EUC-KR
 function classify(name, buf) {   // ui.js buildDbFromFiles와 같은 기준
   const head = decode(buf.subarray(0, 600)).split('\n')[0];
   if (head.indexOf('범위종류') >= 0) return 'road';
+  if (head.indexOf('사서함명') >= 0) return 'pobox';   // 사서함 파일 머리글에 「시작주번지」가 있을 수 있어 먼저 본다
   if (head.indexOf('시작주번지') >= 0) return 'jibun';
-  if (head.indexOf('사서함명') >= 0) return 'pobox';
   if (head.indexOf('이동사유코드') >= 0) throw new Error(name + ': 변경분(변동분) DB입니다. 전체 구간 자료(별표 5)를 넣어 주세요.');
   if (head.indexOf('건물관리번호') >= 0) throw new Error(name + ': 지역별 주소 DB(별표 1~4)입니다. 구간 자료(별표 5)를 넣어 주세요.');
   return '';
@@ -62,6 +62,7 @@ function main() {
   const db = ZipDbBuild.build(src);
   console.log('만듦: 기준일 %s · 도로명 구간 %s · 지번 구간 %s · 사서함 %s · 시도 %d · 시군구 %d · %d초',
     db.date, db.stats.road.toLocaleString(), db.stats.jibun.toLocaleString(), db.stats.pobox.toLocaleString(), db.sido.length, db.sgg.length, Math.round((Date.now() - t0) / 1000));
+  if (!db.stats.road || !db.stats.jibun) throw new Error('구간이 0건입니다. 구분자(|)와 열 수(도로명 15열·지번 14열 이상), 머리글 이름을 확인하세요. 저장하지 않았습니다.');   // 빈 DB를 「주의」만 내고 저장하던 것
   if (db.stats.road < 1000 || db.stats.jibun < 1000) console.log('주의: 구간 수가 적습니다. 전국 자료가 맞는지 확인하세요(시험용 작은 파일이면 정상).');
   // 되읽기 확인: 만든 DB로 엔진을 띄워 첫 도로명 구간의 주소 하나를 찾아 본다
   let extra = null;

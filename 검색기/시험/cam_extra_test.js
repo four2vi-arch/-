@@ -1,6 +1,6 @@
 // 물어물어 v1.6 사진으로 읽기 · 직원 창과 예외(카메라 거부·없음) 시험
 // 사용: node cam_extra_test.js <출품본.html> <사진 폴더> <결과 폴더>
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('playwright');
 const fs = require('fs'); const path = require('path');
 const [HTML, DIR, OUT] = process.argv.slice(2);
 fs.mkdirSync(OUT, { recursive: true });
@@ -32,7 +32,7 @@ async function open(browser, mode) {
   return page;
 }
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--allow-file-access-from-files'] });
+  const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
   // 1. 직원 「주소 찾기」 → 사진으로 읽기
   let page = await open(browser, 'ok');
   await page.click('#btnFind'); await page.waitForSelector('#findDlg[open]');

@@ -152,20 +152,28 @@
     }
     if (g.pobox) {
       roadLines = a(g.pobox);
+      var pHead = (roadLines[0] || "").split("|").map(function (b1) { return b1.trim(); });
+      var pFind = function (re, not) { for (var k = 0; k < pHead.length; k++) { if (re.test(pHead[k]) && !(not && not.test(pHead[k]))) { return k; } } return -1; };
+      var pZip = pFind(/우편번호/), pSido = pFind(/^시도$|시도/), pSgg = pFind(/시군구/), pEup = pFind(/^읍면/), pName = pFind(/사서함명/);
+      var pFm = pFind(/시작/, /부/), pFs = pFind(/시작.*부|부.*시작/), pTm = pFind(/끝/, /부/), pTs = pFind(/끝.*부|부.*끝/);
+      if (pZip < 0 || pSido < 0 || pSgg < 0 || pName < 0 || pFm < 0) {   // 열을 자리로 짚다가 열 구성이 다른 파일에서 조용히 틀린 DB가 되던 것
+        throw new Error("사서함 파일의 머리글(우편번호·시도·시군구·사서함명·시작 번호)을 찾지 못했습니다.");
+      }
+      var pNeed = Math.max(pZip, pSido, pSgg, pName, pFm, pFs, pTm, pTs, pEup) + 1;
       for (i = 1; i < roadLines.length; i++) {
         h = roadLines[i].split("|");
-        if (h.length < 9 || !h[0]) {
+        if (h.length < pNeed || !h[pZip]) {
           continue;
         }
-        var x = sidoIndex.get(h[1]);
+        var x = sidoIndex.get(h[pSido]);
         if (x === undefined) {
-          x = sidoId(h[1]);
+          x = sidoId(h[pSido]);
         }
-        p = sggId(x, h[2]);
-        var y = b(h[5]);
-        var z = b(h[6]);
-        var a1 = h[7] !== "";
-        poboxRanges.push([p, c(h[4]), y, z, a1 ? b(h[7]) : y, a1 ? b(h[8]) : z, b(h[0]), c(h[3])]);
+        p = sggId(x, h[pSgg]);
+        var y = b(h[pFm]);
+        var z = pFs >= 0 ? b(h[pFs]) : 0;
+        var a1 = pTm >= 0 && h[pTm] !== "";
+        poboxRanges.push([p, c(h[pName]), y, z, a1 ? b(h[pTm]) : y, a1 && pTs >= 0 ? b(h[pTs]) : z, b(h[pZip]), pEup >= 0 ? c(h[pEup]) : ""]);
         stats.pobox++;
       }
     }

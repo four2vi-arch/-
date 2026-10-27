@@ -110,6 +110,15 @@ const oai = http.createServer((req, res) => {
     await page2.click('#btnKeyClear'); await sleep(800);
     ok('「키 지우기」로 지움', (await state(PORT2)).key_set === false && !(await page2.$('#btnKeyClear')));
     await page2.close();
+    // 다른 사이트에서 보낸 요청(CSRF)은 Origin으로 거절, 인계 일자는 여러 꼴을 ISO로 받고 못 읽으면 400, 설정 값 꼴 검사
+    const csrf = await fetch(`http://127.0.0.1:${PORT}/api/settings`, {method: 'POST', headers: {'Content-Type': 'text/plain', 'Origin': 'https://evil.example'}, body: JSON.stringify({handover_from: 'CSRF'})});
+    ok('다른 Origin의 POST는 403', csrf.status === 403 && (await state()).handover_from !== 'CSRF');
+    ok('「2026.3.2」「20260302」「3월 2일」 → 2026-03-02, 「abc」 → 400', (await post('/api/settings', {handover_date: '2026.3.2'})).status === 200 && (await state()).handover_date === '2026-03-02' && ((await post('/api/settings', {handover_date: '20260302'})).status === 200) && (await state()).handover_date === '2026-03-02' && ((await post('/api/settings', {handover_date: '3월 2일'})).status === 200) && /^20\d\d-03-02$/.test((await state()).handover_date) && (await post('/api/settings', {handover_date: 'abc'})).status === 400 && (await post('/api/settings', {handover_date: '2026-03-02'})).status === 200, JSON.stringify((await state()).handover_date));
+    ok('기간에 글자를 넣으면 400이고 값은 안 바뀜', (await post('/api/settings', {months: 'abc'})).status === 400 && typeof (await state()).months === 'number');
+    // 「이미 넘긴 업무」에 빈 답이면 아무것도 바꾸지 않음
+    await nav('s1a'); const sugBefore = (await items()).filter(i => i.keep && i.decided !== true).length;
+    page.removeAllListeners('dialog'); page.once('dialog', d => d.accept('')); await page.click('#main [data-gone]'); await sleep(800); page.on('dialog', d => d.accept());
+    ok('「이미 넘긴 업무」에 빈 답이면 제안을 버리지 않음', (await items()).filter(i => i.keep && i.decided !== true).length === sugBefore);
     // 4절 연락처: 줄마다 「빼기」, 「휴대전화 모두 빼기」, 「되살리기」(개인정보 최소화)
     await nav('s4'); await sleep(300);
     const n0 = (await page.$$('#main .person')).length, mob0 = (await state()).contacts.filter(c => c.mobile).length;

@@ -1,11 +1,13 @@
-# 물어물어 구동 시험 도구(2026-10-09)
+# 물어물어 구동 시험 도구(2026-10-09, 10.27. 갱신)
 
-헤드리스 크로미움(Playwright)과 모의 AI 서버로 출품본을 자동 구동해 본 스크립트다. 리눅스 세션에서 돌린 것이라 경로 두 곳은 환경에 맞게 고친다: `require('/opt/node22/lib/node_modules/playwright')`, `executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'`(윈도는 `channel: 'msedge'` 또는 `'chrome'`으로 바꾸면 설치된 브라우저를 쓴다).
+헤드리스 크로미움(Playwright)과 모의 AI 서버로 출품본을 자동 구동해 보는 스크립트다. 준비: Node.js 18 이상에서 `npm i playwright` 뒤 `npx playwright install chromium`(크로미움을 Playwright가 내려받음. 설치된 크롬·엣지를 쓰려면 각 스크립트의 `chromium.launch({ … })`에 `channel: 'chrome'` 또는 `'msedge'`를 더한다). 모든 시험은 가짜 프린터·카메라·음성 인식·모델 서버와 가상 자료만 쓰며, 실제 사람·주소록은 넣지 않는다. 결과 폴더는 비어 있는 새 폴더를 준다.
+
+10.27. 통과 기록은 `통과기록_1027.md`.
 
 | 파일 | 하는 일 |
 |---|---|
 | `mockai.js` | OpenAI 호환 모의 서버(127.0.0.1:11434). 주소 조각을 고정 답으로 돌려주고 요청 본문을 `mockai.log`에 남긴다. `PORT=11434 node mockai.js` |
-| `run.js` | 출품본 열기 → 무결성 → 예시 10건 → 공공기관 20건 CSV → 점검표 → 발송명단 1,000건 → 원본+우편번호·사용자 양식 내려받기 → 라벨 → 키오스크 전 과정(문장 1, 넘기기, 문장 8 AI 없이/AI 연결). `node run.js <출품본.html 절대경로> 11434` |
+| `run.js` | 출품본 열기 → 무결성 → 예시 10건 → 공공기관 20건 CSV → 점검표 → 발송명단 1,000건 → 원본+우편번호·사용자 양식 내려받기 → 라벨 → 키오스크 전 과정(문장 1, 넘기기, 문장 8 AI 없이/AI 연결). `node run.js <출품본.html 절대경로> 11434`. 이 폴더에 `발송명단.csv`(`소스/tools/모의주소_추출.js`가 `tools/out/`에 만든 것)와 `기관발송양식.xlsx`(`모의데이터/예시_기관발송양식(모의데이터).xlsx` 사본)가 있어야 끝까지 돈다 |
 | `tail.js` | 직원 설정(2초 누르기)·AI 연결 시험·외부 주소 차단·자리 비움 지우기(30초 설정)·처리 이력·직접 입력 5줄. `node tail.js <출품본.html>` |
 | `eng.js`, `eng2.js` | 브라우저 없이 `src/engine.js`를 node로 직접 돌려 주소 몇 건과 정답표 1,000건을 대조. `node eng2.js <소스 폴더> <정답.csv>` |
 | `공공기관20.csv` | 공개 기관 주소 20건(오탈자·옛 시도명·띄어쓰기 없음·지번·지하·시군구 없음 사례) |
@@ -16,8 +18,18 @@
 | 파일 | 하는 일 |
 |---|---|
 | `form_test.js` | 양식1·양식2·열 끌어 옮기기·시군구 오타 보정. `node form_test.js <출품본.html> <주소록.xlsx> <결과 폴더>` (`양식시험_주소록_만들기.py`로 가상 주소록 생성) |
-| `cam_test.js` | 사진으로 읽기 전 과정: 시험 사진을 그린 캔버스 영상을 가짜 웹캠으로 쓰고, 어르신 화면에서 찍기→후보→확인→이름·전화 미리 채움까지(`FULL=1`이면 보내는 분·마침·스티커 인쇄까지). `node cam_test.js <출품본.html> <사진 폴더(cam0.png…·truth.json)> <결과 폴더> [번호]` — 사진은 가상 문자 화면만 쓸 것 |
+| `cam_test.js` | 사진으로 읽기 전 과정: 시험 사진을 그린 캔버스 영상을 가짜 웹캠으로 쓰고, 어르신 화면에서 찍기→후보→확인→이름·전화 미리 채움까지(`FULL=1`이면 보내는 분·마침·스티커 인쇄까지). `node cam_test.js <출품본.html> <사진 폴더(cam0.png…·truth.json)> <결과 폴더> [번호]`. 사진은 가상 문자 화면만 쓸 것 |
 | `cam_extra_test.js` | 직원 「주소 찾기」 사진 읽기, 카메라 거부(NotAllowedError)·장치 없음 처리 |
 | `label_test.js` | 롤 스티커 크기·장수·넘침을 인쇄 모양 PDF로 확인(직원 라벨 창 100×45, 어르신 스티커 80×50, A4 여러 쪽). `pdfinfo`·`pdftoppm` 필요 |
 | `ble_test.js` | v1.7 블루투스(BLE) 직접 인쇄: 가짜 `navigator.bluetooth` 프린터가 받은 바이트로 TSPL 비트맵을 PNG로 되살려 크기·장수·회전·색 반전·ESC/POS·전송 크기 축소·설정 창·직원 라벨 창을 확인. `node ble_test.js <출품본.html> <주소록.xlsx> <결과 폴더>` |
 | `usb_test.js` | v1.8 USB(OTG·WebUSB) 직접 인쇄: 가짜 `navigator.usb` 프린터(제조사 인터페이스+프린터 인터페이스)로 인터페이스 선택·선택 창 1회·재연결·취소·보호 클래스 거부·stall 복구·케이블 빠짐·설정 창·직원 롤 스티커·USB 없음 대체 인쇄 확인. `node usb_test.js <출품본.html> <주소록.xlsx> <결과 폴더>` |
+
+## v1.10·v1.11 추가 시험(2026-10-18 ~ 10-27)
+| 파일 | 하는 일 |
+|---|---|
+| `elder_test.js` | 70대 어르신 모의 사용 시나리오 22항목(번호가 하나로 정해지지 않으면 숫자를 보이지 않고 창구 확인, 아파트 이름 찾기, 같은 이름 건물 구분, 직원 도움, 마침 화면). `node elder_test.js <출품본.html>` |
+| `v111_test.js` | v1.11 태블릿 인쇄·말로 하기·직원 설정 124항목(가짜 BLE 프린터로 주소 쪽지·스티커, 보내는 동안 단추 막기, 끊김 띠, 제조사 앱 보내기, 직원 2초 단추, 말로 하기 오류 종류·숨김·다시 켜기, 화면 꺼짐 막기). `node v111_test.js <출품본.html> <주소록.xlsx> <결과 폴더>` |
+| `rv2_test.js` | 10.27. 검토 반영 17항목(내장 DB 지문 대조와 바꿔치기 감지, AI에 보내는 글에서 전화·호칭 이름 제거(가짜 모델 서버 127.0.0.1:11465), 「아니요」 때 적은 글 유지, 성함 「모르겠어요」, 적다 만 글의 자리 비움 확인, 말로 하기 첫 사용 동의 창, A4로 뽑은 뒤 안내·3분 규칙, 뒷화면 inert, 1024x768 안내 창 단추, 처리 이력 파일 이름 가림, 사서함 머리글 분류). `node rv2_test.js <출품본.html> <결과 폴더>` |
+| `mockai.js` | 위 `run.js`·`tail.js`가 쓰는 OpenAI 호환 가짜 모델 서버. `PORT=11434 node mockai.js` |
+
+돌리는 순서 예(리눅스·윈도 같음): `PORT=11434 node mockai.js &` → `node elder_test.js <html>` → `node form_test.js <html> <주소록.xlsx> <결과>` → `node label_test.js …` → `node ble_test.js …` → `node usb_test.js …` → `node v111_test.js …` → `node rv2_test.js <html> <결과>`. 주소록은 `python 양식시험_주소록_만들기.py <출력.xlsx>`로 만든다. `cam_test.js`는 시험 사진 폴더(가상 문자 화면 그림, 저장소에 없음)가 있어야 한다.

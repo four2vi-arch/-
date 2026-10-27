@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>돌다리 · 업무인계·인수서</title>
 <style>
-:root{--bg:#f4f5f7;--card:#fff;--ink:#1c2430;--ink2:#566273;--ink3:#8a94a3;--line:#dfe3ea;--line2:#eef0f4;--accent:#c8102e;--accent-ink:#fff;--accent-soft:#fdecef;--ok:#1f7a4d;--ok-bg:#e6f4ec;--warn:#8a5a00;--warn-bg:#fff3d1;--fail:#b3261e;--fail-bg:#fde7e5;--info:#2d4870;--info-bg:#e4eaf4;--tint:#f3f6fa;--shadow:0 1px 2px rgba(20,30,50,.06),0 4px 14px rgba(20,30,50,.05);--s:1}
+:root{--bg:#f4f5f7;--card:#fff;--ink:#1c2430;--ink2:#566273;--ink3:#66707f;--line:#dfe3ea;--line2:#eef0f4;--accent:#c8102e;--accent-ink:#fff;--accent-soft:#fdecef;--ok:#1f7a4d;--ok-bg:#e6f4ec;--warn:#8a5a00;--warn-bg:#fff3d1;--fail:#b3261e;--fail-bg:#fde7e5;--info:#2d4870;--info-bg:#e4eaf4;--tint:#f3f6fa;--shadow:0 1px 2px rgba(20,30,50,.06),0 4px 14px rgba(20,30,50,.05);--s:1}
 :root[data-theme=dark]{--bg:#12161c;--card:#1a2029;--ink:#e8ecf2;--ink2:#9aa6b6;--ink3:#7b8696;--line:#2c3542;--line2:#232b36;--accent:#ff5a6e;--accent-ink:#1a0a0d;--accent-soft:#3a1a20;--ok:#6fd39f;--ok-bg:#15342a;--warn:#f2c35b;--warn-bg:#3a2f12;--fail:#ff8a80;--fail-bg:#3f1c1a;--info:#9cbcea;--info-bg:#17233a;--tint:#202835;--shadow:none}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;font-size:calc(16.5px*var(--s))}
@@ -54,7 +54,7 @@ main h2{font-size:1.5rem;letter-spacing:-.02em;display:flex;align-items:center;g
 .sug .t{font-weight:500;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .sug .t input.text{flex:1;min-width:200px;border:1px solid transparent;background:transparent;padding:3px 6px;border-radius:7px}
 .sug .t input.text:hover,.sug .t input.text:focus{border-color:var(--line);background:var(--card)}
-.sug .s{font-size:.84rem;color:var(--ink3);word-break:break-all}
+.sug .s{font-size:.88rem;color:var(--ink3);word-break:break-all}
 .sug .act{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end}
 .sug .act button{border:1px solid var(--line);background:var(--card);border-radius:7px;padding:3px 9px;font-size:.84rem;cursor:pointer}
 .sug .act button.y{border-color:var(--ok);color:var(--ok)}.sug .act button.n{color:var(--ink3)}
@@ -98,7 +98,7 @@ input.wide{flex:1;min-width:240px}
 .picker .d{display:inline-block;margin:3px 6px 3px 0;padding:4px 10px;border:1px solid var(--line);border-radius:7px;background:var(--card);cursor:pointer}
 details{margin:8px 0}summary{cursor:pointer;color:var(--info);font-size:.92rem}
 table{border-collapse:collapse;width:100%;font-size:.92rem;margin:6px 0}th,td{border-bottom:1px solid var(--line2);padding:6px 8px;text-align:left;vertical-align:top}th{color:var(--ink2);font-weight:600;white-space:nowrap}td.num,th.num{text-align:right}
-table.tri td{padding:4px 6px}table.tri button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer}table.tri button.y{border-color:var(--ok);color:var(--ok)}table.tri input.when{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:2px 4px}table.tri input.text{width:100%;border:1px solid transparent;background:transparent;padding:2px 4px;border-radius:6px}table.tri input.text:hover,table.tri input.text:focus{border-color:var(--line);background:var(--card)}table.tri select{padding:2px 4px;font-size:.84rem;border-radius:6px;border:1px solid var(--line);background:var(--card)}table.tri tr.sugrow{background:var(--info-bg)}table.tri tr.offrow{opacity:.45}table.tri .d{color:var(--ink3);font-size:.82rem;white-space:nowrap}
+table.tri{width:100%;table-layout:fixed}table.tri td{padding:4px 6px;overflow-wrap:anywhere}#recent{max-width:100%}table.tri button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer}table.tri button.y{border-color:var(--ok);color:var(--ok)}table.tri input.when{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:2px 4px}table.tri input.text{width:100%;border:1px solid transparent;background:transparent;padding:2px 4px;border-radius:6px}table.tri input.text:hover,table.tri input.text:focus{border-color:var(--line);background:var(--card)}table.tri select{padding:2px 4px;font-size:.84rem;border-radius:6px;border:1px solid var(--line);background:var(--card)}table.tri tr.sugrow{background:var(--info-bg)}table.tri tr.offrow{opacity:.45}table.tri .d{color:var(--ink3);font-size:.82rem;white-space:nowrap}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
 .acard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;background:var(--card)}
 .acard:hover{border-color:var(--accent)}

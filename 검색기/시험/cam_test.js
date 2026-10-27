@@ -1,6 +1,6 @@
 // 물어물어 v1.6 사진으로 읽기 시험 — 크로미움 가짜 웹캠(y4m 영상 파일)으로 키오스크 흐름을 끝까지 돈다
 // 사용: node cam_test.js <출품본.html> <사진 폴더> <결과 폴더> [번호]   (사진 폴더에는 cam0.png… 와 truth.json — 가상 자료만)
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('playwright');
 const fs = require('fs'); const path = require('path'); const cp = require('child_process');
 const [HTML, DIR, OUT, ONLY] = process.argv.slice(2);
 fs.mkdirSync(OUT, { recursive: true });
@@ -11,7 +11,7 @@ let pass = 0, fail = 0; const ok = (n, c, x) => { (c ? pass++ : fail++); console
   let strict = 0, total = 0;
   for (const i of idxs) {
     const t = truth[i];
-    const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    const browser = await chromium.launch({
       args: ['--allow-file-access-from-files', '--use-fake-ui-for-media-stream'] });
     const ctx = await browser.newContext({ locale: 'ko-KR', viewport: { width: 1360, height: 900 } });
     const page = await ctx.newPage(); const errs = [];

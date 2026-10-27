@@ -1,7 +1,7 @@
 // 물어물어 v1.11(8차) 새 기능·고친 곳 시험: 주소 쪽지 보내는 동안 막기, 앱으로 보내기(직원만·잠금·다시 누르기·내려받기 대체),
 // 끊김 띠 위치·다시 연결 멈춤, 프린터 오류 문구, 옛 설정 옮김, 가로 보정 상한, 이 기기 상태, 키보드 숫자판, 말로 하기, 직원 설정, 엑셀 작성자.
 // 사용: node v111_test.js <출품본.html> <주소록.xlsx> <결과 폴더>   (가짜 프린터·가짜 음성 인식·가상 자료만)
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('playwright');
 const fs = require('fs'); const path = require('path'); const cp = require('child_process');
 const [HTML, INPUT, OUT] = process.argv.slice(2);
 fs.mkdirSync(OUT, { recursive: true });
@@ -70,7 +70,7 @@ async function toFinish(p, sender) {
   await p.waitForSelector('#kFinMsg');
 }
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--allow-file-access-from-files'] });
+  const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
 
   // ---- 1. 주소 쪽지(영수증 롤, 블루투스): 보내는 동안 단추 막기 · 다시 눌러도 한 장 · 끝나면 안내
   let p = await open(browser, { init: SET({ via: 'ble', media: 'cont', rollW: 76, chunk: 500, delay: 0, cfgv: 2 }, { paper: '80' }) });
@@ -255,14 +255,16 @@ async function toFinish(p, sender) {
   await p.context().close();
 
   // ---- 5. 말로 하기: 오류 종류별 안내 · 두 번 인터넷 오류에만 숨김 · 직원이 다시 켜기 · 늦은 결과 버림
+  // v1.11(10.27.): 「말로 하기」 첫 사용 때 음성 인식 전송 안내 창이 뜨므로 「네」를 누르고 진행한다(안내 창 자체는 rv2_test.js에서 본다)
+  const micClick = async (p) => { await p.click('#kMic'); const y = await p.$('#kModalBtns button:has-text("네, 말로 할게요")'); if (y) { await y.click(); await p.waitForTimeout(60); } };
   p = await open(browser, { init: SET({ via: 'dialog', cfgv: 2 }, { paper: 'a4' }) });
   await p.click('#btnKiosk'); await p.waitForSelector('#kiosk:not([hidden])');
   await (await p.waitForSelector('#kStart')).click(); await p.waitForSelector('#kMic');
-  await p.evaluate(() => { window.__sr.next = { error: 'audio-capture' }; }); await p.click('#kMic'); await p.waitForTimeout(300);
+  await p.evaluate(() => { window.__sr.next = { error: 'audio-capture' }; }); await micClick(p); await p.waitForTimeout(300);
   ok('audio-capture → 「마이크를 쓸 수 없어요」(단추 남음)', /마이크를 쓸 수 없어요/.test(await toasts(p)) && !!(await p.$('#kMic')));
-  await p.evaluate(() => { window.__sr.next = { error: 'network' }; }); await p.click('#kMic'); await p.waitForTimeout(300);
+  await p.evaluate(() => { window.__sr.next = { error: 'network' }; }); await micClick(p); await p.waitForTimeout(300);
   ok('인터넷 오류 한 번 → 단추 남음 · 직원 코드', !!(await p.$('#kMic')) && /직원 확인: network/.test(await toasts(p)));
-  await p.click('#kMic'); await p.waitForTimeout(300);
+  await micClick(p); await p.waitForTimeout(300);
   ok('인터넷 오류 두 번 → 단추 숨김', !(await p.$('#kMic')));
   await p.evaluate(() => { const b = document.getElementById('kStaff'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
   await p.waitForSelector('#kfMic', { timeout: 4000 });
@@ -272,16 +274,16 @@ async function toFinish(p, sender) {
   await p.waitForTimeout(300);
   await p.evaluate(() => __kiosk.close()); await p.click('#btnKiosk'); await (await p.waitForSelector('#kStart')).click();
   ok('직원이 다시 켜면 단추가 돌아옴', !!(await p.waitForSelector('#kMic', { timeout: 3000 }).catch(() => null)));
-  await p.evaluate(() => { window.__sr.next = { error: 'not-allowed' }; }); await p.click('#kMic'); await p.waitForTimeout(300);
+  await p.evaluate(() => { window.__sr.next = { error: 'not-allowed' }; }); await micClick(p); await p.waitForTimeout(300);
   ok('not-allowed → 「안 돼요」 + 직원 코드 + 숨김', /직원 확인: not-allowed/.test(await toasts(p)) && !(await p.$('#kMic')));
   // 늦은 결과는 버림: 다시 켜고, 듣는 중에 화면을 바꾼다
   await p.evaluate(() => { sessionStorage.removeItem('zipfinder.kiosk.micoff'); __kiosk.close(); }); await p.click('#btnKiosk'); await (await p.waitForSelector('#kStart')).click(); await p.waitForSelector('#kMic');
-  await p.evaluate(() => { window.__sr.next = { text: '서울 종로구 세종대로 209', ms: 800 }; }); await p.click('#kMic'); await p.waitForTimeout(100);
+  await p.evaluate(() => { window.__sr.next = { text: '서울 종로구 세종대로 209', ms: 800 }; }); await micClick(p); await p.waitForTimeout(100);
   await p.click('#kRegion'); await p.waitForTimeout(1500);
   await p.click('#kBack').catch(() => { }); await p.waitForTimeout(300);
   if (await p.$('#kMic')) {
     await p.evaluate(() => { window.__sr.next = { text: '서울', ms: 1500 }; });
-    await p.click('#kMic'); await p.waitForTimeout(80); await p.click('#kMic'); await p.waitForTimeout(400);
+    await micClick(p); await p.waitForTimeout(80); await micClick(p); await p.waitForTimeout(400);
     ok('말로 하기를 두 번 눌러도 듣는 중에 「잘 못 들었어요」 안 뜸', !/잘 못 들었어요/.test(await toasts(p)), await toasts(p));
   }
   ok('듣는 중 화면을 바꾸면 늦은 결과로 끌려가지 않음(듣기 멈춤)', (await p.evaluate(() => window.__sr.aborts)) >= 1 && !/세종대로/.test(await p.textContent('#kMain')), (await p.textContent('#kMain .k-bubble')).slice(0, 30));

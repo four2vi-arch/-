@@ -1,13 +1,13 @@
 // 물어물어 v1.6 양식·오타·끌어 옮기기 시험 — 헤드리스 크로미움
 // 사용: node form_test.js <출품본.html> <주소록.xlsx> <결과 폴더> [infer]
 // 주소록은 「이름·우편번호·주소·상세」 꼴. 결과 파일은 결과 폴더에만 두고 저장소에는 넣지 않는다(개인정보).
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('playwright');
 const fs = require('fs'); const path = require('path');
 const [HTML, INPUT, OUT, FLAG] = process.argv.slice(2);   // FLAG=infer: 시·군·구 없는 행이 앞뒤 행 지역으로 찾아져야 함
 fs.mkdirSync(OUT, { recursive: true });
 let pass = 0, fail = 0; const ok = (n, c, x) => { (c ? pass++ : fail++); console.log((c ? '통과  ' : '실패  ') + n + (x ? ' · ' + x : '')); };
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--allow-file-access-from-files'] });
+  const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
   const ctx = await browser.newContext({ acceptDownloads: true, locale: 'ko-KR', viewport: { width: 1360, height: 950 } });
   const page = await ctx.newPage(); const errs = [];
   page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });

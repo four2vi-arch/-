@@ -1,6 +1,6 @@
 // 물어물어 어르신 화면 회귀 시험(v1.10·v1.11, 10.18 어르신 모의 심사에서 틀린 우편번호가 확정되던 시나리오)
 // 사용: node elder_test.js <출품본.html>   (가상 이름·공개 주소만)
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('playwright');
 const HTML = process.argv[2];
 let pass = 0, fail = 0; const ok = (n, c, x) => { (c ? pass++ : fail++); console.log((c ? '통과  ' : '실패  ') + n + (x ? ' · ' + x : '')); };
 const REGION = { region: '전북특별자치도 정읍시', idle: 120 };
@@ -18,7 +18,7 @@ async function say(p, t) { await (await btn(p, '시작하기')).click().catch(()
 const bubble = p => p.evaluate(() => (document.querySelector('#kMain .k-bubble') || {}).innerText || '');
 const zipShown = p => p.evaluate(() => { const z = document.querySelector('#kMain .k-card .k-zip'); return z ? z.textContent.trim() : ''; });
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--allow-file-access-from-files'] });
+  const b = await chromium.launch({ args: ['--allow-file-access-from-files'] });
   // 1. 동 이름 + 아파트 이름: 건물명으로 찾아 맞는 번호(06284)
   let p = await open(b);
   await say(p, '우리 아들네 집 서울 강남 대치동 은마아파트 3동 1004호');

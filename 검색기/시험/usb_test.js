@@ -1,6 +1,6 @@
 // 물어물어 v1.8(v1.11 갱신) USB(OTG·WebUSB) 직접 인쇄 시험 — 가짜 USB 프린터(navigator.usb 대역)로 보낸 바이트를 받아 스티커 그림을 되살려 확인한다.
 // 사용: node ble_test.js <출품본.html> <주소록.xlsx> <결과 폴더>   (가상 자료만)
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('playwright');
 const fs = require('fs'); const path = require('path'); const cp = require('child_process');
 const [HTML, INPUT, OUT] = process.argv.slice(2);
 fs.mkdirSync(OUT, { recursive: true });
@@ -56,7 +56,7 @@ const MOCK = (opt) => `(() => {
 })();`;
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--allow-file-access-from-files'] });
+  const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
   const entries = `[
     { name: '가상일', phone: '010-0000-1111', zip: '56180', addr1: '전북특별자치도 정읍시 충정로 234-1', addr2: '정읍시청 3층', check: false },
     { name: '가상이', phone: '', zip: '56204', addr1: '전북특별자치도 정읍시 시기4길 42', addr2: '101동 1004호(시기동,가상아파트)', check: true }]`;

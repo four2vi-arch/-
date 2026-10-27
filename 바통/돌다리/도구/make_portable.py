@@ -22,9 +22,9 @@ APP_FILES = ['server.py', 'core.py', 'docs.py', 'export.py', 'extract.py', 'ocr.
 APP_DIRS = ['web']
 # 파이썬 표준 라이브러리 중 돌다리가 쓰지 않는 큰 묶음(빼도 동작에 영향 없음)
 DROP = re.compile(r'^tools/(Lib/(ensurepip|idlelib|turtledemo|tkinter|test|lib2to3|venv|pydoc_data|sqlite3)/|Lib/site-packages/pip|Scripts/|tcl/|include/|libs/'
-                  r'|DLLs/(_ssl|_hashlib|_sqlite3)\.pyd$|DLLs/(libssl-3|libcrypto-3|sqlite3)\.dll$)', re.I)
-# 10.18. 공공 GitLab이 큰 파일을 서버 검사로 거절(22.9MB): 돌다리는 https·sqlite를 쓰지 않고(이 PC 127.0.0.1만, hashlib은 내장 sha256으로 대신)
-# Pillow의 AVIF 그림 부품(4.3MB)도 쓰지 않는다. 빠져도 Pillow·urllib·asyncio는 ImportError를 받아 그 기능만 끈다
+                  r'|DLLs/_sqlite3\.pyd$|DLLs/sqlite3\.dll$)', re.I)
+# 10.18. 공공 GitLab이 큰 파일을 서버 검사로 거절(22.9MB): sqlite와 Pillow의 AVIF 그림 부품(4.3MB)은 쓰지 않아 뺀다.
+# 10.27. _ssl·libssl·libcrypto(약 2.5MB)는 다시 넣는다: 기관 모델 서버를 https로 부를 수 있게(--allow-model-host). 빠져도 Pillow·urllib·asyncio는 ImportError를 받아 그 기능만 끈다
 WDROP = re.compile(r'^PIL/_avif\.', re.I)
 
 RUN_BAT = r'''@echo off
@@ -56,7 +56,10 @@ README = '''돌다리 v{ver} 휴대용 묶음(윈도 10·11, 64비트)
 - 파이썬을 따로 설치하지 않아도 됩니다(이 폴더 안 python에 들어 있음). 인터넷도 필요 없습니다.
 - AI 모델(선택): Ollama를 설치하고 「ollama pull exaone3.5:7.8b」 또는 「ollama pull gemma3:4b」. 없으면 규칙만으로 동작합니다.
 - 스캔 PDF 글자 읽기(선택): 윈도 설정 → 시간 및 언어 → 언어 → 한국어 → 언어 옵션에서 「광학 문자 인식」이 설치돼 있으면 자동으로 씁니다.
-- 작업 기록은 doldari\\app\\작업\\ 에 남습니다. 원본 업무 폴더는 읽기만 합니다.
+- 작업 기록은 doldari\\app\\작업\\ 에 남습니다. 원본 업무 폴더는 읽기만 합니다. 인수인계가 끝나면 그 폴더를 지우면 됩니다.
+- 받은 압축 파일이 바뀌지 않았는지: 명령 창에서 certutil -hashfile doldari_v{ver_safe}_portable_win64.zip SHA256 을 실행해 GitLab README의 값과 같은지 봅니다.
+  풀린 파일은 doldari\\SHA256SUMS.txt(파일마다 SHA-256)로 대조할 수 있습니다.
+- 보안 공지가 나면 보는 곳: 파이썬 {pyver}와 아래 부품 판. 새 판으로 바꾸는 절차는 소스 README 「휴대용 묶음 만들기」.
 
 구성 요소와 라이선스: python(CPython {pyver}, PSF 라이선스, python\\LICENSE.txt), {pkgs}
 만든 날: {day}
@@ -125,8 +128,10 @@ def build(nupkg, wheels, out):
         bat = RUN_BAT.replace('\n', '\r\n').encode('utf-8')
         z.writestr('doldari/run.bat', bat)
         z.writestr(zipfile.ZipInfo('doldari/돌다리_실행.bat', date_time=datetime.datetime.now().timetuple()[:6]), bat)
-        txt = README.format(ver=ver, pyver=pyver, pkgs=', '.join(pkgs), day=datetime.date.today().isoformat())
+        txt = README.format(ver=ver, ver_safe=safe, pyver=pyver, pkgs=', '.join(pkgs), day=datetime.date.today().isoformat())
         z.writestr('doldari/README.txt', ('﻿' + txt).replace('\n', '\r\n').encode('utf-8'))
+        sums = ['%s *%s' % (hashlib.sha256(z.read(i)).hexdigest(), i.filename[len('doldari/'):]) for i in z.infolist() if not i.filename.endswith('/')]   # 파일마다 지문(풀린 뒤 대조용)
+        z.writestr('doldari/SHA256SUMS.txt', ('\n'.join(sums) + '\n').encode('utf-8'))
     print('만듦:', dst)
     print('크기: %.1f MB' % (os.path.getsize(dst) / 1e6))
     print('SHA-256:', sha256(dst))
