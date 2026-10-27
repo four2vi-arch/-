@@ -216,9 +216,10 @@ def contact_rows(session):
     who_from = str(session.get('handover_from') or '').split('(')[0].strip()
     own_units = [t for t in re.split(r'\s+', str(session.get('org') or '').strip())[1:] if len(t) >= 2]
     dropped = {it['file'] for it in session.get('items', []) if it.get('file') and not it.get('keep', True)}
+    excl = set(str(x) for x in (session.get('contact_excl') or []))   # 전임자가 4절에서 「빼기」 한 번호(휴대전화 등 개인정보 최소화)
     seen, rows, names_landline = set(), [], set()
     def add_c(a, name, phone, ln, title, pending, src):
-        if phone in seen or (who_from and name and name == who_from):   # 인계자 자신은 뺀다
+        if phone in seen or phone in excl or (who_from and name and name == who_from):   # 인계자 자신·뺀 번호는 뺀다
             return
         if own_units and name and any(u in name for u in own_units):   # 1-가 「소속」의 자기 부서(우편영업실 등) 대표 번호는 뺀다
             return

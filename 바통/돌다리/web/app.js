@@ -343,7 +343,7 @@ function renderPrep(m) {
     h += `<div class="s">기간 기준일 <b>${esc(p.base_date || '')}</b>(${esc(p.base_why || '')}). 인계 일자(위 칸, 1-가의 「일자」와 같은 값)를 바꾸면 그날 기준으로 다시 셉니다.${p.base_warn ? ` <b style="color:var(--fail)">${esc(p.base_warn)}</b>` : ''}${p.n_dupver ? ` 같은 파일 사본·이전 판 ${p.n_dupver}건은 최신 하나만 올립니다.` : ''}${p.n_private ? ` 개인 문서로 보이는 ${p.n_private}건은 현안으로 올리지 않습니다.` : ''}${p.n_secret ? ` <b style="color:var(--fail)">비밀번호·계정 줄이 든 문서 ${p.n_secret}건</b>(발췌에서 가림).` : ''}</div>`;
     h += `<div class="pills"><span class="pill">기간 안 문서 <b>${p.n_items || 0}</b></span><span class="pill">현안 후보 <b>${p.n_issue || 0}</b></span><span class="pill">반복 업무 <b>${p.n_recur || 0}</b></span><span class="pill">연혁 <b>${p.n_hist || 0}</b></span><span class="pill">현황 자료 <b>${p.n_status || 0}</b></span><span class="pill">그 밖의 문서 <b>${p.n_doc || 0}</b></span><span class="pill">기간 밖 <b>${p.n_old || 0}</b></span><span class="pill">붙임 <b>${p.n_attach || 0}</b></span></div>`;
     h += `<div class="row"><div class="seg" id="engineSeg"><button data-e="rules" class="${engine === 'rules' ? 'on' : ''}">규칙만 · 몇 초</button><button data-e="model" class="${engine === 'model' ? 'on' : ''}">AI 모델도 사용 · 요지·할 일 받기</button></div>
-      <span id="modelRow" ${engine === 'model' ? '' : 'hidden'}><select id="model"><option value="">모델 고르기</option>${ST.model ? `<option value="${esc(ST.model)}" selected>${esc(ST.model)}</option>` : ''}</select> <input type="text" id="url" value="${esc(ST.url || '')}" style="width:280px">${ST.remote_ok ? ` <input type="password" id="key" value="${esc(ST.key || '')}" placeholder="키(기관 서버가 요구할 때만)" style="width:200px" title="실행 옵션 --allow-model-host 로 기관 서버를 허용했을 때만 보입니다. 이 PC 작업 폴더의 세션 파일에 저장됩니다">` : ''} <button class="ghost sm" id="btnModels">목록 새로고침</button>
+      <span id="modelRow" ${engine === 'model' ? '' : 'hidden'}><select id="model"><option value="">모델 고르기</option>${ST.model ? `<option value="${esc(ST.model)}" selected>${esc(ST.model)}</option>` : ''}</select> <input type="text" id="url" value="${esc(ST.url || '')}" style="width:280px">${ST.remote_ok ? ` <input type="password" id="key" value="" placeholder="${ST.key_set ? '키 저장됨(이 실행 동안만) · 바꾸려면 새로 입력' : '키(기관 서버가 요구할 때만)'}" style="width:200px" title="실행 옵션 --allow-model-host 로 기관 서버를 허용했을 때만 보입니다. 키는 이 실행 동안 메모리에만 두고 세션 파일에 저장하지 않습니다(검은 창을 닫으면 사라짐)">${ST.key_set ? ' <button class="ghost sm" id="btnKeyClear" title="저장된 키를 지웁니다">키 지우기</button>' : ''}` : ''} <button class="ghost sm" id="btnModels">목록 새로고침</button>
       <div class="seg" id="scopeSeg" style="display:inline-flex;margin-left:8px"><button data-sc="issues" class="${(ST.model_scope || 'issues') === 'issues' ? 'on' : ''}">현안 후보만</button><button data-sc="all" class="${ST.model_scope === 'all' ? 'on' : ''}">기간 안 전부</button></div></span><span class="s" id="planHint"></span></div>`;
     h += engine === 'model' && ST.model ? `<div class="note">모델 <b>${esc(ST.model)}</b>에 문서 ${p.calls || 0}건(한 건에 한 번). 예상 약 ${secText(p.est_sec || 0)}. 「여기까지만」으로 끊어도 결과는 남고, 모델 응답은 호출마다 저장되어 중간에 꺼져도 이어서 갑니다.${ST.checkpoint && ST.checkpoint.reusable ? ` 저장된 이전 응답 ${ST.checkpoint.reusable}회는 다시 부르지 않습니다.` : ''}</div>` : `<div class="s">규칙만: 문서마다 날짜·문서번호·제목·기한·담당·소관 업무를 읽습니다. 수천 파일도 몇 초입니다. 모델은 현안 후보의 「요지·할 일」 한 줄을 보탭니다(없어도 됩니다).</div>`;
     const pr = ST.progress;
@@ -383,6 +383,7 @@ function bindPrep() {
     seg.querySelectorAll('button').forEach(b => b.onclick = async () => { engine = b.dataset.e; ls('engine', engine); if (engine === 'rules') { await settings({model: ''}); } renderMain(); if (engine === 'model') loadModels(); });
     $('#scopeSeg').querySelectorAll('button').forEach(b => b.onclick = () => settings({model_scope: b.dataset.sc}).then(() => renderMain()).catch(e => alert(e.message)));
     ['#model', '#url', '#key', '#months', '#hDate2', '#manualPath'].forEach(s => { const el = $(s); if (el) el.onchange = () => settings().then(() => renderMain()).catch(e => alert(e.message)); });
+    const kc = $('#btnKeyClear'); if (kc) kc.onclick = () => settings({key: ''}).then(() => renderMain()).catch(e => alert(e.message));
     $('#btnModels').onclick = loadModels; if (engine === 'model') loadModels();
     $('#btnDraft').onclick = async () => { try {
       if (engine === 'model') { const j = await api('/api/models');
@@ -401,7 +402,8 @@ async function settings0(extra) {
   const body = Object.assign({}, extra || {});
   if (Object.keys(body).some(k => ['overview', 'assets', 'handover_from', 'handover_to', 'witness', 'handover_date', 'org', 'areas_text'].includes(k))) dirtyAfterExport = true;
   const take = (sel, k, f) => { const el = $(sel); if (el) body[k] = f ? f(el) : el.value; };
-  if (!('model' in body)) take('#model', 'model'); take('#url', 'url', el => el.value.trim()); take('#key', 'key', el => el.value.trim()); take('#hDate2', 'handover_date', el => el.value.trim()); take('#months', 'months', el => +el.value); take('#manualPath', 'manual_path', el => el.value.trim());
+  if (!('model' in body)) take('#model', 'model'); take('#url', 'url', el => el.value.trim()); const kEl = $('#key'); if (kEl && kEl.value.trim()) body.key = kEl.value.trim();   // 키는 새로 적었을 때만 보낸다(빈 칸이 저장된 키를 지우지 않게. 지우기는 「키 지우기」) 
+  take('#hDate2', 'handover_date', el => el.value.trim()); take('#months', 'months', el => +el.value); take('#manualPath', 'manual_path', el => el.value.trim());
   if (engine === 'rules') body.model = '';
   else if (body.model === '') delete body.model;
   const j = await api('/api/settings', body);
@@ -506,21 +508,27 @@ function renderS3(m) {
 }
 // --- 4. 참고: 연락처·매뉴얼·못 읽은 자료
 function contactsAll() {   // 서버(export.contact_rows)가 만든 목록 그대로: 내보내는 4절과 화면이 같다(명단 연락처가 화면에 없고 확인 전 문서 연락처가 파일에 없던 것)
-  return (ST.contacts || []).map(p => ({a: p.area, c: {name: p.name, phone: p.phone + (p.mobile ? ' (휴대)' : ''), line: p.line}, title: p.title, pending: p.pending, src: p.src}));
+  return (ST.contacts || []).map(p => ({a: p.area, c: {name: p.name, phone: p.phone + (p.mobile ? ' (휴대)' : ''), line: p.line}, title: p.title, pending: p.pending, src: p.src, raw: p.phone, mobile: p.mobile}));
 }
 function renderS4(m) {
   const info = ST.info || {}; const people = contactsAll();
-  let h = head('4. 그 밖의 참고사항', '문서에 적힌 문의처·담당자와 표·명단 파일의 연락처입니다(내려받는 4절과 같은 목록: 같은 번호는 하나로, 버리기 한 문서·명단은 뺌, 아직 확인 전인 문서는 [확인 전]). 명단의 번호를 빼려면 2절에서 그 명단 문서를 버리기 하세요. 누적 매뉴얼과 못 읽은 자료도 여기 실립니다.');
-  h += '<div class="sec"><h3>관계자 연락처</h3>';
+  const ro = mode === 'take', excl = ST.contact_excl || [], nMob = people.filter(p => p.mobile).length;
+  let h = head('4. 그 밖의 참고사항', '문서에 적힌 문의처·담당자와 표·명단 파일의 연락처입니다(내려받는 4절과 같은 목록: 같은 번호는 하나로, 버리기 한 문서·명단은 뺌, 아직 확인 전인 문서는 [확인 전]). 후임자에게 필요 없는 번호(특히 휴대전화 같은 개인정보)는 줄마다 「빼기」로 빼세요. 누적 매뉴얼과 못 읽은 자료도 여기 실립니다.');
+  h += `<div class="sec"><h3>관계자 연락처 <span class="chip">${people.length}명${nMob ? ' · 휴대전화 ' + nMob : ''}${excl.length ? ' · 뺀 번호 ' + excl.length : ''}</span>${!ro && nMob ? ' <button class="ghost sm" id="btnExclMobile" title="010 번호를 모두 뺍니다(개인정보 최소화). 아래 「되살리기」로 되돌릴 수 있습니다">휴대전화 모두 빼기</button>' : ''}</h3>`;
   const areasC = usedAreas(); people.forEach(p => { if (!areasC.includes(p.a)) areasC.push(p.a); });
-  for (const a of areasC) { const r = people.filter(p => p.a === a); if (!r.length) continue; h += `<h4 style="margin:10px 0 4px">${esc(a)}</h4><div class="people">` + r.map(p => `<div class="person"><b>${esc(p.c.name)}</b><span></span><span class="ph">${esc(p.c.phone)}</span><span></span><span class="why">${esc(p.c.line)} · ${esc(p.title)}</span></div>`).join('') + '</div>'; }
+  for (const a of areasC) { const r = people.filter(p => p.a === a); if (!r.length) continue; h += `<h4 style="margin:10px 0 4px">${esc(a)}</h4><div class="people">` + r.map(p => `<div class="person"><b>${esc(p.c.name)}</b>${ro ? '<span></span>' : `<button class="x" data-excl="${esc(p.raw)}" title="이 번호를 4절에서 뺍니다(결과물에도 실리지 않음)">빼기</button>`}<span class="ph">${esc(p.c.phone)}</span><span></span><span class="why">${esc(p.c.line)} · ${esc(p.title)}</span></div>`).join('') + '</div>'; }
   if (!people.length) h += '<div class="s">문서에서 찾은 연락처가 없습니다.</div>';
+  if (excl.length) h += `<div class="s" style="margin-top:8px">뺀 번호 ${excl.length}개(결과물에 실리지 않음): ${excl.map(ph => `<span class="chip">${esc(ph)}${ro ? '' : ` <button class="x" data-restore="${esc(ph)}" title="다시 넣기">되살리기</button>`}</span>`).join(' ')}</div>`;
   h += '</div>';
   h += `<div class="sec"><h3>누적 업무 매뉴얼</h3>${info.manual ? `<div class="good">${esc(info.manual)} · 문서번호 ${info.manual_refs}개 반영. 매뉴얼에 아직 없는 공문 ${info.n_unreflected || 0}건은 「2. 관련 문서 현황」에 ★로 표시했습니다. 후임자가 해당 절에 반영하면 됩니다.</div>` : '<div class="s">폴더에서 누적 매뉴얼을 찾지 못했습니다(이름에 「매뉴얼」이 든 docx·hwpx 파일).</div>'}</div>`;
   const fails = (ST.failures || []).filter(x => !x.skip), skips = (ST.failures || []).filter(x => x.skip);
   const by = {}; fails.forEach(x => { const k = String(x.reason).replace(/\(.*$/, '').trim(); by[k] = (by[k] || 0) + 1; });
   h += `<div class="sec"><h3>확인하지 못한 자료 <span class="chip">붙임으로 실림</span></h3><div class="pills"><span class="pill">못 읽은 문서 <b>${fails.length}</b></span><span class="pill">읽지 않는 형식 <b>${skips.length}</b></span></div><table><tr><th>이유</th><th class="num">파일</th></tr>${Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join('')}</table><details><summary>파일별 보기(${fails.length})</summary><table>${fails.map(x => `<tr><td>${esc(x.file)}</td><td class="s">${esc(x.reason)}</td></tr>`).join('')}</table></details></div>`;
   m.innerHTML = h; bindCopy();
+  const setExcl = list => settings({contact_excl: Array.from(new Set(list))}).then(() => renderMain()).catch(e => alert(e.message));
+  $$('#main [data-excl]').forEach(b => b.onclick = () => setExcl(excl.concat([b.dataset.excl])));
+  $$('#main [data-restore]').forEach(b => b.onclick = () => setExcl(excl.filter(x => x !== b.dataset.restore)));
+  const bm = $('#btnExclMobile'); if (bm) bm.onclick = () => { if (confirm('휴대전화(010) 번호 ' + nMob + '개를 모두 4절에서 뺄까요? 아래 「되살리기」로 되돌릴 수 있습니다.')) setExcl(excl.concat(people.filter(p => p.mobile).map(p => p.raw))); };
 }
 
 // ---------------------------------------------------------------- 오른쪽: 물어보기·완성도
@@ -556,6 +564,7 @@ $('#btnExport').onclick = async () => {
   const nB = ITEMS.filter(i => i.keep && i.bulk).length; if (nB) warn.push(`· 한꺼번에 넣은 ${nB}건은 [일괄 넣음]으로 표시됩니다`);
   const nP = ITEMS.filter(i => i.keep && !isSug(i) && i.private).length; if (nP) warn.push(`· 개인 문서로 보이는 ${nP}건을 넣었습니다: ${ITEMS.filter(i => i.keep && !isSug(i) && i.private).slice(0, 4).map(i => i.title).join(', ')}`);
   const nS2 = ITEMS.filter(i => i.keep && i.secret).length; if (nS2) warn.push(`· 비밀번호·계정 줄이 든 문서 ${nS2}건(발췌에서는 가렸지만 원문을 확인하세요)`);
+  const nM = contactsAll().filter(p => p.mobile).length; if (nM) warn.push(`· 4절에 휴대전화 번호 ${nM}명이 실립니다(개인정보: 후임자에게 필요한 번호만 남기려면 4절에서 「빼기」)`);
   if (warn.length && !confirm('내보내기 전에 확인하세요.\n\n' + warn.join('\n') + '\n\n이대로 만들까요? (나중에 고쳐서 다시 내보낼 수 있습니다)')) return;
   try { await api('/api/export', {}); ST = await api('/api/state'); dirtyAfterExport = false; showExports(); window.scrollTo(0, 0); } catch (e) { alert(e.message); }
 };

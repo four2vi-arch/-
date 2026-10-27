@@ -49,7 +49,7 @@ STATE = {'step': 1, 'folder': '', 'subdirs': [], 'exclude': [], 'warn': '', 'sug
          'items': [], 'dropped': [], 'model': '', 'url': 'http://127.0.0.1:11434/v1/chat/completions', 'include_tables': False,
          'recent_years': 0, 'max_calls': 3, 'skip_reference': True, 'avg_sec': 40.0, 'running': False, 'stop': False, 'errors': [], 'calls': [], 'exports': [], 'title': '', 'log': [],
          'areas': core.DEFAULT_AREAS, 'overview': {}, 'handover_from': '', 'handover_to': '', 'assets': {}, 'keyfiles': [],
-         'months': 12, 'model_scope': 'issues', 'witness': '', 'handover_date': '', 'org': '', 'info': {}, 'manual_path': '', 'ocr': 'auto', 'ocr_pages': 5, 'ocr_images': False, 'key': '', 'recent': []}
+         'months': 12, 'model_scope': 'issues', 'witness': '', 'handover_date': '', 'org': '', 'info': {}, 'manual_path': '', 'ocr': 'auto', 'ocr_pages': 5, 'ocr_images': False, 'key': '', 'recent': [], 'contact_excl': []}
 _ocr_status = None   # ocr.available() 결과(시작·설정 때만 다시 센다)
 _units = {}   # 파일 → units (메모리만; 세션.json에는 넣지 않는다)
 CHECKPOINT = '모델응답_이어하기.jsonl'   # 모델 응답을 호출마다 바로 적어 두는 파일. 같은 폴더·모델이면 다음 「초안 만들기」가 재사용한다(죽어도 한 호출만 잃음)
@@ -100,7 +100,7 @@ def log(msg):
 
 
 def save_session():
-    keep = {k: v for k, v in STATE.items() if k not in ('running', 'stop', 'log', 'reloading', 'extracting', 'extract_error')}
+    keep = {k: v for k, v in STATE.items() if k not in ('running', 'stop', 'log', 'reloading', 'extracting', 'extract_error', 'key')}   # 모델 키는 메모리에만(세션 파일에 평문으로 남지 않게)
     try:
         with open(os.path.join(WORK, '세션.json'), 'w', encoding='utf-8', errors='replace') as f:
             json.dump(keep, f, ensure_ascii=False, indent=1)
@@ -464,6 +464,7 @@ class H(BaseHTTPRequestHandler):
                 st['n_items'] = len(STATE['items']); st['n_dropped'] = len(STATE['dropped'])
                 st['originals_changed'] = sum(1 for x in STATE['fingerprints'] if not x.get('unchanged', True))
                 st['work'] = WORK; st['version'] = VERSION
+                st['key_set'] = bool(STATE.get('key')); st.pop('key', None)   # 키 값은 화면에 되돌려 주지 않는다
                 st['checkpoint'] = checkpoint_info()
                 st['extracting'] = STATE.get('extracting') if _extracting else None; st['extract_error'] = STATE.get('extract_error', '')
                 st['areas_text'] = docs.areas_text(STATE.get('areas') or core.DEFAULT_AREAS)
@@ -475,7 +476,7 @@ class H(BaseHTTPRequestHandler):
                 st['units_loaded'] = bool(_units); st['dirty_after_export'] = bool(STATE.get('dirty_after_export'))
                 st['allowed_hosts'] = sorted(core.ALLOWED_MODEL_HOSTS); st['remote_ok'] = core.remote_allowed()
                 st['contacts'] = export.contact_rows({'items': STATE['items'], 'info': STATE.get('info') or {}, 'areas': STATE.get('areas') or core.DEFAULT_AREAS, 'overview': STATE.get('overview') or {},
-                                                      'handover_from': STATE.get('handover_from', ''), 'org': STATE.get('org', '')}) if STATE['items'] else []   # 화면 4절은 내보내기와 같은 목록
+                                                      'handover_from': STATE.get('handover_from', ''), 'org': STATE.get('org', ''), 'contact_excl': STATE.get('contact_excl') or []}) if STATE['items'] else []   # 화면 4절은 내보내기와 같은 목록
             return self._send(200, st)
         if p.path == '/api/items':
             with LOCK:
@@ -493,7 +494,7 @@ class H(BaseHTTPRequestHandler):
             with LOCK:
                 session = {'items': STATE['items'], 'areas': STATE.get('areas') or core.DEFAULT_AREAS, 'overview': STATE.get('overview') or {}, 'assets': STATE.get('assets') or {},
                            'info': STATE.get('info') or {}, 'months': STATE.get('months', 12), 'failures': STATE['failures'], 'handover_from': STATE.get('handover_from', ''),
-                           'handover_to': STATE.get('handover_to', ''), 'witness': STATE.get('witness', ''), 'handover_date': STATE.get('handover_date', ''), 'org': STATE.get('org', '')}
+                           'handover_to': STATE.get('handover_to', ''), 'witness': STATE.get('witness', ''), 'handover_date': STATE.get('handover_date', ''), 'org': STATE.get('org', ''), 'contact_excl': STATE.get('contact_excl') or []}
                 session.update({'title': STATE.get('title') or '', 'files': STATE['files'], 'fingerprints': STATE['fingerprints'], 'model': STATE['model'] or '없음(규칙층만)', 'version': VERSION, 'folder': STATE.get('folder') or ''})   # 인쇄본 끝줄의 「업무 폴더」가 비어 나오던 것
             if p.path == '/api/report':
                 return self._send(200, {'html': export.to_html(session)})
@@ -578,13 +579,15 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {'ok': True})
         if p == '/api/settings':
             with LOCK:
-                for k in ('model', 'key', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path', 'ocr', 'ocr_pages', 'ocr_images', 'areas_mode'):
+                for k in ('model', 'key', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path', 'ocr', 'ocr_pages', 'ocr_images', 'areas_mode', 'contact_excl'):
                     if k in body:
-                        if k in ('overview', 'assets') and isinstance(body[k], dict) and isinstance(STATE.get(k), dict):
+                        if k == 'contact_excl':   # 4절에서 뺀 연락처(전화번호 목록): 결과물·화면 모두에서 뺀다
+                            STATE[k] = [str(x)[:30] for x in (body[k] if isinstance(body[k], list) else [])][:500]
+                        elif k in ('overview', 'assets') and isinstance(body[k], dict) and isinstance(STATE.get(k), dict):
                             STATE[k] = dict(STATE[k], **body[k])   # 창이 둘 열려 있어도 서로의 업무 설명·물품 칸을 지우지 않게(칸 단위로 합침)
                         else:
                             STATE[k] = body[k]
-                if STATE.get('exports') and any(k in body for k in ('overview', 'assets', 'handover_from', 'handover_to', 'witness', 'handover_date', 'org', 'title', 'areas_text', 'manual_path')):
+                if STATE.get('exports') and any(k in body for k in ('overview', 'assets', 'handover_from', 'handover_to', 'witness', 'handover_date', 'org', 'title', 'areas_text', 'manual_path', 'contact_excl')):
                     STATE['dirty_after_export'] = True   # 내려받은 뒤 고침(다시 열어도 「예전 파일」 안내가 남게)
                 if 'areas_text' in body:
                     STATE['areas'] = docs.parse_areas(body['areas_text']) or core.DEFAULT_AREAS; STATE['areas_src'] = '사람' if body['areas_text'].strip() else '기본'
@@ -688,7 +691,7 @@ class H(BaseHTTPRequestHandler):
                            'items': STATE['items'], 'model': STATE['model'] or '없음(규칙층만)', 'title': STATE['title'] or '전임자 확인 후 확정', 'version': VERSION,
                            'overview': STATE.get('overview') or {}, 'assets': STATE.get('assets') or {}, 'keyfiles': STATE.get('keyfiles') or [], 'areas': STATE.get('areas') or core.DEFAULT_AREAS,
                            'handover_from': STATE.get('handover_from', ''), 'handover_to': STATE.get('handover_to', ''), 'witness': STATE.get('witness', ''), 'handover_date': STATE.get('handover_date', ''),
-                           'org': STATE.get('org', ''), 'months': STATE.get('months', 12), 'info': STATE.get('info') or {}}
+                           'org': STATE.get('org', ''), 'months': STATE.get('months', 12), 'info': STATE.get('info') or {}, 'contact_excl': STATE.get('contact_excl') or []}
             stem = '인수인계서_' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             base, k = stem, 2
             while os.path.exists(os.path.join(WORK, stem + '.md')):   # 같은 초에 두 번 눌러도 앞 파일을 덮어쓰지 않게

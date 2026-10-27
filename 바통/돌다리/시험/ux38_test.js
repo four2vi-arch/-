@@ -101,7 +101,25 @@ const oai = http.createServer((req, res) => {
     await page2.goto(`http://127.0.0.1:${PORT2}/`); await sleep(700); await page2.fill('#folder', MOCK); await page2.click('#btnExtract'); await page2.waitForSelector('.pills', {timeout: 40000}); await sleep(500);
     await page2.click('#engineSeg button[data-e="model"]'); await sleep(500);
     ok('허용했을 때만 키 칸이 보임', !!(await page2.$('#key')) && !(await page.$('#key')));
+    // 키는 화면에 되돌려 주지 않고(key_set만), 세션 파일에도 남지 않는다. 빈 칸으로 저장해도 지워지지 않고 「키 지우기」로만 지운다
+    const stK = await state(PORT2); const sessTxt = fs.existsSync(path.join(WORK, 'b', '세션.json')) ? fs.readFileSync(path.join(WORK, 'b', '세션.json'), 'utf8') : '';
+    ok('키 값은 /api/state에 없고 key_set만, 세션.json에도 없음', !('key' in stK) && stK.key_set === true && !sessTxt.includes('k-test'), JSON.stringify({key: stK.key, key_set: stK.key_set, inFile: sessTxt.includes('k-test')}));
+    ok('키 칸은 비어 있고 「저장됨」 안내·「키 지우기」 단추', (await page2.$eval('#key', e => e.value)) === '' && (await page2.$eval('#key', e => e.placeholder)).includes('저장됨') && !!(await page2.$('#btnKeyClear')));
+    await page2.fill('#hDate2', '2026-03-02'); await page2.$eval('#hDate2', e => e.dispatchEvent(new Event('change'))); await sleep(800);
+    ok('다른 설정을 저장해도 키는 남음', (await state(PORT2)).key_set === true);
+    await page2.click('#btnKeyClear'); await sleep(800);
+    ok('「키 지우기」로 지움', (await state(PORT2)).key_set === false && !(await page2.$('#btnKeyClear')));
     await page2.close();
+    // 4절 연락처: 줄마다 「빼기」, 「휴대전화 모두 빼기」, 「되살리기」(개인정보 최소화)
+    await nav('s4'); await sleep(300);
+    const n0 = (await page.$$('#main .person')).length, mob0 = (await state()).contacts.filter(c => c.mobile).length;
+    const firstPh = await page.$eval('#main .person [data-excl]', b => b.dataset.excl);
+    await page.click('#main .person [data-excl]'); await sleep(900);
+    ok('「빼기」를 누르면 그 번호가 목록·상태에서 빠지고 「뺀 번호」에 보임', (await page.$$('#main .person')).length === n0 - 1 && ((await state()).contact_excl || [])[0] === firstPh && !!(await page.$(`[data-restore="${firstPh}"]`)), JSON.stringify((await state()).contact_excl));
+    await page.click(`[data-restore="${firstPh}"]`); await sleep(900);
+    ok('「되살리기」로 되돌림', (await page.$$('#main .person')).length === n0 && ((await state()).contact_excl || []).length === 0);
+    if (mob0) { await page.click('#btnExclMobile'); await sleep(900); ok('「휴대전화 모두 빼기」', (await state()).contacts.filter(c => c.mobile).length === 0 && ((await state()).contact_excl || []).length === mob0, JSON.stringify((await state()).contact_excl)); }
+    else ok('「휴대전화 모두 빼기」(모의 폴더에 휴대전화 없음: 건너뜀)', true);
     ok('페이지 오류 없음', errors.length === 0, errors.join(' / '));
   } catch (e) { ok('예외 없음', false, String(e && e.stack || e)); }
   finally {

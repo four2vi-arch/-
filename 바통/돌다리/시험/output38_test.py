@@ -121,6 +121,9 @@ ok('현황 자료의 메모·할 일이 1-가 현황 칸에', '메모: 매년 4�
 # 7. 4절 연락처는 한 목록(contact_rows): 명단 항목을 버리면 그 연락처도 빠짐, 확인 전 문서 연락처는 [확인 전]
 rows = export.contact_rows(s)
 ok('명단 연락처(오세린)가 목록에 있고 출처 「(명단)」', any(r['name'] == '오세린' and r['src'] == '명단' for r in rows), [(r['name'], r['src']) for r in rows][:5])
+s['contact_excl'] = ['063-000-0808']   # 전임자가 4절에서 「빼기」 한 번호
+ok('4절에서 뺀 번호는 목록·결과물에서 빠짐', not any(r['phone'] == '063-000-0808' for r in export.contact_rows(s)) and '063-000-0808' not in export.to_markdown(s).split('관계자 연락처', 1)[1].split('인수자 질문')[0])
+s['contact_excl'] = []
 doc_it.update(keep=False)
 rows2 = export.contact_rows(s)
 ok('명단 문서를 버리면 그 연락처도 빠짐', not any(r['name'] == '오세린' for r in rows2))
