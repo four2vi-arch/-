@@ -31,6 +31,30 @@ const recurs = () => ITEMS.filter(i => i.kind3 === '반복' || (i.kind3 === '현
 const fileName = f => String(f || '').split('/').pop();
 // 내려받는 파일 본문에 실리는 항목(export.kept_docs와 같은 기준): 넣은 것 + 확인 전 현안·반복. 확인 전 문서·현황·연혁 제안은 붙임 1로만
 const inBody = i => i.keep && !(isSug(i) && (i.private || !['현안', '반복'].includes(i.kind3)));
+// 문서 제목에서 자주 나오는 말(물어보기 자동 검색어, 1-가 업무 설명 자동 초안). 개인 문서·버린 문서는 쓰지 않고, 날짜·숫자·흔한 공문 말·호칭은 뺀다
+const KW_STOP = new Set('알림 계획 결과 보고 보고서 추진 관련 제출 수립 시행 안내 요청 회신 협조 개최 실시 운영 현황 자료 검토 계획서 변경 협의 통보 작성 초안 최종 개정 붙임 문서 공문 회의 회의록 메모 대장 목록 파일 양식 서식 명단 정리 기준 사항 방안 대책 업무 관리 위한 대한 따른 관한 년도 상반기 하반기 분기 월별 연간 올해 내년 기타 우리 해당 일부 전체 세부 주요 기본 각종 신규 추가 기존 사본 수정 최신 이전 다음 공유 확인 첨부 매주 매월 매년 매일 익월 전월 당월 월요일 화요일 수요일 목요일 금요일 토요일 일요일 오전 오후 이내 이후 전년 금년 RE FW Fwd'.split(' '));
+function keywordsOf(items, n, maxShare) {
+  const cnt = new Map(), first = new Map(); let k = 0, tot = 0;
+  const orgW = new Set(String(ST.org || '').split(/\s+/).filter(x => x.length >= 2));   // 1-가 소속의 낱말(우리 부서 이름)은 업무를 말하지 않는다
+  items.forEach(i => { if (i.private || i.keep === false) return; tot++; const seen = new Set();
+    const t0 = String(i.title || ''); const names = new Set(); t0.replace(/([가-힣]{2,4})\s*(과장|주무관|주사|팀장|국장|실장|대리|계장|님|씨|담당자)/g, (m, x) => { names.add(x); return m; });   // 「홍길동 과장」의 이름
+    t0.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').split(/[^가-힣A-Za-z0-9]+/).forEach(w0 => {
+      let w = w0.length >= 3 ? w0.replace(/(의|을|를|은|는|이|가|에서|으로|에)$/, '') : w0;   // 「기한을」「재고를」→ 기한·재고
+      if (names.has(w) || names.has(w0) || orgW.has(w) || (w.length >= 3 && /(과|실|팀|국|청|센터|본부)$/.test(w))) return;   // 이름·부서명(영업과·우편영업실)
+      if (w.length < 2 || w.length > 12 || /^\d/.test(w) || KW_STOP.has(w) || /(하여|하고|한다|하는|하며|하기|합니다|하였다|했다|된다|되어|되는|하도록|토록|까지|부터|에게|이며|이고|없이|있는|없는)$/.test(w) || /(님|씨|주무관|주사|과장|팀장|국장|실장)$/.test(w) || seen.has(w)) return;
+      seen.add(w); cnt.set(w, (cnt.get(w) || 0) + 1); if (!first.has(w)) first.set(w, k++); }); });
+  const out = [];
+  [...cnt.entries()].sort((a, b) => b[1] - a[1] || first.get(a[0]) - first.get(b[0])).forEach(([w, c]) => {
+    if (out.length >= n || (maxShare && tot >= 6 && c > tot * maxShare)) return;   // 절반 넘는 문서에 나오는 말은 찾기 단추로 쓸모가 적음
+    if (out.some(x => x.includes(w) || w.includes(x))) return;   // 우편매출액·우편매출처럼 겹치면 하나만
+    out.push(w); });
+  return out;
+}
+function josa(w, a, b) { const c = String(w || '').slice(-1).charCodeAt(0); return c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28 ? a : b; }   // 받침이 있으면 a(이·은), 없으면 b(가·는)
+function autoDesc(a) {   // 그 업무 문서 제목의 자주 나온 말 네 개로 한 줄 초안(전임자가 고쳐 쓰는 출발점)
+  const r = ITEMS.filter(i => areaOf(i) === a && i.keep !== false && !i.private); const kw = keywordsOf(r, 4);
+  return kw.length ? `${kw.join(', ')} 등(문서 ${r.length}건)` : '';
+}
 const bodyAreas = () => usedAreas().filter(a => (OV[a] || {}).gone || ITEMS.some(i => areaOf(i) === a && inBody(i)));   // 1-가·완성도·내보내기 점검(화면 7개·파일 6개로 업무 수가 다르던 것)
 
 // ---------------------------------------------------------------- 상태
@@ -66,11 +90,12 @@ function progText(pr) {
 function completeness(a) {
   const rows = ITEMS.filter(i => areaOf(i) === a);
   const ov = OV[a] || {};
-  const desc = !!(ov.desc || '').trim();
+  const desc = !!(ov.desc || '').trim() && !ov.desc_auto;   // 자동 초안 그대로면 아직 쓰지 않은 것으로 센다
+  const auto = !!(ov.desc || '').trim() && !!ov.desc_auto;
   const sug = rows.filter(i => isSug(i) && i.kind3 !== '문서').length;
   const noNext = rows.filter(i => i.keep && !isSug(i) && i.kind3 === '현안' && !(i.next || '').trim() && !(i.todo || '').trim()).length;
   const k = rows.filter(i => i.keep && !isSug(i));
-  return {desc, sug, noNext, done: desc && sug === 0 && noNext === 0, seen: k.length ? Math.round(100 * k.filter(i => i.seen).length / k.length) : 0};
+  return {desc, auto, sug, noNext, done: desc && sug === 0 && noNext === 0, seen: k.length ? Math.round(100 * k.filter(i => i.seen).length / k.length) : 0};
 }
 function overall() {
   const used = bodyAreas(); if (!used.length) return {pct: 0, label: '완성도 ·'};
@@ -87,7 +112,7 @@ function renderNav() {
   const badge = id => {
     if (!ITEMS.length) return '';
     const sugN = r => r.filter(isSug).length;
-    if (id === 's1a') { const n = bodyAreas().filter(a => (OV[a] || {}).desc).length; return n === bodyAreas().length ? '<span class="st ok">작성</span>' : `<span class="st todo">${n}/${bodyAreas().length}</span>`; }
+    if (id === 's1a') { const n = bodyAreas().filter(a => (OV[a] || {}).desc && !(OV[a] || {}).desc_auto).length; return n === bodyAreas().length ? '<span class="st ok">작성</span>' : `<span class="st todo">${n}/${bodyAreas().length}</span>`; }
     if (id === 's1b') { const r = recurs(); const s = sugN(r); return s ? `<span class="st ai">확인 전 ${s}</span>` : `<span class="st ok">${r.filter(i => i.keep).length}건</span>`; }
     if (id === 's1c') { const r = issues(); const s = sugN(r); return s ? `<span class="st ai">확인 전 ${s}</span>` : `<span class="st ok">${r.filter(i => i.keep && i.status !== '미결').length}건</span>`; }
     if (id === 's1d') { return `<span class="st">${issues().filter(i => i.keep && !isSug(i) && i.status === '미결').length}건</span>`; }
@@ -97,11 +122,14 @@ function renderNav() {
     return '';
   };
   for (const [id, name] of SECS) h += `<a data-s="${id}" href="#${id}" class="${sec === id ? 'cur' : ''}">${name} ${badge(id)}</a>`;
-  h += `<div class="lbl">기 타</div><a data-s="log" href="#log" class="${sec === 'log' ? 'cur' : ''}">작업 기록</a>`;
+  h += `<div class="lbl">기 타</div><a href="#q" id="navAsk" title="파일 이름·본문 찾기(화면이 좁으면 본문 아래에 있음)">물어보기(파일 찾기)</a><a data-s="log" href="#log" class="${sec === 'log' ? 'cur' : ''}">작업 기록</a>`;
   nav.innerHTML = h;
-  $$('#nav a').forEach(el => el.onclick = async (e) => { e.preventDefault(); await settingsQ.catch(() => {}); sec = el.dataset.s; ls('sec', sec); ORD = null; renderNav(); renderMain(); renderAside(); window.scrollTo(0, 0); });   // 방금 고친 설정(인계 일자 등)의 저장이 끝난 뒤 그린다(준비 화면 기준일이 옛 값으로 보이던 것)   // href로 Tab 이동·Enter 가능(키보드만으로 목차를 못 가던 것)
+  const na = $('#navAsk'); if (na) na.onclick = e => { e.preventDefault(); const q = $('#q'); q.scrollIntoView({block: 'center'}); q.focus(); };   // 물어보기는 절이 아니라 칸으로 바로 감
+  $$('#nav a[data-s]').forEach(el => el.onclick = async (e) => { e.preventDefault(); await settingsQ.catch(() => {}); clearSel(); sec = el.dataset.s; ls('sec', sec); ORD = null; renderNav(); renderMain(); renderAside(); window.scrollTo(0, 0); });   // 방금 고친 설정(인계 일자 등)의 저장이 끝난 뒤 그린다(준비 화면 기준일이 옛 값으로 보이던 것)   // href로 Tab 이동·Enter 가능(키보드만으로 목차를 못 가던 것)
   fitTop();   // 상단 띠 높이가 바뀌어도(인계자↔인수자) 목차·오른쪽 패널 위치를 다시 잰다
   const o = overall(); $('#progLbl').textContent = o.label; $('#progBar').style.width = o.pct + '%';
+  const pg = $('#prog'); if (pg) { const left = ITEMS.length ? bodyAreas().find(a => !completeness(a).done) : null; pg.title = left ? `「${left}」부터 채우기(누르면 그 업무로 갑니다)` : ITEMS.length ? '모든 업무 완료' : '';
+    pg.onclick = pg.onkeydown = e => { if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return; e.preventDefault(); const a = ITEMS.length && bodyAreas().find(x => !completeness(x).done); if (!a) return; goArea(a); }; }   // 완성도를 누르면 아직 덜 된 첫 업무로
   ['#btnExport', '#btnPrint', '#btnPreview'].forEach(s => { const b = $(s); if (b) { b.disabled = !ITEMS.length; b.title = ITEMS.length ? '' : '초안을 만든 뒤 쓸 수 있습니다'; } });
 }
 
@@ -119,7 +147,7 @@ function detailsRestore(m, keys) {
 }
 function renderMain() {
   const m = $('#main'); const keep = detailsKeys(m);
-  renderMain0(m); detailsRestore(m, keep);
+  renderMain0(m); detailsRestore(m, keep); selBar();   // 고르기 칸이 없는 절(3절·준비·미리보기)에서도 띠를 다시 셈
 }
 function renderMain0(m) {
   if (!ITEMS.length && sec !== 'prep' && sec !== 'log') sec = 'prep';
@@ -142,7 +170,7 @@ function stepBar() {
   return `<div class="row stepbar" style="justify-content:space-between;margin-top:28px;border-top:1px solid var(--line2);padding-top:12px">${prev ? `<button class="ghost" data-step="${prev[0]}">← ${esc(prev[1])}</button>` : '<span></span>'}${next ? `<button class="btn" data-step="${next[0]}">다음: ${esc(next[1])} →</button>` : '<button class="btn" id="stepExport">인계·인수서 내려받기</button>'}</div>`;
 }
 function bindStepBar(root) {
-  root.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { sec = b.dataset.step; ls('sec', sec); ORD = null; rerender(); window.scrollTo(0, 0); });
+  root.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { clearSel(); sec = b.dataset.step; ls('sec', sec); ORD = null; rerender(); window.scrollTo(0, 0); });
   const e = root.querySelector('#stepExport'); if (e) e.onclick = () => $('#btnExport').click();
 }
 // 절 맨 위 띠: ① 초안이 끝난 뒤 처음 보는 절에 결과(건수·모델 호출·오류)를 한 번 ② 초안 뒤 기준일(인계 일자)이 바뀌어 초안이 낡았을 때
@@ -158,7 +186,7 @@ function topBands() {
   return h;
 }
 function bindTopBands(root) {
-  const r = root.querySelector('#btnRedraft'); if (r) r.onclick = async () => { try { await api('/api/draft', {}); wasRunning = true; sec = 'prep'; ls('sec', sec); await refresh(); } catch (e) { alert(e.message); } };
+  const r = root.querySelector('#btnRedraft'); if (r) r.onclick = async () => { clearSel(); try { await api('/api/draft', {}); wasRunning = true; sec = 'prep'; ls('sec', sec); await refresh(); } catch (e) { alert(e.message); } };
   const c = root.querySelector('#doneClose'); if (c) c.onclick = () => { doneSec = ''; renderMain(); };
 }
 // 넣기·버리기 두 단추는 결정한 뒤에도 그대로 두고 고른 쪽만 채운다(누르면 「빼기」 같은 다른 단추로 바뀌어 「고르는 칸이 사라진」 듯 보이던 것). 다른 쪽을 누르면 바꾼다
@@ -205,9 +233,9 @@ function card(it, o) {
   if (it.summary) body += `<div class="s">요지${it.src === '모델' && it.summary_by !== '사람' ? '(AI)' : ''}: ${esc(it.summary)}</div>`;   // 결과물과 같게: AI가 쓴 글은 표시하고 원문 줄은 늘 함께
   if (it.todo_ai && it.todo_by !== '사람') body += `<div class="s">할 일(AI 제안): ${esc(it.todo_ai)} <span class="chip">원문 할 일은 그대로 두고 참고로만</span></div>`;
   if (it.quote) body += `<div class="s">원문: ${esc(it.quote)}</div>`;
-  if (!ro) body += `<div class="t"><input class="text" data-k="todo" value="${esc(it.todo || '')}" placeholder="후임자가 할 일 (한 줄)"><input class="when" data-k="due_next" value="${esc(it.due_next || '')}" placeholder="기한 YYYY-MM-DD"></div>`;
+  if (!ro) body += `<div class="t"><input class="text" data-k="todo" value="${esc(it.todo || '')}" placeholder="후임자가 할 일 (한 줄)" title="${esc(it.todo || '후임자가 할 일 (한 줄)')}"><input class="when" data-k="due_next" value="${esc(it.due_next || '')}" placeholder="기한 YYYY-MM-DD"></div>`;
   else if (it.todo || it.due_next) body += `<div class="s">할 일: ${esc(it.todo || '')}${it.due_next ? ' · 기한 ' + esc(it.due_next) : ''}</div>`;
-  if (it.kind3 === '현안' && !sug && it.keep && !ro) body += `<div class="t"><select class="mini" data-k="status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(it.status || '진행') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><input class="text" data-k="next" value="${esc(it.next || '')}" placeholder="다음에 할 일(후임자가 이어서 할 것)"></div>`;
+  if (it.kind3 === '현안' && !sug && it.keep && !ro) body += `<div class="t"><select class="mini" data-k="status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(it.status || '진행') === k ? 'selected' : ''}>${v}</option>`).join('')}</select><input class="text" data-k="next" value="${esc(it.next || '')}" placeholder="다음에 할 일(후임자가 이어서 할 것)" title="${esc(it.next || '다음에 할 일(후임자가 이어서 할 것)')}"></div>`;
   const who = [(it.contacts || []).map(c => `${esc(c.name)} ${esc(c.phone)}`).join(', '), it.owner ? esc(it.owner) + '(AI)' : ''].filter(Boolean).join(' / ');   // 결과물 「담당」과 같은 차례(규칙 연락처 → 모델 담당)
   body += `<div class="s">${it.file ? `<button class="ghost sm doc-open" data-f="${esc(it.file)}">원문 ▸</button> 파일: ` + esc(it.file) : '전임자가 직접 적음'}${it.attachments && it.attachments.length ? ' · 붙임 ' + it.attachments.length + '개' : ''}${who ? ' · 담당: ' + who : ''}${it.due && it.due.length > 1 ? ' · 기한 후보 ' + it.due.map(d => d.date).join(', ') : ''}</div>`;
   if (!sug && it.keep && !ro) body += `<input class="memo" data-k="note" value="${esc(it.note || '')}" placeholder="메모(후임자에게 남길 말)">`;
@@ -221,7 +249,33 @@ function card(it, o) {
   if (!ro && !sug && it.keep) act += `<span class="mv"><select class="mini" data-k="area" title="업무 바꾸기">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select><select class="mini" data-k="kind3" title="절 바꾸기">${KINDS.map(k => `<option ${it.kind3 === k ? 'selected' : ''}>${k}</option>`).join('')}</select></span>`;
   return `<div class="sug doc ${sug ? '' : it.keep ? 'me' : 'off'}" data-id="${it.id}"><div>${body}</div><div class="act">${act}</div></div>`;
 }
+// 표 보기 일괄 처리: 확인 전 줄을 골라 한꺼번에 넣기·버리기(하나씩 보고 고른 것이라 「일괄 넣음」 표시는 붙이지 않음)
+const SEL = new Map();   // id → {title, all}: 초안을 다시 만들어 id가 바뀌어도 다른 줄이 골라지지 않게 제목까지 본다. all = 「모두 고르기」로 고른 것
+const selOk = (id, v) => ITEMS.some(i => i.id === id && i.title === v.title && isSug(i));
+function clearSel() { SEL.clear(); const b = $('#selBar'); if (b) b.hidden = true; }
+function selBar() {
+  let b = $('#selBar'); if (!b) { b = document.createElement('div'); b.id = 'selBar'; b.className = 'selbar'; document.body.appendChild(b); }
+  const vis = new Set([...document.querySelectorAll('#main input.pick')].map(c => +c.dataset.id));   // 지금 화면에 보이는 고르기 칸만(다른 절·카드 보기에서 보이지 않는 줄이 바뀌던 것)
+  [...SEL.keys()].forEach(id => { if (!vis.has(id) || !selOk(id, SEL.get(id))) SEL.delete(id); });
+  const ids = [...SEL.keys()];
+  if (!ids.length || mode === 'take') { b.hidden = true; return; }
+  b.hidden = false; b.innerHTML = `<span>고른 줄 <b>${ids.length}</b>건</span> <button class="btn sm" data-sa="in">넣기</button> <button class="ghost sm" data-sa="out">버리기</button> <button class="ghost sm" data-sa="none">고르기 풀기</button>`;
+  b.querySelectorAll('[data-sa]').forEach(x => x.onclick = async () => { const act = x.dataset.sa; if (act === 'none') { clearSel(); renderMain(); return; }
+    const on = act === 'in'; const ids = [...SEL.keys()].filter(id => selOk(id, SEL.get(id)));
+    const its = ids.map(id => ITEMS.find(i => i.id === id)); const yearly = its.filter(i => !on && i.kind3 === '현안' && i.recur && i.recur.years);
+    if (!on && !confirm(`고른 ${ids.length}건을 버릴까요?` + (yearly.length ? `\n(해마다 오는 현안 ${yearly.length}건은 버리지 않고 1-나 반복 업무로 옮깁니다)` : ''))) return;
+    const allIds = ids.filter(id => SEL.get(id).all && !yearly.some(y => y.id === id)), oneIds = ids.filter(id => !SEL.get(id).all && !yearly.some(y => y.id === id));
+    const ch = Object.values(pending).concat(oneIds.map(id => ({id, keep: on, decided: true})), yearly.map(y => ({id: y.id, kind3: '반복', keep: true, decided: true})));
+    try { const j = await api('/api/items', {changes: ch, bulk: allIds.length ? [{ids: allIds, keep: on}] : []}); pending = {}; ITEMS = j.items; clearSel(); rerender(); } catch (e) { alert(e.message); } });   // 「모두 고르기」로 고른 것은 하나씩 보지 않았으니 넣으면 [일괄 넣음]
+}
+function bindPick(root) {
+  const t = id => (ITEMS.find(i => i.id === id) || {}).title;
+  root.querySelectorAll('input.pick').forEach(c => c.onchange = () => { const id = +c.dataset.id; if (c.checked) SEL.set(id, {title: t(id), all: false}); else SEL.delete(id); selBar(); });
+  root.querySelectorAll('input.pickall').forEach(c => c.onchange = () => { c.closest('table').querySelectorAll('input.pick').forEach(p => { p.checked = c.checked; const id = +p.dataset.id; if (c.checked) SEL.set(id, {title: t(id), all: true}); else SEL.delete(id); }); selBar(); });
+  selBar();
+}
 function bindCards(root) {
+  bindPick(root);
   root.querySelectorAll('.sug[data-id], .trow[data-id]').forEach(el => {
     const id = +el.dataset.id; const it = ITEMS.find(i => i.id === id); if (!it) return;
     el.querySelectorAll('[data-k]').forEach(inp => { inp.onchange = () => { mark(id, inp.dataset.k, inp.value); if (inp.dataset.autoin && isSug(it)) { mark(id, 'keep', true); mark(id, 'decided', true); } if (inp.dataset.k === 'area' || inp.dataset.k === 'kind3') { renderNav(); renderAside(); } };   // 업무·절을 바꿔도 카드는 다음 화면 이동 때까지 제자리(바뀌어 사라진 줄 알던 것)
@@ -242,13 +296,13 @@ async function toggleDoc(el, btn) {
   try { const j = await api('/api/doc?file=' + encodeURIComponent(btn.dataset.f));
     const box = document.createElement(el.tagName === 'TR' ? 'tr' : 'div'); box.className = 'docview';
     const inner = `${j.hot.length ? `<div class="hot"><b>눈여겨볼 줄</b>${j.hot.map(l => `<div>${esc(l)}</div>`).join('')}</div>` : ''}<div class="head"><b>앞부분</b>${j.head.map(l => `<div>${esc(l)}</div>`).join('')}${j.n_lines > 30 ? `<div class="s">… 전체 ${j.n_lines}줄</div>` : ''}</div>`;
-    box.innerHTML = el.tagName === 'TR' ? `<td colspan="9">${inner}</td>` : inner;
+    box.innerHTML = el.tagName === 'TR' ? `<td colspan="${el.children.length}">${inner}</td>` : inner;   // 그 표의 칸 수만큼(9칸으로 넓혀 빈 칸 두 개가 폭을 빼앗고 「문서」 칸이 몇 글자로 좁아지던 것)
     if (el.tagName === 'TR') el.after(box); else el.querySelector('div').appendChild(box);
     btn.textContent = '원문 ▾'; } catch (e) { alert(e.message); }
 }
 function dateText(it) { const d = String(it.date || ''); if (!d) return it.when ? String(it.when) : '날짜 없음'; if (it.date_src === '연도만') return d.slice(0, 4) + '년'; return d + (it.date_src === '수정일' ? '(수정일)' : ''); }
 let dirtyAfterExport = false;
-function mark(id, k, v) { dirtyAfterExport = true; pending[id] = pending[id] || {id}; pending[id][k] = v; const it = ITEMS.find(i => i.id === id); if (it) { it[k] = v; if (k === 'area') it.area_by = '사람'; } clearTimeout(flushTimer); flushTimer = setTimeout(flush, 500); }
+function mark(id, k, v) { if (!dirtyAfterExport && (ST.exports || []).length && $('#exportBox')) setTimeout(showExports, 0); dirtyAfterExport = true; pending[id] = pending[id] || {id}; pending[id][k] = v; const it = ITEMS.find(i => i.id === id); if (it) { it[k] = v; if (k === 'area') it.area_by = '사람'; } clearTimeout(flushTimer); flushTimer = setTimeout(flush, 500); }
 async function flush() {
   if (!Object.keys(pending).length) return;
   const body = {changes: Object.values(pending)}; pending = {};
@@ -265,6 +319,12 @@ window.addEventListener('beforeunload', () => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && ST && !ST.running && !ST.extracting) refresh().catch(() => {}); });   // 다른 창(탭)에서 고친 것을 돌아왔을 때 다시 읽는다
 function rerender() { renderNav(); renderMain(); renderAside(); }
+function goArea(a) {   // 1-가에서 그 업무 칸으로 가서 빈 설명이면 바로 적게
+  clearSel(); sec = 's1a'; ls('sec', sec); ORD = null; rerender();
+  const inp = [...document.querySelectorAll('#main input[data-ov="desc"]')].find(x => x.dataset.a === a); if (!inp) return;
+  const q = inp.closest('.q') || inp; q.scrollIntoView({block: 'center'}); q.classList.add('flash'); setTimeout(() => q.classList.remove('flash'), 2500);
+  const c = completeness(a); if (!c.desc && mode !== 'take') inp.focus({preventScroll: true});
+}
 function rerenderFocus(id) { rerender(); const b = $(`#main [data-id="${id}"] button.on`) || $(`#main [data-id="${id}"] button`); if (b) b.focus(); }   // 키보드로 넣기·버리기 한 뒤 초점이 문서 맨 앞으로 가던 것
 function bulkBtns(rows, label) {
   const s = rows.filter(isSug); if (!s.length || mode === 'take') return '';
@@ -295,7 +355,7 @@ function bindAdd(kind3) {
 }
 let view = ls('view') || 'table';   // 'table' = 한 줄씩 표로 빠르게 정리, 'card' = 카드
 function viewSeg() { return mode === 'take' ? '' : `<span class="r"><span class="seg" id="viewSeg"><button data-v="table" class="${view === 'table' ? 'on' : ''}">표로 보기</button><button data-v="card" class="${view === 'card' ? 'on' : ''}">카드로 보기</button></span></span>`; }
-function bindView(root) { const s = root.querySelector('#viewSeg'); if (s) s.querySelectorAll('button').forEach(b => b.onclick = () => { view = b.dataset.v; ls('view', view); ORD = null; renderMain(); }); }
+function bindView(root) { const s = root.querySelector('#viewSeg'); if (s) s.querySelectorAll('button').forEach(b => b.onclick = () => { view = b.dataset.v; ls('view', view); ORD = null; clearSel(); renderMain(); }); }
 // 한 줄 = 문서 한 건. 넣기/버리기/상태/할 일을 표 안에서 바로 고친다
 function triTable(rows, o) {
   o = o || {}; const ro = mode === 'take';
@@ -305,11 +365,11 @@ function triTable(rows, o) {
     if (it.src === '모델') chips.push('<span class="chip">AI</span>');
     const act = ro ? (!it.keep && !sug ? '<span class="chip">뺌</span>' : `<label><input type="checkbox" class="seen" ${it.seen ? 'checked' : ''}> 인수 확인</label><input class="text" data-k="question" value="${esc(it.question || '')}" placeholder="물을 것" style="margin-top:3px">`)
       : sug ? `<button class="y" data-act="in">넣기</button> <button class="n" data-act="out">버리기</button>${it.private ? ' <span class="chip st">개인?</span>' : ''}${it.secret ? ' <span class="chip st">계정</span>' : ''}` : tog(it);
-    return `<tr class="trow ${sug ? 'sugrow' : !it.keep ? 'offrow' : ''}" data-id="${it.id}"><td class="d">${esc(dateText(it))}</td><td><input class="text" data-k="title" value="${esc(it.title)}" ${ro ? 'disabled' : ''}><div class="s" title="${esc(it.file || '')}">${it.file ? `<button class="ghost sm doc-open" data-f="${esc(it.file)}">원문 ▸</button> ` : ''}${esc(it.cls || '')}${it.docno ? ' · ' + esc(it.docno) : ''} · ${esc(fileName(it.file))}${it.summary ? '<br>요지: ' + esc(it.summary) : it.quote ? '<br>원문: ' + esc(it.quote) : ''}${it.todo_ai && it.todo_by !== '사람' ? '<br>할 일(AI 제안): ' + esc(it.todo_ai) : ''}</div>${!ro && it.question ? `<div class="s">인수자 질문: ${esc(it.question)}</div><input class="text" data-k="answer" value="${esc(it.answer || '')}" placeholder="답(결과물 4절 「전임자 답」에 실림)">` : ''}</td>
+    return `<tr class="trow ${sug ? 'sugrow' : !it.keep ? 'offrow' : ''}" data-id="${it.id}"><td class="sel">${sug && !ro && (o.issue || it.kind3 === '문서') ? `<input type="checkbox" class="pick" data-id="${it.id}" aria-label="고르기: ${esc(it.title)}" ${SEL.has(it.id) && SEL.get(it.id).title === it.title ? 'checked' : ''}>` : ''}</td><td class="d">${esc(dateText(it))}</td><td><input class="text" data-k="title" value="${esc(it.title)}" ${ro ? 'disabled' : ''}><div class="s" title="${esc(it.file || '')}">${it.file ? `<button class="ghost sm doc-open" data-f="${esc(it.file)}">원문 ▸</button> ` : ''}${esc(it.cls || '')}${it.docno ? ' · ' + esc(it.docno) : ''} · ${esc(fileName(it.file))}${it.summary ? '<br>요지: ' + esc(it.summary) : it.quote ? '<br>원문: ' + esc(it.quote) : ''}${it.todo_ai && it.todo_by !== '사람' ? '<br>할 일(AI 제안): ' + esc(it.todo_ai) : ''}</div>${!ro && it.question ? `<div class="s">인수자 질문: ${esc(it.question)}</div><input class="text" data-k="answer" value="${esc(it.answer || '')}" placeholder="답(결과물 4절 「전임자 답」에 실림)">` : ''}</td>
       <td>${chips.join(' ')}</td>${o.issue ? `<td>${!sug && it.keep && !ro ? `<select class="mini" data-k="status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(it.status || '진행') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>` : esc(STATUS[it.status || '진행'] || it.status)}<input class="when" data-k="due_next" value="${esc(it.due_next || '')}" placeholder="기한" style="width:100%;margin-top:3px" ${ro ? 'disabled' : ''}></td>` : ''}
-      <td>${ro ? esc(it.todo || '') + (it.next ? '<br>다음: ' + esc(it.next) : '') : `<input class="text" data-k="todo" value="${esc(it.todo || '')}" placeholder="할 일">${o.issue ? `<input class="text" data-k="next" value="${esc(it.next || '')}" placeholder="다음에 할 일" style="margin-top:3px">` : ''}`}</td>
+      <td>${ro ? esc(it.todo || '') + (it.next ? '<br>다음: ' + esc(it.next) : '') : `<input class="text" data-k="todo" value="${esc(it.todo || '')}" placeholder="할 일" title="${esc(it.todo || '후임자가 할 일')}">${o.issue ? `<input class="text" data-k="next" value="${esc(it.next || '')}" placeholder="다음에 할 일" title="${esc(it.next || '다음에 할 일')}" style="margin-top:3px">` : ''}`}</td>
       <td class="act">${act}${!ro && !sug && it.keep ? `<div class="mv"><select class="mini" data-k="area" title="업무">${AREAS.concat(['기타']).map(a => `<option ${areaOf(it) === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select><select class="mini" data-k="kind3" title="절">${KINDS.map(k => `<option ${it.kind3 === k ? 'selected' : ''}>${k}</option>`).join('')}</select></div>` : ''}</td></tr>`; };
-  return `<table class="tri"><tr><th style="width:84px">날짜</th><th style="min-width:38%">문서</th><th style="width:52px"></th>${o.issue ? '<th style="width:124px">상태·기한</th>' : ''}<th style="width:23%">할 일${o.issue ? ' · 다음' : ''}</th><th style="width:118px"></th></tr>${rows.map(tr).join('')}</table>`;
+  return `<table class="tri"><tr><th style="width:26px">${!ro && rows.some(i => isSug(i) && (o.issue || i.kind3 === '문서')) ? '<input type="checkbox" class="pickall" title="이 표의 확인 전 줄을 모두 고르기(하나씩 보지 않고 넣으면 결과물에 [일괄 넣음])" aria-label="모두 고르기">' : ''}</th><th style="width:84px">날짜</th><th style="min-width:38%">문서</th><th style="width:52px"></th>${o.issue ? '<th style="width:124px">상태·기한</th>' : ''}<th style="width:23%">할 일${o.issue ? ' · 다음' : ''}</th><th style="width:118px"></th></tr>${rows.map(tr).join('')}</table>`;
 }
 // 순서: 제안 먼저, 최근 것 먼저. 한 절 안에서는 넣기·버리기를 눌러도 줄이 제자리에 있게(다른 절로 갈 때 다시 정렬)
 let ORD = null;
@@ -361,7 +421,7 @@ function renderPrep(m) {
     if (ST.running && pr) h += `<div class="bar"><i style="width:${pr.calls_total ? Math.round(100 * pr.calls_done / pr.calls_total) : 0}%"></i></div>`;
     if (ITEMS.length) h += `<div class="s">다시 만들거나 폴더를 다시 읽어도 넣기·버리기·상태·메모·고친 글·직접 적은 항목은 파일 기준으로 그대로 남습니다.</div>`;
     h += `<div class="row"><label>누적 매뉴얼 파일 <input type="text" id="manualPath" value="${esc(ST.manual_path || '')}" placeholder="비우면 폴더 안에서 자동으로 찾음. 폴더 밖이면 파일 주소(docx·hwpx·md)" style="width:520px"></label>${ST.info && ST.info.manual ? `<span class="s">지금 잡힌 매뉴얼: ${esc(ST.info.manual)}</span>` : ''}</div>`;
-    h += `<details><summary>업무 키워드·기간 설정${ST.areas_src === '폴더' ? ' <span class="chip">폴더 이름으로 나눔</span>' : ''}</summary><div class="s" style="margin-top:8px">한 줄에 「업무 이름: 키워드, 키워드 | 기간」. 맨 위 폴더 이름이 업무 이름과 같으면 그 업무로, 아니면(미분류·서식 폴더 등) 제목·앞부분에 키워드가 많이 든 업무로 분류합니다. 기간을 안 적으면 위 기본 기간.</div><textarea id="areas" style="width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(ST.areas_text || '')}</textarea><div class="row"><button class="ghost sm" id="btnAreas">적용(다시 분류)</button><button class="ghost sm" id="btnAreasDefault">기본값으로</button><span class="s" style="margin-left:8px">다른 기관 보기:</span>${(ST.presets || []).map(([n]) => `<button class="ghost sm" data-preset="${esc(n)}" title="이 보기의 업무·키워드로 채우고 바로 다시 나눕니다">${esc(n)}</button>`).join('')}</div></details>`;
+    h += `<details><summary>업무 키워드·기간 설정${ST.areas_src === '폴더' ? ' <span class="chip">폴더 이름으로 나눔</span>' : ''}</summary><div class="s" style="margin-top:8px">한 줄에 「업무 이름: 키워드, 키워드 | 기간」. 맨 위 폴더 이름이 업무 이름과 같으면 그 업무로, 아니면(미분류·서식 폴더 등) 제목·앞부분에 키워드가 많이 든 업무로 분류합니다. 기간을 안 적으면 위 기본 기간.</div><textarea id="areas" style="width:100%;min-height:140px;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(ST.areas_text || '')}</textarea><div class="row"><button class="ghost sm" id="btnAreas">적용(다시 분류)</button><button class="ghost sm" id="btnAreasDefault">기본값으로</button><span class="s" style="margin-left:8px">다른 기관 보기:</span>${(ST.presets || []).map(([n]) => `<button class="ghost sm" data-preset="${esc(n)}" title="이 보기의 업무·키워드로 채우고 바로 다시 나눕니다">${esc(n)}</button>`).join('')}</div>${(() => { const o = ITEMS.filter(i => areaOf(i) === '기타' && !i.private && i.keep !== false); const kw = keywordsOf(o, 6); return o.length && kw.length ? `<div class="row" style="margin-top:6px"><span class="s">「기타」로 남은 문서 ${o.length}건에서 자주 나온 말: <b>${kw.map(esc).join(', ')}</b></span><button class="ghost sm" id="btnKwAdd" data-kw="${esc(kw.join(', '))}" title="이 말들을 키워드로 하는 업무 한 줄을 더합니다. 업무 이름을 고친 뒤 「적용」을 누르세요">이 말로 새 업무 줄 더하기</button></div>` : ''; })()}</details>`;   // 다른 기관: 어느 업무에도 안 걸린 문서의 말을 뽑아 키워드 줄을 손으로 짓지 않게
   }
   h += '</div>';
   if (ITEMS.length) { const nS = ITEMS.filter(isSug).length; h += `<div class="good">초안이 있습니다. 왼쪽 「1-가. 담당 업무」부터 차례로 채우세요. <button class="btn sm" id="goS1">서식으로</button>${nS && mode === 'give' ? ` <button class="ghost sm" id="btnAllIn" style="font-size:.78rem">확인 전 ${nS}건 한꺼번에 넣기</button><span class="s"> (한꺼번에 넣은 것은 결과물에 [일괄 넣음]으로 표시)</span>` : ''}</div>`; }
@@ -387,6 +447,7 @@ function bindPrep() {
     else if (j.cancelled) { $('#extractMsg').innerHTML = extractMsgHtml(); }
     else { $('#extractMsg').innerHTML = '<div class="note">이 PC에서는 윈도 폴더 창을 열지 못해 화면 안 목록으로 고릅니다.</div>'; pkLoad($('#folder').value.trim() || '').catch(e => alert(e.message)); } };
   const rc = $('#recent'); if (rc) rc.onchange = () => { if (rc.value) { $('#folder').value = rc.value; rc.blur(); doExtract(rc.value, []); } };
+  const ka = $('#btnKwAdd'); if (ka) ka.onclick = () => { const t = $('#areas'); t.value = t.value.replace(/\s*$/, '') + '\n새 업무: ' + ka.dataset.kw; t.focus(); const i = t.value.lastIndexOf('새 업무'); t.setSelectionRange(i, i + 5); alert('업무 키워드 맨 아래에 「새 업무: …」 줄을 더했습니다. 「새 업무」를 알맞은 업무 이름으로 고치고 필요 없는 말은 지운 뒤 「적용(다시 분류)」을 누르세요.'); };
   $$('[data-preset]').forEach(b => b.onclick = () => { const p = (ST.presets || []).find(x => x[0] === b.dataset.preset); if (!p) return; $('#areas').value = p[1]; $('#btnAreas').click(); });
   const sa = $('#subAll'); if (sa) { sa.onclick = () => $$('.sub').forEach(c => c.checked = true); $('#subNone').onclick = () => $$('.sub').forEach(c => c.checked = false); $('#btnReread').onclick = () => doExtract($('#folder').value, $$('.sub').filter(c => !c.checked).map(c => c.value)); }
   const seg = $('#engineSeg'); if (seg) {
@@ -395,7 +456,7 @@ function bindPrep() {
     ['#model', '#url', '#key', '#months', '#hDate2', '#manualPath'].forEach(s => { const el = $(s); if (el) el.onchange = () => settings().then(() => renderMain()).catch(e => alert(e.message)); });
     const kc = $('#btnKeyClear'); if (kc) kc.onclick = () => settings({key: ''}).then(() => renderMain()).catch(e => alert(e.message));
     $('#btnModels').onclick = loadModels; if (engine === 'model') loadModels();
-    $('#btnDraft').onclick = async () => { try {
+    $('#btnDraft').onclick = async () => { clearSel(); try {
       if (engine === 'model') { const j = await api('/api/models');
         if (!hostAllowed($('#url') ? $('#url').value.trim() : ST.url)) { alert('모델 주소가 허용 목록 밖입니다(허용: ' + (ST.allowed_hosts || []).join(', ') + '). 이 PC의 Ollama 주소를 적거나, 기관 서버는 「돌다리_실행.bat --allow-model-host 주소:포트」로 실행하세요.'); return; }
         if (!j.models.length || !ST.model) { if (!confirm(!j.models.length ? 'AI 모델(Ollama)에 연결하지 못했습니다. 규칙만으로 초안을 만들까요?' : '모델을 고르지 않았습니다. 규칙만으로 초안을 만들까요?')) return;
@@ -411,7 +472,7 @@ let settingsQ = Promise.resolve();
 function settings(extra) { const run = settingsQ.then(() => settings0(extra)); settingsQ = run.catch(() => {}); return run; }
 async function settings0(extra) {
   const body = Object.assign({}, extra || {});
-  if (Object.keys(body).some(k => ['overview', 'assets', 'handover_from', 'handover_to', 'witness', 'handover_date', 'org', 'areas_text'].includes(k))) dirtyAfterExport = true;
+  if (Object.keys(body).some(k => ['overview', 'assets', 'handover_from', 'handover_to', 'witness', 'handover_date', 'org', 'areas_text'].includes(k))) { if (!dirtyAfterExport && (ST.exports || []).length && $('#exportBox')) setTimeout(showExports, 0); dirtyAfterExport = true; }   // 같은 화면의 zip·.docx 단추로 예전 파일을 받던 것
   const take = (sel, k, f) => { const el = $(sel); if (el) body[k] = f ? f(el) : el.value; };
   if (!('model' in body)) take('#model', 'model'); take('#url', 'url', el => el.value.trim()); const kEl = $('#key'); if (kEl && kEl.value.trim()) body.key = kEl.value.trim();   // 키는 새로 적었을 때만 보낸다(빈 칸이 저장된 키를 지우지 않게. 지우기는 「키 지우기」) 
   take('#hDate2', 'handover_date', el => el.value.trim()); take('#months', 'months', el => +el.value); take('#manualPath', 'manual_path', el => el.value.trim());
@@ -430,6 +491,7 @@ async function loadModels() {
     $('#planHint').textContent = j.models.length ? '' : 'Ollama가 켜져 있지 않거나 모델이 없습니다. 규칙만으로 진행할 수 있습니다.'; } catch (e) { const ph = $('#planHint'); if (ph) ph.textContent = e.message; }
 }
 async function doExtract(folder, exclude) {
+  clearSel();
   if (!String(folder || '').trim()) { alert('업무 폴더 주소가 비어 있습니다.\n「폴더 찾아보기…」로 고르거나 폴더 주소를 붙여 넣은 뒤 「읽기」를 누르세요.'); return; }   // 빈 주소로 돌다리 자신의 폴더를 읽던 것
   const norm = p => String(p || '').trim().replace(/^"|"$/g, '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
   let fresh = false;
@@ -454,19 +516,25 @@ function renderS1a(m) {
   const used = bodyAreas(); const ro = mode === 'take';
   let h = head('1-가. 담당 업무', '인계자·인수자·입회자(바로 위 상급자)와 일자를 적고, 업무마다 한 줄 설명과 조심할 것을 적습니다. 숫자는 문서에서 센 것입니다.');
   h += `<div class="q"><div class="row"><label>인계자 <input type="text" id="hFrom" value="${esc(ST.handover_from || '')}" placeholder="이름(직급)" ${ro ? 'disabled' : ''}></label><label>인수자 <input type="text" id="hTo" value="${esc(ST.handover_to || '')}" placeholder="이름(직급)" ${ro ? 'disabled' : ''}></label><label>입회자 <input type="text" id="hWit" value="${esc(ST.witness || '')}" placeholder="바로 위 상급자" ${ro ? 'disabled' : ''}></label><label>일자 <input type="text" id="hDate" value="${esc(ST.handover_date || '')}" placeholder="YYYY-MM-DD" style="width:130px" ${ro ? 'disabled' : ''}></label><label>소속 <input type="text" id="hOrg" value="${esc(ST.org || '')}" placeholder="예) ○○우체국 ○○과" style="width:260px" ${ro ? 'disabled' : ''}></label></div></div>`;
-  h += `<div class="sec"><h3>업무별 설명 <span class="chip">${ST.areas_src === '폴더' ? '맨 위 폴더 이름으로 나눈 것' : '키워드로 나눈 것'} · 준비 화면에서 고칠 수 있음</span></h3>` + used.map(a => { const r = ITEMS.filter(i => areaOf(i) === a); const c = completeness(a); const ov = OV[a] || {}; const n = k => r.filter(i => i.kind3 === k && i.keep && !isSug(i)).length; const sN = r.filter(isSug).length;
+  const nEmpty = used.filter(a => !((OV[a] || {}).desc || '').trim() && !(OV[a] || {}).gone).length;
+  h += `<div class="sec"><h3>업무별 설명 <span class="chip">${ST.areas_src === '폴더' ? '맨 위 폴더 이름으로 나눈 것' : '키워드로 나눈 것'} · 준비 화면에서 고칠 수 있음</span>${!ro && used.length ? `<span class="r"><button class="ghost sm" id="btnAutoDesc" title="업무마다 문서 제목에서 자주 나온 말로 한 줄 초안을 채웁니다(빈 칸만). 고쳐 쓰면 「자동 초안」 표시가 사라집니다" ${nEmpty ? '' : 'disabled'}>${nEmpty ? `빈 설명 ${nEmpty}개 자동으로 채우기` : '빈 설명 없음'}</button></span>` : ''}</h3>` + used.map(a => { const r = ITEMS.filter(i => areaOf(i) === a); const c = completeness(a); const ov = OV[a] || {}; const n = k => r.filter(i => i.kind3 === k && i.keep && !isSug(i)).length; const sN = r.filter(isSug).length;
     const hist = r.filter(i => i.kind3 === '연혁' || i.hist).sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
     const stat = r.filter(i => i.kind3 === '현황');
-    return `<div class="q"><div class="qt">${esc(a)} <span class="chip">넣음: 현안 ${n('현안')} · 반복 ${n('반복')} · 문서 ${r.filter(i => i.keep && !isSug(i)).length}${sN ? ' · 확인 전 ' + sN : ''}</span> ${c.done ? '<span class="st ok">작성</span>' : c.sug ? `<span class="st ai" title="이 업무에서 아직 넣기·버리기를 안 누른 현안·반복 제안">현안·반복 제안 ${c.sug}건 남음</span>` : ''}${!ro ? ` <button class="ghost sm" data-gone="${esc(a)}" title="앞서 다른 사람에게 넘긴 업무: 남은 확인 전 제안을 모두 버리고 1-가에 「인계 완료」 한 줄만 남깁니다">이미 넘긴 업무(제안 모두 버림)</button>` : ''}</div>${ov.gone ? `<div class="s">[인계 완료] ${esc(ov.gone)}</div>` : ''}<input data-ov="desc" data-a="${esc(a)}" value="${esc(ov.desc || '')}" placeholder="이 업무가 무엇인지 한 줄 (예: 요금후납 계약 체결·갱신·미납 관리)" ${ro ? 'disabled' : ''}><input data-ov="tip" data-a="${esc(a)}" value="${esc(ov.tip || '')}" placeholder="자주 틀리거나 조심할 것 (예: 미납 2개월째 업체는 발송 정지 전에 유선 통보)" style="margin-top:6px" ${ro ? 'disabled' : ''}>${hist.length || stat.length ? `<details ${hist.filter(isSug).length || stat.filter(isSug).length ? 'open' : ''}><summary>연혁 ${hist.length}건 · 현황 자료 ${stat.length}건 ${bulkBtns(hist.concat(stat), '연혁·현황 제안')}</summary>${hist.map(i => card(i)).join('')}${stat.map(i => card(i)).join('')}</details>` : ''}</div>`; }).join('') + '</div>';
+    return `<div class="q"><div class="qt">${esc(a)} <span class="chip">넣음: 현안 ${n('현안')} · 반복 ${n('반복')} · 문서 ${r.filter(i => i.keep && !isSug(i)).length}${sN ? ' · 확인 전 ' + sN : ''}</span> ${c.done ? '<span class="st ok">작성</span>' : c.sug ? `<span class="st ai" title="이 업무에서 아직 넣기·버리기를 안 누른 현안·반복 제안">현안·반복 제안 ${c.sug}건 남음</span>` : ''}${!ro ? ` <button class="ghost sm" data-gone="${esc(a)}" title="앞서 다른 사람에게 넘긴 업무: 남은 확인 전 제안을 모두 버리고 1-가에 「인계 완료」 한 줄만 남깁니다">이미 넘긴 업무(제안 모두 버림)</button>` : ''}</div>${ov.gone ? `<div class="s">[인계 완료] ${esc(ov.gone)}</div>` : ''}${ov.desc_auto && (ov.desc || '').trim() ? (ro ? '<span class="chip">자동 초안(전임자 확인 전)</span>' : '<span class="chip st autochip" title="문서 제목에서 뽑은 초안입니다. 고쳐 쓰면 표시가 사라지고, 그대로 두면 결과물에 「(자동 초안)」이 붙습니다">자동 초안 · 고쳐 쓰세요</span>') : ''}<input data-ov="desc" data-a="${esc(a)}" value="${esc(ov.desc || '')}" placeholder="이 업무가 무엇인지 한 줄 (예: 요금후납 계약 체결·갱신·미납 관리)" ${ro ? 'disabled' : ''}><input data-ov="tip" data-a="${esc(a)}" value="${esc(ov.tip || '')}" placeholder="자주 틀리거나 조심할 것 (예: 미납 2개월째 업체는 발송 정지 전에 유선 통보)" style="margin-top:6px" ${ro ? 'disabled' : ''}>${hist.length || stat.length ? `<details ${hist.filter(isSug).length || stat.filter(isSug).length ? 'open' : ''}><summary>연혁 ${hist.length}건 · 현황 자료 ${stat.length}건 ${bulkBtns(hist.concat(stat), '연혁·현황 제안')}</summary>${hist.map(i => card(i)).join('')}${stat.map(i => card(i)).join('')}</details>` : ''}</div>`; }).join('') + '</div>';
   h += '<div class="s">연혁은 제목에 협약·계약·개정·변경·도입·종료·이관·지정·시범 같은 전환점 말이 있거나 옛 인수인계서·누적 매뉴얼에 든 문서입니다. 기간 밖이어도 업무마다 최근 12건까지 올립니다. 현황 자료는 대장·현황·명단·실적 파일의 최신판입니다. 그 밖의 기간 밖 문서는 내보내기의 붙임 1에 업무·연도별 제목으로 실립니다.</div>';
   m.innerHTML = h; bindCopy(); bindCards(m); bindBulk(m, b => { const q = b.closest('.q'); const a = q.querySelector('input[data-ov="desc"]').dataset.a; return ITEMS.filter(i => areaOf(i) === a && (i.kind3 === '연혁' || i.hist || i.kind3 === '현황')); });
   m.querySelectorAll('[data-gone]').forEach(b => b.onclick = async () => { const a = b.dataset.gone;
     const who = prompt(`「${a}」을(를) 이미 누구에게 넘겼나요? 예) 2026. 5. 1. 박○○ 주무관에게 인계\n(이 업무의 확인 전 제안 ${ITEMS.filter(i => areaOf(i) === a && isSug(i)).length}건은 모두 버립니다. 비워 두면 아무것도 바꾸지 않습니다)`, (OV[a] || {}).gone || ''); if (who === null || !who.trim()) return;
-    OV[a] = Object.assign({}, OV[a] || {}, {gone: who.trim()});
+    OV[a] = Object.assign({}, OV[a] || {}, {gone: who.trim()}); if (OV[a].desc_auto) { delete OV[a].desc; delete OV[a].desc_auto; }   // 넘긴 업무는 「인계 완료」 한 줄만(자동 초안이 함께 실리던 것)
     try { await settings({overview: OV}); const ids = ITEMS.filter(i => areaOf(i) === a && isSug(i)).map(i => i.id); const j = await api('/api/items', {changes: Object.values(pending), bulk: ids.length ? [{ids, keep: false, area_done: true}] : []}); pending = {}; ITEMS = j.items; rerender(); } catch (e) { alert(e.message); } });
   const sv = () => settings({handover_from: $('#hFrom').value, handover_to: $('#hTo').value, witness: $('#hWit').value, handover_date: $('#hDate').value, org: $('#hOrg').value}).then(() => renderNav()).catch(e => alert(e.message));
   ['#hFrom', '#hTo', '#hWit', '#hDate', '#hOrg'].forEach(s => $(s).onchange = s === '#hDate' ? () => sv().then(() => renderMain()) : sv);   // 일자를 바꾸면 「기준일이 바뀌었습니다」 띠를 바로 다시 그린다(되돌려도 남던 것)
-  m.querySelectorAll('input[data-ov]').forEach(t => { t.onchange = async () => { const a = t.dataset.a; OV[a] = Object.assign({}, OV[a] || {}, {[t.dataset.ov]: t.value}); ovDirty = true; try { await settings({overview: OV}); ST.overview = OV; ovDirty = false; renderNav(); renderAside(); } catch (e) { alert('저장 실패: ' + e.message); } }; debounceInput(t, () => { if (t.value !== ((OV[t.dataset.a] || {})[t.dataset.ov] || '')) t.onchange(); }); });
+  const ad = $('#btnAutoDesc'); if (ad) ad.onclick = async () => { const filled = [];
+    used.forEach(a => { const o = OV[a] || {}; if ((o.desc || '').trim() || o.gone) return; const d = autoDesc(a); if (d) { OV[a] = Object.assign({}, o, {desc: d, desc_auto: true}); filled.push(a); } });
+    if (!filled.length) return alert('채울 말을 찾지 못했습니다. 업무마다 직접 적어 주세요.');
+    try { await settings({overview: OV}); ST.overview = OV; rerender(); alert(`업무 설명 ${filled.length}개를 문서 제목에서 자주 나온 말로 채웠습니다.\n「자동 초안」 표시가 있는 칸을 읽고 고쳐 쓰세요(그대로 두면 결과물에 「(자동 초안)」으로 실립니다).`); } catch (e) { alert('저장 실패: ' + e.message); } };
+  m.querySelectorAll('input[data-ov]').forEach(t => { t.onchange = async () => { const a = t.dataset.a; OV[a] = Object.assign({}, OV[a] || {}, {[t.dataset.ov]: t.value}); if (t.dataset.ov === 'desc') { delete OV[a].desc_auto; const ch = t.previousElementSibling; if (ch && ch.classList.contains('autochip')) ch.remove();
+      const ne = used.filter(x => !((OV[x] || {}).desc || '').trim() && !(OV[x] || {}).gone).length, bt = $('#btnAutoDesc'); if (bt) { bt.disabled = !ne; bt.textContent = ne ? `빈 설명 ${ne}개 자동으로 채우기` : '빈 설명 없음'; } } ovDirty = true; try { await settings({overview: OV}); ST.overview = OV; ovDirty = false; renderNav(); renderAside(); } catch (e) { alert('저장 실패: ' + e.message); } }; debounceInput(t, () => { if (t.value !== ((OV[t.dataset.a] || {})[t.dataset.ov] || '')) t.onchange(); }); });
 }
 // --- 1-나. 반복 업무(연간 일정)
 function calHtml(rows) {
@@ -556,14 +624,26 @@ function renderS4(m) {
 // ---------------------------------------------------------------- 오른쪽: 물어보기·완성도
 function renderAside() {
   const box = $('#checklist'); if (!ITEMS.length) { box.innerHTML = '<div>초안을 만들면 여기에 완성도가 보입니다.</div>'; return; }
-  const used = bodyAreas(); box.innerHTML = used.map(a => { const c = completeness(a); return `<div><span>${esc(a)}</span><span class="${c.done ? 'ok' : 'no'}">${c.done ? '완료' : c.sug ? '제안 ' + c.sug : !c.desc ? '설명 없음' : '할 일 빈 현안 ' + c.noNext}</span></div>`; }).join('') + `<div><span>물품·예산</span><span class="${AS.every(([k]) => (ASSETS[k] || '').trim()) ? 'ok' : 'no'}">${AS.filter(([k]) => (ASSETS[k] || '').trim()).length}/4</span></div><div><span>인계·인수·입회자</span><span class="${ST.handover_from && ST.handover_to && ST.witness ? 'ok' : 'no'}">${[ST.handover_from, ST.handover_to, ST.witness].filter(Boolean).length}/3</span></div>`;
+  const qc = $('#qchips'); if (qc) { const kws = keywordsOf(ITEMS, 10, 0.5); qc.innerHTML = kws.length ? '<span class="s">자주 나온 말</span> ' + kws.map(w => `<button class="ghost sm" data-q="${esc(w)}">${esc(w)}</button>`).join('') : '';
+    qc.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { $('#q').value = b.dataset.q; $('#q').oninput(); }); }   // 무엇을 찾을지 떠올리지 않아도 누르면 바로 찾음(받는 사람에게 특히)
+  const used = bodyAreas(); box.innerHTML = used.map(a => { const c = completeness(a); return `<div><span>${esc(a)}</span><span class="${c.done ? 'ok' : 'no'}">${c.done ? '완료' : c.sug ? '제안 ' + c.sug + (c.auto ? ' · 자동 초안' : '') : c.auto ? '자동 초안 확인' : !c.desc ? '설명 없음' : '할 일 빈 현안 ' + c.noNext}</span></div>`; }).join('') + `<div><span>물품·예산</span><span class="${AS.every(([k]) => (ASSETS[k] || '').trim()) ? 'ok' : 'no'}">${AS.filter(([k]) => (ASSETS[k] || '').trim()).length}/4</span></div><div><span>인계·인수·입회자</span><span class="${ST.handover_from && ST.handover_to && ST.witness ? 'ok' : 'no'}">${[ST.handover_from, ST.handover_to, ST.witness].filter(Boolean).length}/3</span></div>`;
 }
 let qTimer = null;
 $('#q').oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(async () => { const q = $('#q').value.trim(); if (q.length < 2) { $('#answers').innerHTML = ''; return; }
-  try { const j = await api('/api/search?q=' + encodeURIComponent(q)); $('#answers').innerHTML = j.hits.length ? `<div class="s" style="font-size:.82rem;color:var(--ink3)">「${esc(q)}」가 든 파일 ${j.total}개 중 ${j.hits.length}개</div>` + j.hits.map(h => `<div class="ans"><div class="f">${esc(h.file)}</div>${h.lines.map(l => `<div class="l">${esc(l)}</div>`).join('')}<div class="src">이름 ${h.name_hits}곳 · 본문 ${h.body_hits}곳</div></div>`).join('') : '<div class="ans">찾지 못했습니다. 다른 말로 찾아보세요.</div>'; } catch (e) { $('#answers').innerHTML = '<div class="ans">' + esc(e.message) + '</div>'; } }, 350); };
+  try { const j = await api('/api/search?q=' + encodeURIComponent(q)); $('#answers').innerHTML = j.hits.length ? `<div class="s" style="font-size:.82rem;color:var(--ink3)">「${esc(q)}」${josa(q, '이', '가')} 든 파일 ${j.total}개 중 ${j.hits.length}개</div>` + j.hits.map(h => `<div class="ans"><div class="f">${esc(h.file)}${goBtn(h.file)}</div>${h.lines.map(l => `<div class="l">${esc(l)}</div>`).join('')}<div class="src">이름 ${h.name_hits}곳 · 본문 ${h.body_hits}곳</div></div>`).join('') : '<div class="ans">찾지 못했습니다. 다른 말로 찾아보세요.</div>'; bindGoto($('#answers')); } catch (e) { $('#answers').innerHTML = '<div class="ans">' + esc(e.message) + '</div>'; } }, 350); };
+function goBtn(file) { const it = ITEMS.find(i => i.file === file && !i.rkey && i.keep !== false && !i.private); return it ? ` <button class="ghost sm goto" data-goto="${it.id}" title="이 문서가 들어 있는 줄로 갑니다">이 문서 줄로 가기</button>` : ''; }
+function bindGoto(root) {
+  root.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => {
+    const it = ITEMS.find(i => i.id === +b.dataset.goto); if (!it) return;
+    const find = () => { const r = document.querySelector(`#main [data-id="${it.id}"]`); return r && (r.closest('tr.trow') || r); };
+    const go = s => { clearSel(); sec = s; ls('sec', sec); ORD = null; rerender(); return find(); };
+    const tr = go(it.kind3 === '현안' ? 's1c' : it.kind3 === '반복' ? 's1b' : 's2') || go('s2');   // 현안·반복은 그 절, 나머지는 2절(못 찾으면 2절)
+    if (tr) { tr.scrollIntoView({block: 'center'}); tr.classList.add('flash'); setTimeout(() => tr.classList.remove('flash'), 2500); const f = tr.querySelector('button, input'); if (f) f.focus({preventScroll: true}); }
+  });
+}
 
 // ---------------------------------------------------------------- 머리글: 모드·글자·인쇄·내보내기
-$('#modeSeg').querySelectorAll('button').forEach(b => b.onclick = () => { mode = b.dataset.m; ls('mode', mode); $$('#modeSeg button').forEach(x => x.classList.toggle('on', x === b)); rerender(); });
+$('#modeSeg').querySelectorAll('button').forEach(b => b.onclick = () => { clearSel(); mode = b.dataset.m; ls('mode', mode); $$('#modeSeg button').forEach(x => x.classList.toggle('on', x === b)); rerender(); });
 function fitTop() { const t = document.querySelector('.top'); if (!t) return; const hgt = t.offsetHeight; document.documentElement.style.setProperty('--toph', hgt + 'px'); }
 window.addEventListener('resize', fitTop);
 function applyPrefs() { document.documentElement.style.setProperty('--s', String(+(ls('fs') || 1))); const t = ls('theme'); if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
@@ -583,6 +663,7 @@ $('#btnExport').onclick = async () => {
   if (nS1 || nS2b) warn.push(`· 아직 넣기·버리기를 안 누른 제안 ${nS1 + nS2b}건: 현안·반복 ${nS1}건은 본문에 「[확인 전]」으로, 문서·현황·연혁 ${nS2b}건은 붙임 1 「확인 전 문서」 목록으로 실립니다`);
   const nA = AS.filter(([k]) => !(ASSETS[k] || '').trim()).length; if (nA) warn.push(`· 3절 물품·예산 ${nA}칸이 「(적지 않음)」으로 나갑니다`);
   const eD = bodyAreas().filter(a => !((OV[a] || {}).desc || (OV[a] || {}).gone || '').trim()), nD = eD.length; if (nD) warn.push(`· 1-가 업무 설명이 빈 업무 ${nD}개(「(적지 않음)」으로 나감): ${eD.slice(0, 3).join(', ')}${nD > 3 ? ' 외' : ''}`);
+  const nAu = bodyAreas().filter(a => (OV[a] || {}).desc_auto && ((OV[a] || {}).desc || '').trim() && !(OV[a] || {}).gone).length; if (nAu) warn.push(`· 1-가 업무 설명 ${nAu}개가 자동 초안 그대로입니다(「(자동 초안)」이 붙어 나감)`);
   const eT = ITEMS.filter(i => i.kind3 === '현안' && i.keep && !(i.todo || '').trim() && !(i.next || '').trim()), nT = eT.length; if (nT) warn.push(`· 1-다 할 일·다음이 빈 현안 ${nT}건(인수자가 무엇을 할지 모름): ${eT.slice(0, 3).map(i => i.title).join(', ')}${nT > 3 ? ' 외' : ''}`);
   const nB = ITEMS.filter(i => i.keep && i.bulk).length; if (nB) warn.push(`· 한꺼번에 넣은 ${nB}건은 [일괄 넣음]으로 표시됩니다`);
   const nP = ITEMS.filter(i => i.keep && !isSug(i) && i.private).length; if (nP) warn.push(`· 개인 문서로 보이는 ${nP}건을 넣었습니다: ${ITEMS.filter(i => i.keep && !isSug(i) && i.private).slice(0, 4).map(i => i.title).join(', ')}`);
@@ -596,7 +677,7 @@ function exportsHtml() {
   const link = n => `<a href="/api/download?name=${encodeURIComponent(n)}">${esc(n)}</a>`;
   const docx = files.find(n => n.endsWith('.docx')), rest = files.filter(n => n !== docx);
   if (dirtyAfterExport || ST.dirty_after_export) return `<div class="note" id="exportBox"><b>내려받은 뒤 고친 내용이 있습니다.</b> 예전 파일(${esc(files[0] || '')})에는 반영되지 않았으니 오른쪽 위 「인계·인수서 내려받기」를 다시 누르세요. <button class="ghost sm" id="btnOpenWork">작업 폴더 열기</button></div>`;
-  return `<div class="good" id="exportBox"><b>업무인계·인수서를 만들었습니다.</b> ${docx ? `<a class="btn sm" style="text-decoration:none" href="/api/download?name=${encodeURIComponent(docx)}">워드 파일(.docx) 받기</a>` : ''} <button class="ghost sm" id="btnOpenWork">작업 폴더 열기</button>
+  return `<div class="good" id="exportBox"><b>업무인계·인수서를 만들었습니다.</b> ${docx ? `<a class="btn sm" style="text-decoration:none" href="/api/download?name=${encodeURIComponent(docx)}">워드 파일(.docx) 받기</a>` : ''} <a class="ghost sm" id="dlAll" style="text-decoration:none" href="/api/download_all" title=".docx·.md·온나라 붙여넣기 글·원본지문 .csv를 zip 하나로">네 파일 한 번에 받기(.zip)</a> <button class="ghost sm" id="btnOpenWork">작업 폴더 열기</button>
     <div class="s" style="margin-top:6px">.docx는 한글·워드에서 열어 서식에 붙입니다. 그 밖의 파일: ${rest.map(link).join(' · ')} (_온나라.txt는 온나라 칸마다 붙여 넣는 글, _원본지문.csv는 원본이 바뀌지 않았다는 증빙). 위치: ${esc(ST.work || '')}</div></div>`;
 }
 function showExports() {

@@ -298,6 +298,8 @@ def chapters(session):
         tip = (ov.get('tip') or '').strip() if isinstance(ov, dict) else ''
         stat = [it for it in r if it.get('kind3') == '현황']
         gone = (ov.get('gone') or '').strip() if isinstance(ov, dict) else ''
+        if desc and isinstance(ov, dict) and ov.get('desc_auto'):
+            desc = '' if gone else desc + ' (자동 초안)'   # 화면의 「빈 설명 자동으로 채우기」로 넣고 고치지 않은 것(이미 넘긴 업무는 「인계 완료」 한 줄만)
         if gone:
             desc = ('[인계 완료] ' + gone + ('\n' + desc if desc else ''))
         rows.append([a, desc or '(적지 않음)', tip or '', '\n'.join('%s (%s)%s' % (it.get('title', ''), dshow(it, 7), note_tail(it, ' · ')) for it in stat[:4]) + ((' 외 %d' % (len(stat) - 4)) if len(stat) > 4 else '')])

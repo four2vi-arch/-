@@ -7,7 +7,7 @@
        → ④ 검토(지우기·고치기·현안 직접 적기·불확실 항목 복원) → ⑤ 내보내기(.md·.docx)
 작업 상태는 작업폴더/세션.json에 남아 화면을 닫았다 열어도 이어진다. 원본 파일은 읽기만 한다.
 """
-import os, sys, re, json, time, threading, argparse, webbrowser, datetime, subprocess, urllib.request, urllib.parse
+import os, sys, re, json, html, time, threading, argparse, webbrowser, datetime, subprocess, urllib.request, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 
@@ -451,9 +451,37 @@ def list_dir(path):
     return {'path': path, 'parent': parent if parent and parent != path else '', 'dirs': dirs, 'files': nfiles}
 
 
+def reclassify_areas():
+    """업무 키워드를 바꾼 뒤 사람이 고르지 않은 줄의 업무를 다시 정한다. 처음 초안(docs.plan_docs)과 같은 규칙."""
+    areas = STATE['areas']
+    text = lambda f: docs.text_of({'units': _units.get(f.replace('\\', '/'), [])})
+    doc_area = {}
+    for it in STATE['items']:
+        f = it.get('file', '')
+        if f and not it.get('rkey') and f not in doc_area:
+            doc_area[f] = docs.area_of(it.get('title', ''), text(f), areas, f)
+    for it in STATE['items']:
+        if it.get('area_by') == '사람':
+            continue
+        f = it.get('file', '')
+        if not it.get('rkey'):
+            it['area'] = doc_area.get(f) or docs.area_of(it.get('title', ''), '', areas, f)
+            continue
+        line = it.get('title', '')   # 반복 문장: 줄에 적힌 업무 이름 → 매뉴얼·인수인계서는 줄 위 제목 → 그 문서의 업무
+        a = docs.area_by_tag(line, areas)
+        if not a and f and it.get('cls') in ('인수인계서', '매뉴얼'):
+            a = docs.area_by_heading(text(f), it.get('quote') or line, areas)
+        it['area'] = a or doc_area.get(f) or docs.area_of(line, '', areas, f)
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
+
+    def _page(self, code, msg):
+        """주소창으로 바로 연 단추(zip 받기)가 실패하면 JSON 대신 읽을 수 있는 한 쪽."""
+        h = '<!doctype html><meta charset="utf-8"><title>돌다리</title><body style="font-family:sans-serif;margin:2rem;line-height:1.7"><p>%s</p><p><a href="/">돌다리 화면으로 돌아가기</a></p></body>' % html.escape(msg)
+        return self._send(code, h.encode('utf-8'), 'text/html; charset=utf-8')
 
     def _send(self, code, body, ctype='application/json; charset=utf-8', extra=None):
         data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode('utf-8')
@@ -577,6 +605,22 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, list_dir(urllib.parse.parse_qs(p.query).get('path', [''])[0]))
         if p.path == '/api/models':
             return self._send(200, {'models': ollama_models(STATE['url'])})
+        if p.path == '/api/download_all':   # 내보낸 네 파일(.docx·.md·온나라 .txt·원본지문 .csv)을 zip 하나로
+            import io, zipfile
+            names = [n for n in (STATE.get('exports') or []) if os.path.isfile(os.path.join(WORK, n))]
+            want_page = 'text/html' in (self.headers.get('Accept') or '')
+            if not names:
+                msg = '아직 내려받은 인수인계서가 없습니다. 오른쪽 위 「인계·인수서 내려받기」를 먼저 누르세요.'
+                return self._page(404, msg) if want_page else self._send(404, {'error': msg})
+            if STATE.get('dirty_after_export'):   # 내려받은 뒤 고친 것이 있으면 예전 파일을 묶어 주지 않는다
+                msg = '내려받은 뒤 고친 내용이 있습니다. 오른쪽 위 「인계·인수서 내려받기」를 다시 눌러 새 파일을 만든 뒤 받으세요.'
+                return self._page(409, msg) if want_page else self._send(409, {'error': msg})
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+                for n in names:
+                    z.write(os.path.join(WORK, n), n)
+            zname = re.sub(r'(_원본지문|_온나라)?\.(md|docx|csv|txt)$', '', names[0]) + '.zip'
+            return self._send(200, buf.getvalue(), 'application/zip', {'Content-Disposition': "attachment; filename=\"handover.zip\"; filename*=UTF-8''" + urllib.parse.quote(zname)})
         if p.path == '/api/download':
             name = urllib.parse.parse_qs(p.query).get('name', [''])[0]
             full = os.path.realpath(os.path.join(WORK, name))
@@ -656,9 +700,7 @@ class H(BaseHTTPRequestHandler):
                     STATE['dirty_after_export'] = True   # 내려받은 뒤 고침(다시 열어도 「예전 파일」 안내가 남게)
                 if 'areas_text' in body:
                     STATE['areas'] = docs.parse_areas(body['areas_text']) or core.DEFAULT_AREAS; STATE['areas_src'] = '사람' if body['areas_text'].strip() else '기본'
-                    for it in STATE['items']:
-                        if it.get('area_by') != '사람':
-                            it['area'] = docs.area_of(it.get('title', ''), '', STATE['areas'], it.get('file', ''))
+                    reclassify_areas()   # 처음 초안과 같은 규칙(본문까지 본다). 제목만 보던 것은 본문에만 키워드가 있는 문서를 「기타」로 보냈다
                 if 'url' in body:
                     if not core.is_local_url(str(body['url'])):
                         return self._send(400, {'error': '모델 주소는 이 PC(127.0.0.1·localhost)만 허용합니다. 기관 모델 서버는 「돌다리_실행.bat --allow-model-host 주소:포트」로 실행하면 받습니다'})

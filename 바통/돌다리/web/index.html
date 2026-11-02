@@ -59,7 +59,7 @@ main h2{font-size:1.5rem;letter-spacing:-.02em;display:flex;align-items:center;g
 .sug .act button{border:1px solid var(--line);background:var(--card);border-radius:7px;padding:3px 9px;font-size:.84rem;cursor:pointer}
 .sug .act button.y{border-color:var(--ok);color:var(--ok)}.sug .act button.n{color:var(--ink3)}
 .sug .act button.y.on,table.tri button.y.on{background:var(--ok);color:#fff;border-color:var(--ok);font-weight:600}.sug .act button.n.on,table.tri button.n.on{background:var(--ink3);color:#fff;border-color:var(--ink3);font-weight:600}
-.act .mv,td.act .mv{display:flex;gap:4px;flex-basis:100%;margin-top:3px}td.act .mv{flex-wrap:wrap}table.tri select{max-width:100%;min-width:0}td.act .mv select{flex:1 1 100%}table.tri select[data-k="status"]{width:100%}
+.act .mv,td.act .mv{display:flex;gap:4px;flex-basis:100%;margin-top:3px}.qchips{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:6px 0 2px}.qchips .s{font-size:.8rem;color:var(--ink3)}.qchips button{padding:1px 8px;font-size:.82rem}table.tri td.sel{padding:6px 2px;text-align:center}.selbar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:50;background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:8px 14px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:center;max-width:calc(100% - 32px);flex-wrap:wrap}.selbar[hidden]{display:none}.flash{outline:3px solid var(--accent);outline-offset:2px;transition:outline-color .6s}tr.flash>td{box-shadow:inset 0 0 0 999px rgba(255,190,0,.16)}#prog{display:flex;align-items:center;gap:10px;cursor:pointer;border-radius:8px;padding:2px 4px}#prog:focus-visible{outline:2px solid var(--accent)}td.act .mv{flex-wrap:wrap}table.tri select{max-width:100%;min-width:0}td.act .mv select{flex:1 1 100%}table.tri select[data-k="status"]{width:100%}
 .sug input.memo{width:100%;border:1px dashed var(--line);border-radius:7px;padding:4px 8px;font-size:.88rem;background:transparent}
 .sug select.mini,.sug input.when{padding:3px 6px;font-size:.84rem;border-radius:7px;border:1px solid var(--line);background:var(--card)}
 .sug input.when{width:130px}
@@ -115,8 +115,8 @@ table.tri{width:100%;table-layout:fixed}table.tri td{padding:4px 6px;overflow-wr
 :is(#printView,.pvDoc) table.hdr th{background:#eef1f5;border:1px solid #777;padding:3pt 5pt;width:9%;white-space:nowrap}:is(#printView,.pvDoc) table.hdr td{border:1px solid #777;padding:3pt 5pt}
 .previewWrap{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18mm 16mm;max-width:210mm;margin:0 auto;box-shadow:var(--shadow)}
 @media print{.top,nav,aside,main,.layout,#downBand,#missBand{display:none !important} #printView{display:block;padding:0}}
-@media (max-width:1300px){.layout{grid-template-columns:240px minmax(0,1fr)} aside{grid-column:1/3;position:static;height:auto;border-left:0;border-top:1px solid var(--line)}}
-@media (max-width:860px){.layout{grid-template-columns:1fr} nav{position:static;height:auto} .cal{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:1300px){.layout{grid-template-columns:240px minmax(0,1fr)} aside{grid-column:2/3;position:static;height:auto;border-left:0;border-top:1px solid var(--line)}}
+@media (max-width:860px){.layout{grid-template-columns:1fr} aside{grid-column:auto} nav{position:static;height:auto} .cal{grid-template-columns:repeat(2,1fr)}}
 .pvDoc th,.pvDoc td,#printView th,#printView td{color:#000}
 </style>
 </head>
@@ -124,7 +124,7 @@ table.tri{width:100%;table-layout:fixed}table.tri td{padding:4px 6px;overflow-wr
 <div class="top">
   <div class="mark">돌</div>
   <div style="min-width:0;flex:1 1 300px"><h1>돌다리 · 업무인계·인수서 <span id="ver" class="sub" style="font-size:.78rem"></span> <span id="saved" class="sub" style="font-size:.78rem"></span></h1><div class="sub" id="subline">업무 폴더의 최근 문서를 한 건씩 정리해 법정 서식(별지 제12호)으로 채웁니다 · 이 PC 안에서만 작동</div></div>
-  <div class="prog"><span id="progLbl">완성도 ·</span><div class="bar"><i id="progBar"></i></div>
+  <div class="prog"><div id="prog" role="button" tabindex="0"><span id="progLbl">완성도 ·</span><div class="bar"><i id="progBar"></i></div></div>
     <div class="seg" id="modeSeg" title="넘기는 사람은 넣고 고치고, 받는 사람은 확인합니다"><button data-m="give" class="on">넘기는 사람</button><button data-m="take">받는 사람</button></div>
     <button class="ghost sm" id="fsdn" title="글자 작게">가−</button><button class="ghost sm" id="fsup" title="글자 크게">가＋</button><button class="ghost sm" id="thm" title="밝기">◐</button><button class="ghost sm" id="btnPreview" title="인쇄될 모양을 화면에서 먼저 봅니다">미리보기</button><button class="ghost sm" id="btnPrint">인쇄</button><button class="btn" id="btnExport">인계·인수서 내려받기</button></div>
 </div>
@@ -136,6 +136,7 @@ table.tri{width:100%;table-layout:fixed}table.tri td{padding:4px 6px;overflow-wr
 <aside id="aside">
   <h4>💬 물어보기 <span class="chip">파일 이름·본문 검색 · 이 PC 안</span></h4>
   <input class="ask" id="q" placeholder="예) 계약서, 특별소통, 한결물류" autocomplete="off">
+  <div id="qchips" class="qchips"></div>
   <div id="answers"></div>
   <h4>✅ 완성도</h4>
   <div class="check" id="checklist"></div>
