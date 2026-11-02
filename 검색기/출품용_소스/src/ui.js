@@ -2005,7 +2005,7 @@
   }
   var EPOST_HEADERS = ["발송인명\n(띄어쓰기 포함 \n16자 이내)", "우편번호\n(예시:06267)", "발송인주소1 - 동/읍/면/로 까지\n① 예시1 : 서울특별시 영등포구 영중로83\n② 예시2 : 경기도 가평군 가평읍\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "발송인주소2(나머지주소-필수입력)\n① 예시1 : 한국우편사업진흥원\n② 예시2 : 개곡리 123-4번지\n③ 예시3 : 나머지 주소가 없을 때 임의문자 한 글자라도 추가 ( 점 (.)표시)\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "발송인 일반전화\n(예시:02-1234-4567)\n\n* 발송인 일반전화 또는 \n휴대전화 중 1개만 입력", "발송인 휴대전화\n(예시:010-1234-4567)\n\n* 발송인 일반전화 또는 \n휴대전화 중 1개만 입력", "수취인명\n(띄어쓰기 포함\n 15자 이내)", "우편번호\n(예시:06267)", "수취인주소1 - 동/읍/면/로 까지\n① 예시1 : 서울특별시 영등포구 영중로83\n② 예시2 : 경기도 가평군 가평읍\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "수취인주소2(나머지주소-필수입력)\n① 예시1 : 한국우편사업진흥원\n② 예시2 : 개곡리 123-4번지\n③ 예시3 : 나머지 주소가 없을 때 임의문자 한 글자라도 추가 ( 점 (.)표시)\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "받는분 일반전화\n(예시:02-1234-4567)\n\n* 받는분 일반전화 또는 휴대전화 중 1개만 입력", "받는분 휴대전화\n(예시:010-1234-4567)\n\n* 받는분 일반전화 또는 휴대전화 중 1개만 입력"];
   var EPOST_SOURCES = ["senderName", "senderZip", "senderAddr1", "senderAddr2", "senderTelOnly", "senderMobile", "name", "zip", "addr1", "addr2", "telOnly", "mobile1"];
-  var CUSTOM_SOURCES = [["name", "받는 분"], ["zip", "우편번호"], ["addrFull", "주소(전체)"], ["addrStd", "주소(표준 표기 · 시·도 생략)"], ["addrMain", "주소(표준 표기 · 상세 뺌)"], ["addrMainFull", "주소(번지까지 · 시·도 포함)"], ["addrDetail", "상세주소(동·호수 등)"], ["addr1", "주소1(기본)"], ["addr2", "주소2(상세)"], ["phone", "전화(휴대전화 우선)"], ["tel", "일반전화"], ["mobile", "휴대전화"], ["item", "상품명"], ["memo", "배송 메시지"], ["seq", "일련번호"], ["const", "고정값(오른쪽 칸)"], ["blank", "빈칸"], ["grade", "검색결과"], ["note", "근거"], ["office", "배달 우체국"], ["senderName", "보내는 분 이름"], ["senderZip", "보내는 분 우편번호"], ["senderAddr1", "보내는 분 주소1"], ["senderAddr2", "보내는 분 주소2"], ["senderAddrFull", "보내는 분 주소(전체)"], ["senderPhone", "보내는 분 전화"]];
+  var CUSTOM_SOURCES = [["name", "받는 분"], ["zip", "우편번호"], ["addrFull", "주소(전체)"], ["addrStd", "주소(표준 표기 · 시·도 생략)"], ["addrMain", "주소(표준 표기 · 상세 뺌)"], ["addrMainFull", "주소(번지까지 · 시·도 포함)"], ["addrDetail", "상세주소(동·호수 등)"], ["addrRegion", "주소(시·도~시·군·구까지)"], ["addrRest", "상세주소(시·군·구 다음 전부)"], ["addr1", "주소1(기본)"], ["addr2", "주소2(상세)"], ["phone", "전화(휴대전화 우선)"], ["tel", "일반전화"], ["mobile", "휴대전화"], ["item", "상품명"], ["memo", "배송 메시지"], ["seq", "일련번호"], ["const", "고정값(오른쪽 칸)"], ["blank", "빈칸"], ["grade", "검색결과"], ["note", "근거"], ["office", "배달 우체국"], ["senderName", "보내는 분 이름"], ["senderZip", "보내는 분 우편번호"], ["senderAddr1", "보내는 분 주소1"], ["senderAddr2", "보내는 분 주소2"], ["senderAddrFull", "보내는 분 주소(전체)"], ["senderPhone", "보내는 분 전화"]];
   var PRESETS = {
     orig: {
       name: "원본 + 우편번호",
@@ -2064,15 +2064,15 @@
     },
     reg: {
       name: "양식1 · 등기용",
-      desc: "연번·수취인·우편번호·주소·상세주소·연락처1(핸드폰)·연락처2(일반전화) · 연락처는 선택",
+      desc: "주소는 시·도~시·군·구까지, 나머지는 상세주소 · 연락처1(핸드폰)·연락처2(일반전화)는 선택",
       formats: ["xlsx", "xls", "csv"],
       sheet: "Sheet1",
       custom: true,
       base: true,
       top: 2,
       tag: "등기용",
-      // 창구 등기 접수 양식(2026-11-02 사용자 지정): 연락처1은 핸드폰, 연락처2는 일반전화이며 둘 다 선택
-      cols: [{h: "연번", src: "seq", def: ""}, {h: "수취인", src: "name", def: ""}, {h: "우편번호", src: "zip", def: ""}, {h: "주소", src: "addrMain", def: ""}, {h: "상세주소", src: "addrDetail", def: ""}, {h: "연락처1", src: "mobile", def: ""}, {h: "연락처2", src: "tel", def: ""}]
+      // 창구 등기 접수 양식(2026-11-02 사용자 지정): 주소는 시·도~시·군·구(구까지), 나머지는 상세주소. 연락처1은 핸드폰, 연락처2는 일반전화이며 둘 다 선택
+      cols: [{h: "연번", src: "seq", def: ""}, {h: "수취인", src: "name", def: ""}, {h: "우편번호", src: "zip", def: ""}, {h: "주소", src: "addrRegion", def: ""}, {h: "상세주소", src: "addrRest", def: ""}, {h: "연락처1", src: "mobile", def: ""}, {h: "연락처2", src: "tel", def: ""}]
     },
     parcel: {
       name: "양식2 · 소포용",
@@ -2085,7 +2085,7 @@
       tag: "소포용",
       needMobile: true,   // 연락처1(핸드폰)은 소포 접수에 필수: 빈 행은 내려받기 안내에 행 번호를 적고 엑셀 칸을 주황색으로
       // 창구 소포 접수 양식(2026-11-02 사용자 지정): 연락처1은 핸드폰(필수), 연락처2는 일반전화(선택)
-      cols: [{h: "연번", src: "seq", def: ""}, {h: "수취인", src: "name", def: ""}, {h: "우편번호", src: "zip", def: ""}, {h: "주소", src: "addrMain", def: ""}, {h: "상세주소", src: "addrDetail", def: ""}, {h: "연락처1", src: "mobile", def: ""}, {h: "연락처2", src: "tel", def: ""}]
+      cols: [{h: "연번", src: "seq", def: ""}, {h: "수취인", src: "name", def: ""}, {h: "우편번호", src: "zip", def: ""}, {h: "주소", src: "addrRegion", def: ""}, {h: "상세주소", src: "addrRest", def: ""}, {h: "연락처1", src: "mobile", def: ""}, {h: "연락처2", src: "tel", def: ""}]
     },
     custom: {
       name: "사용자 지정 양식",
@@ -2285,6 +2285,31 @@
     }
     return [whole, det];
   }
+  // 양식1·2(창구 등기·소포 접수, 11.2. 사용자 지정): 주소 칸은 시·도부터 시·군·구(구가 있으면 구)까지, 나머지(도로명·건물번호 또는 읍·면·동·번지, 동·호수, 참고항목)는 상세주소.
+  // 시·도를 함께 둔다(「서구」「중구」만 남으면 어느 시인지 모름). 못 찾은 행(실패)은 원문 주소·상세를 그대로 둔다.
+  function splitRegion(row, rec) {
+    if (row.status === "실패" && !row.edited) {
+      return [clean(rec.addr1), clean(rec.addr2)];
+    }
+    var kind = row.r && row.status !== "실패" ? row.r.kind : "";
+    var t = clean(rec.addr1).split(" ").filter(Boolean);
+    var sd = S.engine && S.engine.db ? S.engine.db.sido : [];
+    var short = ["서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"];
+    var k = t.length && (sd.indexOf(t[0]) >= 0 || short.indexOf(t[0]) >= 0 || /(특별시|광역시|특별자치시|특별자치도|도)$/.test(t[0])) ? 1 : 0;
+    while (k < t.length && /[시군구]$/.test(t[k])) {
+      k++;
+    }
+    if (!k) {
+      return [clean(rec.addr1), clean(rec.addr2)];   // 시·도·시·군·구를 알아보지 못하면 나누지 않는다
+    }
+    var base = t.slice(k).join(" ");
+    var det = clean(rec.addr2);
+    if (kind === "pobox") {
+      det = det.replace(/(\S)사서함/, "$1 사서함");
+    }
+    var rest = base ? standardAddress(base, det, kind) : det.replace(/\s+\(/g, "(").replace(/^,\s*/, "");   // 도로명은 「충정로 234-1, 101-1004호」, 지번은 「수성동 689-3, 102동 304호」
+    return [t.slice(0, k).join(" "), rest];
+  }
   function fieldValue(a, b, c, d) {
     var f = S.aoa[a.i] || [];
     var cur = d.cur && d.cur.row === a ? d.cur : null;
@@ -2326,6 +2351,10 @@
         return standardAddress(rec.addr1, rec.addr2, a.r && a.status !== "실패" ? a.r.kind : "");
       case "addrMain":
         return splitStdAddress(a, rec)[0];
+      case "addrRegion":
+        return splitRegion(a, rec)[0];
+      case "addrRest":
+        return splitRegion(a, rec)[1];
       case "addrMainFull":
         return splitStdAddress(a, rec, true)[0];
       case "addrDetail":
@@ -3061,7 +3090,7 @@
         if ((S.preset === "reg" || S.preset === "parcel") && g.flags && g.flags.size && a === "xlsx") {   // xls(BIFF8)는 칸 색을 담지 못한다
           var zc = c.cols.findIndex(function (x) { return x.src === "zip"; });
           var mc = c.cols.findIndex(function (x) { return x.src === "mobile"; });
-          var ac = c.cols.findIndex(function (x) { return /^addr(Main|MainFull|Std|Full|1)$/.test(x.src); });
+          var ac = c.cols.findIndex(function (x) { return /^addr(Region|Main|MainFull|Std|Full|1)$/.test(x.src); });
           var nc = c.cols.findIndex(function (x) { return x.src === "name"; });
           var cells = {};
           f.rows.forEach(function (rw, k) {
