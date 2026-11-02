@@ -158,6 +158,12 @@
     '모르는 값은 빈 문자열로 둔다. 우편번호는 절대 만들지 마라. 사람 이름·전화번호는 넣지 마라. ' +
     '형식: {"sido":"","sigungu":"","eupmyeondong":"","ri":"","road":"","buildingNo":"","jibun":"","buildingName":"","detail":""}';
   function isLocalUrl(u) { return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//i.test(clean(u)); }
+  function normAiUrl(u) {   // 「127.0.0.1:11434」「http://127.0.0.1:11434」처럼 적어도 OpenAI 호환 주소로 고쳐 쓴다(엉뚱하게 「외부 주소」라고 안내하던 것)
+    u = clean(u);
+    if (u && !/^https?:\/\//i.test(u)) { u = 'http://' + u; }
+    if (/^https?:\/\/[^\/]+\/?$/i.test(u)) { u = u.replace(/\/?$/, '/v1/chat/completions'); }
+    return u;
+  }
   function aiCfg() { var a = cfg().ai || {}; return a.url && a.model && isLocalUrl(a.url) ? a : null; }
   function aiReason(e) {
     var m = String(e && e.message || e || '');
@@ -167,7 +173,7 @@
     if (/^HTTP 401|^HTTP 403/.test(m)) { return '키가 없거나 틀렸어요(' + m + ').'; }
     if (/^HTTP/.test(m)) { return '모델 실행기가 오류를 냈어요(' + m + ').'; }
     if (/^JSON/.test(m)) { return '모델 답이 JSON이 아니에요. 다른 모델 이름으로 해 보세요.'; }
-    return '연결이 거부됐어요. 모델 실행기가 켜져 있는지, 허용 출처(OLLAMA_ORIGINS에 「*」 또는 file://*)를 확인하고 다시 시작하세요.';
+    return '연결이 거부됐어요. 모델 실행기가 켜져 있는지, 허용 출처(OLLAMA_ORIGINS에 「*」)를 확인하고 다시 시작하세요.';
   }
   function aiExtractRaw(text, override) {
     var a = override || aiCfg();
@@ -276,7 +282,7 @@
     '.k-choice small{display:block;color:#666;font-size:.72em;margin-top:4px;font-weight:500}.k-choice:hover{border-color:#c8102e}' +
     '.k-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}.k-grid .k-choice{margin:0;text-align:center}' +
     '.k-zip{font-size:2.6em;font-weight:900;letter-spacing:.08em;color:#c8102e;line-height:1.1}' +
-    '.k-addr{font-size:1.22em;font-weight:800;line-height:1.5;margin-top:6px}.k-sub{font-size:.8em;color:#555;margin-top:6px}' +
+    '.k-addr{font-size:1.22em;font-weight:800;line-height:1.5;margin-top:6px;word-break:keep-all}.k-sub{font-size:.8em;color:#555;margin-top:6px}' +
     '.k-card{background:#fff;border:3px solid #ddd;border-radius:18px;padding:14px 18px;margin:10px 0}.k-card .k-zip{font-size:1.6em}' +
     '.k-warn{color:#a35a00;font-weight:800}.k-ai{color:#1d5fb4;font-weight:800}' +
     '.k-keys{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;max-width:540px}' +
@@ -301,7 +307,7 @@
     '.k-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:5100}' +
     '.k-modal>div{background:#fff;border-radius:22px;padding:26px;max-width:680px;width:92%;font-size:calc(21px*var(--kf,1));max-height:90vh;overflow:auto}' +
     '#kModalBtns{position:sticky;bottom:-26px;background:#fff;padding:10px 0 4px;margin-bottom:-4px}' +
-    '.k-toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:#333;color:#fff;padding:14px 22px;border-radius:14px;font-size:calc(20px*var(--kf,1));z-index:5200;max-width:90%}' +
+    '.k-toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:#333;color:#fff;padding:14px 22px;border-radius:14px;font-size:calc(20px*var(--kf,1));z-index:5200;max-width:90%;pointer-events:none}' +
     '.k-field{display:block;margin:10px 0;font-size:16px}.k-field b{display:block;margin-bottom:4px}.k-field input{width:100%;font-size:16px;padding:8px;box-sizing:border-box}' +
     '.k-note{font-size:14px;color:#555;line-height:1.5}' +
     '#kPrint{display:none}' +
@@ -371,6 +377,8 @@
     sb.addEventListener('pointerdown', down);
     sb.addEventListener('pointerup', up);
     sb.addEventListener('pointerleave', function () { clearTimeout(hold); hold = null; t0 = 0; });
+    sb.addEventListener('keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ') { return; } e.preventDefault(); if (!e.repeat && !hold) { down(e); } });   // 키보드로도 Enter·스페이스를 2초 누르면 열림
+    sb.addEventListener('keyup', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); up(); } });
     document.addEventListener('pointerdown', touch, true);
     document.addEventListener('keydown', touch, true);
     applyFont();
@@ -1286,16 +1294,19 @@
     var s = st.sender || {};
     var full = !!s.addr1;
     var head = (full ? ['보내는 분', '보내는 분 전화', '보내는 분 우편번호', '보내는 분 주소', '보내는 분 상세주소'] : [])
-      .concat(['받는 분', '받는 분 전화', '우편번호', '주소', '상세주소', '비고(접수 확인)']);   // 「비고」가 들어가야 메모 열로 알아보고 양식 비고에 「창구 확인 필요」가 남는다
-    var memo = full ? '' : '보내는 분 ' + (s.name || '') + (s.phone ? ' ' + s.phone : '') + ' · 주소 창구 확인';
+      .concat(['받는 분', '받는 분 전화', '우편번호', '주소', '상세주소', '비고(접수 확인)']);   // 「비고」가 들어가야 메모 열로 알아본다. 양식1·2(비고 열 없음)는 이 글을 읽어 내려받기 안내에 행 번호를 적고 주소 칸을 노랗게 칠한다
+    var who = [s.name, s.phone].filter(Boolean).join(' ');   // 비지 않은 것만(「보내는 분  · 주소 창구 확인」처럼 빈 이름이 들어가던 것)
+    var memo = full ? '' : (who ? '보내는 분 ' + who + ' · 주소 창구 확인' : '보내는 분 성함·주소 창구 확인');
     var rows = st.entries.map(function (x) {
-      var note = [x.check ? '창구 확인 필요' + (x.why ? '(' + x.why + ')' : '') : '', x.ai ? 'AI 도움(주소 정리) · 접수 전 확인' : '', memo, s.check ? '보내는 분 주소 창구 확인' : ''].filter(Boolean).join(' / ');
+      var note = [x.check ? '창구 확인 필요' + (x.why ? '(' + x.why + ')' : '') : '', x.ai ? 'AI 도움(주소 정리) · 접수 전 확인' : '', memo, full && s.check ? '보내는 분 주소 창구 확인' : ''].filter(Boolean).join(' / ');   // 주소를 안 적었으면 위 memo가 이미 말함(같은 말이 두 번)
       return (full ? [s.name || '', s.phone || '', s.zip || '', s.addr1 || '', s.addr2 || ''] : []).concat([x.name, x.phone, x.zip, x.addr1, x.addr2, note]);
     });
     var ws = XLSX.utils.aoa_to_sheet([head].concat(rows));
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '어르신입력');
     var buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    var Z = window.__zip && __zip.S;   // 직원 화면에 작업 중인 주소록이 있으면 바꾸기 전에 묻는다(직접 고친 우편번호까지 말없이 사라지던 것)
+    if (Z && Z.rows && Z.rows.length && !confirm('직원 화면에 작업 중인 주소록(' + (Z.fileName || '') + ', ' + Z.rows.length + '건)이 있습니다.\n이 어르신 입력으로 바꿀까요? 지금 주소록의 결과·고친 내용은 사라집니다(먼저 내려받아 두세요).\n[취소]를 누르면 넘기지 않고 어르신 입력은 그대로 둡니다.')) { return; }
     if (!st.no) { st.no = nextNo(); }
     var name = '어르신입력_' + st.no + '번_' + stamp() + '.xlsx';
     var inp = document.getElementById('fileInput');
@@ -1308,6 +1319,7 @@
     log('어르신 입력 넘김', st.entries.length, '접수번호 ' + st.no);
     wipe(true);
     closeKiosk();
+    try { if (window.__zip && __zip.S) { __zip.S.asked = true; } } catch (e) { }
     inp.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
@@ -1358,7 +1370,8 @@
 
   // ------------------------------------------------------------------ 직원 설정
   function aiTest() {
-    var a = { url: clean($('#kfUrl').value), model: clean($('#kfModel').value), key: $('#kfKey').value };
+    var a = { url: normAiUrl($('#kfUrl').value), model: clean($('#kfModel').value), key: $('#kfKey').value };
+    if (a.url) { $('#kfUrl').value = a.url; }
     var m = $('#kfMsg');
     if (!a.url || !a.model) { m.textContent = '주소와 모델 이름을 먼저 넣어 주세요.'; return; }
     if (/[^\x21-\x7e]/.test(a.key || '')) { m.textContent = '키에 쓸 수 없는 글자(한글·공백)가 있어요. 영문·숫자만 적어 주세요.'; return; }
@@ -1422,7 +1435,7 @@
       '<p class="k-note">이 PC에서 돌리는 로컬 모델(127.0.0.1)만 연결할 수 있습니다. AI에는 전화번호와 호칭 붙은 이름을 뺀 주소 문장만 보내고(따로 받는 이름·전화는 보내지 않음), 우편번호는 언제나 고시 자료로 확정합니다.</p></details>' +
       '<p class="k-note" id="kfMsg"></p>',
       [['저장', function () {
-        var u = clean($('#kfUrl').value);
+        var u = normAiUrl($('#kfUrl').value); $('#kfUrl').value = u;
         if (u && !isLocalUrl(u)) { $('#kfMsg').textContent = '이 PC의 모델 주소만 저장됩니다. http://127.0.0.1:포트/… 또는 http://localhost:포트/… 로 적어 주세요.'; return; }
         setCfg({ org: clean($('#kfOrg').value), region: clean($('#kfRegion').value), idle: Math.max(30, Number($('#kfIdle').value) || 120), paper: $('#kfPaper').value, lblW: Number($('#kfLblW').value) || 100, lblH: Number($('#kfLblH').value) || 45, autoPrint: $('#kfAuto').checked,
           noMic: !$('#kfMic').checked, wake: $('#kfWake').checked, ai: { url: clean($('#kfUrl').value), model: clean($('#kfModel').value), key: $('#kfKey').value } });
@@ -1445,7 +1458,12 @@
           prnHint(); bleBar(__ble.status());
         } });
       }, 'sub'],
-      ['닫기', closeModal, 'sub']].concat(st && st.entries && st.entries.length && !(st.entries.length === 1 && st.entries[0].why === '직원 도움 요청') ? [['이 어르신 입력을 접수 화면으로 넘기기', function () { closeModal(); if (job0 !== st) { toast('(직원 확인) 자리 비움으로 입력이 지워져 넘길 내용이 없어요.', 6000); return; } handOff(); }, 'sub']] : []));
+      ['닫기', closeModal, 'sub']]);
+    if (st && st.entries && st.entries.length && !(st.entries.length === 1 && st.entries[0].why === '직원 도움 요청')) {   // 마침 뒤 직원이 할 일은 넘기기라 맨 앞에(설정 단추 아래 끝에 있어 768 높이에서 잘리던 것)
+      var hb = document.createElement('button'); hb.type = 'button'; hb.className = 'k-btn sub'; hb.style.fontWeight = '800'; hb.textContent = '이 어르신 입력을 접수 화면으로 넘기기';
+      hb.onclick = function () { closeModal(); if (job0 !== st) { toast('(직원 확인) 자리 비움으로 입력이 지워져 넘길 내용이 없어요.', 6000); return; } handOff(); };
+      var bx = $('#kModalBtns', m); if (bx) { bx.insertBefore(hb, bx.firstChild); }
+    }
     // 직원 화면으로 돌아가는 길은 맨 위에 둔다(맨 아래에 있어 찾기 어렵던 것)
     if ($('#kfPrn')) {
       $('#kfPrn').onclick = function () {
@@ -1525,6 +1543,7 @@
       var f = new File([buf], fname, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       var dt = new DataTransfer(); dt.items.add(f); inp.files = dt.files;
     } catch (e) { return false; }
+    try { if (window.__zip && __zip.S) { __zip.S.asked = true; } } catch (e) { }   // 여기까지 오기 전에 이미 물었다(직원 화면이 다시 묻지 않게)
     inp.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
   }
@@ -1551,6 +1570,8 @@
   }
   function recvInject() {
     if (!rc.list.length) { recvMsg('먼저 QR을 찍어 주세요.'); return; }
+    var Z = window.__zip && __zip.S;
+    if (Z && Z.rows && Z.rows.length && !confirm('지금 열어 둔 주소록(' + (Z.fileName || '') + ', ' + Z.rows.length + '건)을 QR 메모로 바꿀까요? 지금 주소록의 결과·고친 내용은 사라집니다.')) { return; }
     var head = ['보내는 분', '보내는 분 전화', '보내는 분 우편번호', '보내는 분 주소', '보내는 분 상세주소', '받는 분', '받는 분 전화', '우편번호', '주소', '상세주소', '비고'];
     var rows = [], n = 0;
     rc.list.forEach(function (o) {

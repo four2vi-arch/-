@@ -29,6 +29,9 @@ const usedAreas = () => { const conf = AREAS.concat(['기타']); const extra = [
 const issues = () => ITEMS.filter(i => i.kind3 === '현안');
 const recurs = () => ITEMS.filter(i => i.kind3 === '반복' || (i.kind3 === '현안' && i.recur));
 const fileName = f => String(f || '').split('/').pop();
+// 내려받는 파일 본문에 실리는 항목(export.kept_docs와 같은 기준): 넣은 것 + 확인 전 현안·반복. 확인 전 문서·현황·연혁 제안은 붙임 1로만
+const inBody = i => i.keep && !(isSug(i) && (i.private || !['현안', '반복'].includes(i.kind3)));
+const bodyAreas = () => usedAreas().filter(a => (OV[a] || {}).gone || ITEMS.some(i => areaOf(i) === a && inBody(i)));   // 1-가·완성도·내보내기 점검(화면 7개·파일 6개로 업무 수가 다르던 것)
 
 // ---------------------------------------------------------------- 상태
 async function refresh() {
@@ -70,8 +73,8 @@ function completeness(a) {
   return {desc, sug, noNext, done: desc && sug === 0 && noNext === 0, seen: k.length ? Math.round(100 * k.filter(i => i.seen).length / k.length) : 0};
 }
 function overall() {
-  const used = usedAreas(); if (!used.length) return {pct: 0, label: '완성도 ·'};
-  if (mode === 'take') { const k = kept(); const n = k.filter(i => i.seen).length; return {pct: k.length ? Math.round(100 * n / k.length) : 0, label: `확인 ${n}/${k.length}`}; }
+  const used = bodyAreas(); if (!used.length) return {pct: 0, label: '완성도 ·'};
+  if (mode === 'take') { const k = ITEMS.filter(inBody); const n = k.filter(i => i.seen).length; return {pct: k.length ? Math.round(100 * n / k.length) : 0, label: `확인 ${n}/${k.length}`}; }
   const n = used.filter(a => completeness(a).done).length;
   return {pct: Math.round(100 * n / used.length), label: `완성도 ${n}/${used.length} 업무`};
 }
@@ -84,7 +87,7 @@ function renderNav() {
   const badge = id => {
     if (!ITEMS.length) return '';
     const sugN = r => r.filter(isSug).length;
-    if (id === 's1a') { const n = usedAreas().filter(a => (OV[a] || {}).desc).length; return n === usedAreas().length ? '<span class="st ok">작성</span>' : `<span class="st todo">${n}/${usedAreas().length}</span>`; }
+    if (id === 's1a') { const n = bodyAreas().filter(a => (OV[a] || {}).desc).length; return n === bodyAreas().length ? '<span class="st ok">작성</span>' : `<span class="st todo">${n}/${bodyAreas().length}</span>`; }
     if (id === 's1b') { const r = recurs(); const s = sugN(r); return s ? `<span class="st ai">확인 전 ${s}</span>` : `<span class="st ok">${r.filter(i => i.keep).length}건</span>`; }
     if (id === 's1c') { const r = issues(); const s = sugN(r); return s ? `<span class="st ai">확인 전 ${s}</span>` : `<span class="st ok">${r.filter(i => i.keep && i.status !== '미결').length}건</span>`; }
     if (id === 's1d') { return `<span class="st">${issues().filter(i => i.keep && !isSug(i) && i.status === '미결').length}건</span>`; }
@@ -166,7 +169,10 @@ function tog(it) {
 // 절·업무 머리의 건수: 넣음 · 확인 전 · 버림(넣기를 누르면 줄이 사라지는 게 아니라 「✓ 넣음」으로 바뀐다는 것이 보이게)
 const cnt = r => ({in: r.filter(i => i.keep && !isSug(i)).length, sug: r.filter(isSug).length, out: r.filter(i => !i.keep && !isSug(i)).length});
 function cntChip(r) { const c = cnt(r); return `<span class="chip">넣음 ${c.in}</span>${c.sug ? ` <span class="chip" style="background:var(--info-bg);color:var(--info)">확인 전 ${c.sug}</span>` : (r.length ? ' <span class="chip cy">모두 확인함</span>' : '')}${c.out ? ` <span class="chip">버림 ${c.out}</span>` : ''}`; }
-function head(title, lead, badges) { return `<div class="crumb">업무인계·인수서</div><h2>${esc(title)} ${badges || ''}</h2><p class="lead">${lead}</p>` + copyBar(); }
+function head(title, lead, badges) {
+  if (mode === 'take') return `<div class="crumb">업무인계·인수서 · 받는 사람 화면</div><h2>${esc(title)}</h2><p class="lead">넘기는 사람이 정리한 내용입니다(이 화면에서는 고칠 수 없음). 줄마다 읽고 「인수 확인」을 체크하고, 궁금한 것은 「물을 것」에 적으세요. 넘기는 사람이 답을 적으면 4절 「인수자 질문·전임자 답」에 모이고 내려받는 파일에도 실립니다.</p>`;   // 넘기는 사람용 안내·온나라 복사 띠가 받는 사람에게 그대로 보이던 것
+  return `<div class="crumb">업무인계·인수서</div><h2>${esc(title)} ${badges || ''}</h2><p class="lead">${lead}</p>` + copyBar();
+}
 function copyBar() {
   if (!ONNARA[sec] || !ITEMS.length) return '';
   return `<div class="copybar"><button class="ghost sm" id="btnCopy">온나라에 붙여넣을 글 복사</button><span>서식의 「${esc(ONNARA[sec])}」 칸에 그대로 붙여 넣습니다. 버리기 한 것은 빠지고, 아직 넣기·버리기를 안 누른 제안은 「[확인 전]」 표시로 들어갑니다.</span></div>`;
@@ -240,7 +246,7 @@ async function toggleDoc(el, btn) {
     if (el.tagName === 'TR') el.after(box); else el.querySelector('div').appendChild(box);
     btn.textContent = '원문 ▾'; } catch (e) { alert(e.message); }
 }
-function dateText(it) { const d = String(it.date || ''); if (!d) return '날짜 없음'; if (it.date_src === '연도만') return d.slice(0, 4) + '년'; return d + (it.date_src === '수정일' ? '(수정일)' : ''); }
+function dateText(it) { const d = String(it.date || ''); if (!d) return it.when ? String(it.when) : '날짜 없음'; if (it.date_src === '연도만') return d.slice(0, 4) + '년'; return d + (it.date_src === '수정일' ? '(수정일)' : ''); }
 let dirtyAfterExport = false;
 function mark(id, k, v) { dirtyAfterExport = true; pending[id] = pending[id] || {id}; pending[id][k] = v; const it = ITEMS.find(i => i.id === id); if (it) { it[k] = v; if (k === 'area') it.area_by = '사람'; } clearTimeout(flushTimer); flushTimer = setTimeout(flush, 500); }
 async function flush() {
@@ -424,6 +430,7 @@ async function loadModels() {
     $('#planHint').textContent = j.models.length ? '' : 'Ollama가 켜져 있지 않거나 모델이 없습니다. 규칙만으로 진행할 수 있습니다.'; } catch (e) { const ph = $('#planHint'); if (ph) ph.textContent = e.message; }
 }
 async function doExtract(folder, exclude) {
+  if (!String(folder || '').trim()) { alert('업무 폴더 주소가 비어 있습니다.\n「폴더 찾아보기…」로 고르거나 폴더 주소를 붙여 넣은 뒤 「읽기」를 누르세요.'); return; }   // 빈 주소로 돌다리 자신의 폴더를 읽던 것
   const norm = p => String(p || '').trim().replace(/^"|"$/g, '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
   let fresh = false;
   if (folder) { try { const ok = await api('/api/folder_ok?path=' + encodeURIComponent(folder)); if (!ok.ok) { alert('폴더를 찾지 못했습니다: ' + folder + '\n주소를 다시 확인하세요(이동식 디스크·공유 폴더는 연결돼 있어야 합니다).'); return; } } catch (e) { } }   // 없는 폴더에 「새 인계서로 시작」 확인 창부터 뜨던 것
@@ -444,7 +451,7 @@ async function pkLoad(path) {
 
 // --- 1-가. 담당 업무
 function renderS1a(m) {
-  const used = usedAreas(); const ro = mode === 'take';
+  const used = bodyAreas(); const ro = mode === 'take';
   let h = head('1-가. 담당 업무', '인계자·인수자·입회자(바로 위 상급자)와 일자를 적고, 업무마다 한 줄 설명과 조심할 것을 적습니다. 숫자는 문서에서 센 것입니다.');
   h += `<div class="q"><div class="row"><label>인계자 <input type="text" id="hFrom" value="${esc(ST.handover_from || '')}" placeholder="이름(직급)" ${ro ? 'disabled' : ''}></label><label>인수자 <input type="text" id="hTo" value="${esc(ST.handover_to || '')}" placeholder="이름(직급)" ${ro ? 'disabled' : ''}></label><label>입회자 <input type="text" id="hWit" value="${esc(ST.witness || '')}" placeholder="바로 위 상급자" ${ro ? 'disabled' : ''}></label><label>일자 <input type="text" id="hDate" value="${esc(ST.handover_date || '')}" placeholder="YYYY-MM-DD" style="width:130px" ${ro ? 'disabled' : ''}></label><label>소속 <input type="text" id="hOrg" value="${esc(ST.org || '')}" placeholder="예) ○○우체국 ○○과" style="width:260px" ${ro ? 'disabled' : ''}></label></div></div>`;
   h += `<div class="sec"><h3>업무별 설명 <span class="chip">${ST.areas_src === '폴더' ? '맨 위 폴더 이름으로 나눈 것' : '키워드로 나눈 것'} · 준비 화면에서 고칠 수 있음</span></h3>` + used.map(a => { const r = ITEMS.filter(i => areaOf(i) === a); const c = completeness(a); const ov = OV[a] || {}; const n = k => r.filter(i => i.kind3 === k && i.keep && !isSug(i)).length; const sN = r.filter(isSug).length;
@@ -465,14 +472,19 @@ function renderS1a(m) {
 function calHtml(rows) {
   const k = rows.filter(i => i.keep && !isSug(i));
   const months = {}; for (let i = 1; i <= 12; i++) months[i] = [];
-  k.forEach(i => { const r = i.recur || {}; const mm = r.month || ((r.cycle === '매년' && !r.years) ? 0 : (i.date ? +i.date.slice(5, 7) : 0)); if (mm >= 1 && mm <= 12) months[mm].push(i); });   // 「매년」인데 달을 모르면 달력에 넣지 않는다(파일 날짜의 달에 들어가던 것)
-  let h = '<div class="cal">';
+  const every = k.filter(i => ['매월', '매주', '분기'].includes((i.recur || {}).cycle));   // 매월·매주·분기 업무는 한 달 칸이 아니라 달력 위 한 줄에(파일 날짜의 달 한 칸에만 들어가던 것)
+  k.filter(i => !every.includes(i)).forEach(i => { const r = i.recur || {}; const mm = r.month || ((r.cycle === '매년' && !r.years) ? 0 : (i.date ? +i.date.slice(5, 7) : 0)); if (mm >= 1 && mm <= 12) months[mm].push(i); });   // 「매년」인데 달을 모르면 달력에 넣지 않는다(파일 날짜의 달에 들어가던 것)
+  let h = every.length ? `<div class="note" style="margin-bottom:8px"><b>달마다·주마다·분기마다</b> ${every.map(x => `${esc(x.title)} <span class="chip cy">${esc(x.recur.cycle)}</span>`).join(' · ')}</div>` : '';
+  h += '<div class="cal">';
   for (let i = 1; i <= 12; i++) h += `<div class="m ${months[i].length ? '' : 'empty'}"><b>${i}월</b>${months[i].map(x => `<div>${esc(x.title)}</div>`).join('') || '없음'}</div>`;
   return h + '</div>';
 }
 function renderS1b(m) {
   const rows = recurs();
-  let h = head('1-나. 주요 업무계획 및 진행사항(반복 업무)', '해마다 같은 제목으로 오는 공문을 지난 3년 파일 날짜에서 찾았습니다. 달력에 넣으려면 「넣기」, 아니면 「버리기」. 후임자가 할 일은 한 줄로.', bulkBtns(rows));
+  let h = head('1-나. 주요 업무계획 및 진행사항(반복 업무)', '해마다 같은 제목으로 오는 공문(지난 3년 파일 날짜)과 본문의 「매월 ○일까지」「매주 ○요일」 같은 문장에서 찾은 되풀이 업무입니다. 달력에 넣으려면 「넣기」, 아니면 「버리기」. 후임자가 할 일은 한 줄로.', bulkBtns(rows));
+  { const pb = String((ST.plan || {}).base_date || ''), lim = /^\d{4}-\d{2}-\d{2}/.test(pb) ? new Date(new Date(pb.slice(0, 10)).getTime() - 14 * 864e5).toISOString().slice(0, 10) : '';   // 내려받는 파일의 「인수 직후 할 일(기한 순)」과 같은 기준(export.chapters soon)
+    const soon = ITEMS.filter(i => inBody(i) && /^\d{4}-\d{2}-\d{2}$/.test(i.due_next || '') && i.due_next >= lim && (i.status || '진행') !== '완료' && !i.future).sort((a, b) => a.due_next < b.due_next ? -1 : 1);
+    if (soon.length) h += `<div class="sec"><h3>인수 직후 할 일(기한 순) <span class="chip">${soon.length}건 · 내려받는 파일에 실림</span></h3>` + soon.slice(0, 10).map(i => `<div class="s" style="margin:3px 0"><b>${esc(i.due_next)}</b>${pb && i.due_next < pb.slice(0, 10) ? ' (지남)' : ''} · ${esc(areaOf(i))} · ${esc(i.title)}${isSug(i) ? ' <span class="chip">확인 전</span>' : ''}</div>`).join('') + (soon.length > 10 ? `<div class="s">외 ${soon.length - 10}건</div>` : '') + '<div class="s">기한은 1-다 현안의 「기한」 칸에서 고칩니다.</div></div>'; }
   h += '<div class="sec">' + sortRows(rows).map(i => card(i)).join('') + (rows.length ? '' : '<div class="s">해마다 되풀이되는 문서를 찾지 못했습니다. 아래에서 직접 적을 수 있습니다.</div>') + '</div>';
   if (rows.some(i => i.keep && !isSug(i))) h += '<h3 style="margin:16px 0 8px">넣은 업무의 연간 달력</h3>' + calHtml(rows);
   h += addRow('반복');
@@ -491,8 +503,10 @@ function renderS1c(m) {
 function renderS1d(m) {
   const rows = issues().filter(i => !isSug(i) && i.keep && i.status === '미결');
   let h = head('1-라. 주요 미결사항', '1-다에서 상태를 「미결(회신·결정 대기)」로 둔 것입니다. 「다음에 할 일」이 비면 후임자가 무엇을 기다려야 하는지 모릅니다.');
+  { const cand = issues().filter(i => isSug(i) && i.status === '미결'); if (cand.length && mode !== 'take') h += `<div class="note">1-다에 규칙이 「미결」로 제안한 줄이 ${cand.length}건 있습니다(${cand.slice(0, 3).map(i => esc(i.title)).join(', ')}${cand.length > 3 ? ' 외' : ''}). 넣기·버리기를 하지 않고 내려받아도 이 절(1-라)에 [확인 전]으로 실립니다. <button class="ghost sm" id="goS1c">1-다로 가기</button></div>`; }
   h += '<div class="sec">' + (rows.map(i => card(i)).join('') || '<div class="s">미결로 표시한 현안이 없습니다.</div>') + '</div>';
   m.innerHTML = h; bindCards(m); bindCopy();
+  const g1 = $('#goS1c'); if (g1) g1.onclick = () => { sec = 's1c'; rerender(); };
 }
 // --- 2. 관련 문서
 function renderS2(m) {
@@ -522,7 +536,7 @@ function renderS4(m) {
   let h = head('4. 그 밖의 참고사항', '문서에 적힌 문의처·담당자와 표·명단 파일의 연락처입니다(내려받는 4절과 같은 목록: 같은 번호는 하나로, 버리기 한 문서·명단은 뺌, 아직 확인 전인 문서는 [확인 전]). 후임자에게 필요 없는 번호(특히 휴대전화 같은 개인정보)는 줄마다 「빼기」로 빼세요. 누적 매뉴얼과 못 읽은 자료도 여기 실립니다.');
   h += `<div class="sec"><h3>관계자 연락처 <span class="chip">${people.length}명${nMob ? ' · 휴대전화 ' + nMob : ''}${excl.length ? ' · 뺀 번호 ' + excl.length : ''}</span>${!ro && nMob ? ' <button class="ghost sm" id="btnExclMobile" title="010 번호를 모두 뺍니다(개인정보 최소화). 아래 「되살리기」로 되돌릴 수 있습니다">휴대전화 모두 빼기</button>' : ''}</h3>`;
   const areasC = usedAreas(); people.forEach(p => { if (!areasC.includes(p.a)) areasC.push(p.a); });
-  for (const a of areasC) { const r = people.filter(p => p.a === a); if (!r.length) continue; h += `<h4 style="margin:10px 0 4px">${esc(a)}</h4><div class="people">` + r.map(p => `<div class="person"><b>${esc(p.c.name)}</b>${ro ? '<span></span>' : `<button class="x" data-excl="${esc(p.raw)}" title="이 번호를 4절에서 뺍니다(결과물에도 실리지 않음)">빼기</button>`}<span class="ph">${esc(p.c.phone)}</span><span></span><span class="why">${esc(p.c.line)} · ${esc(p.title)}</span></div>`).join('') + '</div>'; }
+  for (const a of areasC) { const r = people.filter(p => p.a === a); if (!r.length) continue; h += `<h4 style="margin:10px 0 4px">${esc(a)}</h4><div class="people">` + r.map(p => `<div class="person"><b>${esc(p.c.name)}</b>${ro ? '<span></span>' : `<button class="x" data-excl="${esc(p.raw)}" title="이 번호를 4절에서 뺍니다(결과물에도 실리지 않음)">빼기</button>`}<span class="ph">${esc(p.c.phone)}</span><span></span><span class="why">${[p.c.line, p.title].filter(Boolean).map(esc).join(' · ')}</span></div>`).join('') + '</div>'; }
   if (!people.length) h += '<div class="s">문서에서 찾은 연락처가 없습니다.</div>';
   if (excl.length) h += `<div class="s" style="margin-top:8px">뺀 번호 ${excl.length}개(결과물에 실리지 않음): ${excl.map(ph => `<span class="chip">${esc(ph)}${ro ? '' : ` <button class="x" data-restore="${esc(ph)}" title="다시 넣기">되살리기</button>`}</span>`).join(' ')}</div>`;
   h += '</div>';
@@ -542,7 +556,7 @@ function renderS4(m) {
 // ---------------------------------------------------------------- 오른쪽: 물어보기·완성도
 function renderAside() {
   const box = $('#checklist'); if (!ITEMS.length) { box.innerHTML = '<div>초안을 만들면 여기에 완성도가 보입니다.</div>'; return; }
-  const used = usedAreas(); box.innerHTML = used.map(a => { const c = completeness(a); return `<div><span>${esc(a)}</span><span class="${c.done ? 'ok' : 'no'}">${c.done ? '완료' : c.sug ? '제안 ' + c.sug : !c.desc ? '설명 없음' : '할 일 빈 현안 ' + c.noNext}</span></div>`; }).join('') + `<div><span>물품·예산</span><span class="${AS.every(([k]) => (ASSETS[k] || '').trim()) ? 'ok' : 'no'}">${AS.filter(([k]) => (ASSETS[k] || '').trim()).length}/4</span></div><div><span>인계·인수·입회자</span><span class="${ST.handover_from && ST.handover_to && ST.witness ? 'ok' : 'no'}">${[ST.handover_from, ST.handover_to, ST.witness].filter(Boolean).length}/3</span></div>`;
+  const used = bodyAreas(); box.innerHTML = used.map(a => { const c = completeness(a); return `<div><span>${esc(a)}</span><span class="${c.done ? 'ok' : 'no'}">${c.done ? '완료' : c.sug ? '제안 ' + c.sug : !c.desc ? '설명 없음' : '할 일 빈 현안 ' + c.noNext}</span></div>`; }).join('') + `<div><span>물품·예산</span><span class="${AS.every(([k]) => (ASSETS[k] || '').trim()) ? 'ok' : 'no'}">${AS.filter(([k]) => (ASSETS[k] || '').trim()).length}/4</span></div><div><span>인계·인수·입회자</span><span class="${ST.handover_from && ST.handover_to && ST.witness ? 'ok' : 'no'}">${[ST.handover_from, ST.handover_to, ST.witness].filter(Boolean).length}/3</span></div>`;
 }
 let qTimer = null;
 $('#q').oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(async () => { const q = $('#q').value.trim(); if (q.length < 2) { $('#answers').innerHTML = ''; return; }
@@ -568,8 +582,8 @@ $('#btnExport').onclick = async () => {
   const nS1 = ITEMS.filter(i => i.keep && isSug(i) && (i.kind3 === '현안' || i.kind3 === '반복') && !i.private).length, nS2b = ITEMS.filter(i => i.keep && isSug(i)).length - nS1;
   if (nS1 || nS2b) warn.push(`· 아직 넣기·버리기를 안 누른 제안 ${nS1 + nS2b}건: 현안·반복 ${nS1}건은 본문에 「[확인 전]」으로, 문서·현황·연혁 ${nS2b}건은 붙임 1 「확인 전 문서」 목록으로 실립니다`);
   const nA = AS.filter(([k]) => !(ASSETS[k] || '').trim()).length; if (nA) warn.push(`· 3절 물품·예산 ${nA}칸이 「(적지 않음)」으로 나갑니다`);
-  const nD = usedAreas().filter(a => !((OV[a] || {}).desc || (OV[a] || {}).gone || '').trim()).length; if (nD) warn.push(`· 1-가 업무 설명이 빈 업무 ${nD}개(「(적지 않음)」으로 나감)`);
-  const nT = ITEMS.filter(i => i.kind3 === '현안' && i.keep && !(i.todo || '').trim() && !(i.next || '').trim()).length; if (nT) warn.push(`· 1-다 할 일·다음이 빈 현안 ${nT}건(인수자가 무엇을 할지 모름)`);
+  const eD = bodyAreas().filter(a => !((OV[a] || {}).desc || (OV[a] || {}).gone || '').trim()), nD = eD.length; if (nD) warn.push(`· 1-가 업무 설명이 빈 업무 ${nD}개(「(적지 않음)」으로 나감): ${eD.slice(0, 3).join(', ')}${nD > 3 ? ' 외' : ''}`);
+  const eT = ITEMS.filter(i => i.kind3 === '현안' && i.keep && !(i.todo || '').trim() && !(i.next || '').trim()), nT = eT.length; if (nT) warn.push(`· 1-다 할 일·다음이 빈 현안 ${nT}건(인수자가 무엇을 할지 모름): ${eT.slice(0, 3).map(i => i.title).join(', ')}${nT > 3 ? ' 외' : ''}`);
   const nB = ITEMS.filter(i => i.keep && i.bulk).length; if (nB) warn.push(`· 한꺼번에 넣은 ${nB}건은 [일괄 넣음]으로 표시됩니다`);
   const nP = ITEMS.filter(i => i.keep && !isSug(i) && i.private).length; if (nP) warn.push(`· 개인 문서로 보이는 ${nP}건을 넣었습니다: ${ITEMS.filter(i => i.keep && !isSug(i) && i.private).slice(0, 4).map(i => i.title).join(', ')}`);
   const nS2 = ITEMS.filter(i => i.keep && i.secret).length; if (nS2) warn.push(`· 비밀번호·계정 줄이 든 문서 ${nS2}건(발췌에서는 가렸지만 원문을 확인하세요)`);

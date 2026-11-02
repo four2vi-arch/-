@@ -129,6 +129,18 @@ const oai = http.createServer((req, res) => {
     ok('「되살리기」로 되돌림', (await page.$$('#main .person')).length === n0 && ((await state()).contact_excl || []).length === 0);
     if (mob0) { await page.click('#btnExclMobile'); await sleep(900); ok('「휴대전화 모두 빼기」', (await state()).contacts.filter(c => c.mobile).length === 0 && ((await state()).contact_excl || []).length === mob0, JSON.stringify((await state()).contact_excl)); }
     else ok('「휴대전화 모두 빼기」(모의 폴더에 휴대전화 없음: 건너뜀)', true);
+    // 11.2. 최종 점검에서 재현한 오류
+    const stC = await state(); const cs = stC.contacts || [];
+    ok('명단 연락처가 다른 문서에 같은 번호가 있어도 빠지지 않음(한예준 063-000-0707)', cs.some(c => c.phone === '063-000-0707'), cs.map(c => c.name).join(','));
+    ok('명단 연락처의 「무슨 일로」가 비지 않음(국명·직위·업체)', cs.filter(c => c.src === '명단').length > 0 && cs.filter(c => c.src === '명단').every(c => String(c.line || '').trim()), JSON.stringify(cs.filter(c => c.src === '명단').map(c => c.line)));
+    ok('빈 주소로 「읽기」 → 400(돌다리 자신의 폴더를 읽지 않음)', (await post('/api/extract', {folder: ''})).status === 400);
+    const mig = (await items()).find(i => i.kind3 === '현안' && i.status === '미결' && i.status_by === '규칙');
+    if (mig) { await post('/api/items', {changes: [{id: mig.id, keep: true, decided: true}]}); await post('/api/items', {changes: [{id: mig.id, next: '회신 오면 결재'}]});
+      const m2 = (await items()).find(i => i.id === mig.id); ok('「다음에 할 일」만 적으면 규칙이 고른 미결 상태는 그대로(1-다에서 사라지지 않음)', m2.status_by === '규칙' && m2.next_src === '사람', JSON.stringify([m2.status_by, m2.next_src])); }
+    else ok('규칙이 미결로 제안한 현안 찾기', false);
+    await post('/api/export', {}); const anyI = (await items()).find(i => i.kind3 === '현안'); await post('/api/items', {changes: [{id: anyI.id, note: '내보낸 뒤 고침'}]});
+    ok('내보낸 뒤 고치면 「고친 내용 있음」', (await state()).dirty_after_export === true);
+    await post('/api/export', {}); ok('다시 내보내면 표시가 풀림(녹색 상자·.docx 단추가 돌아옴)', (await state()).dirty_after_export === false);
     ok('페이지 오류 없음', errors.length === 0, errors.join(' / '));
   } catch (e) { ok('예외 없음', false, String(e && e.stack || e)); }
   finally {

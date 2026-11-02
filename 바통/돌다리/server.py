@@ -615,6 +615,8 @@ class H(BaseHTTPRequestHandler):
         if p == '/api/extract':
             global _extracting
             raw_folder = str(body.get('folder', '')).strip().strip('"')
+            if not raw_folder:   # 빈 주소면 프로그램이 시작된 폴더(돌다리 자신)를 읽던 것
+                return self._send(400, {'error': '업무 폴더 주소가 비어 있습니다. 「폴더 찾아보기…」로 고르거나 주소를 붙여 넣으세요.'})
             folder = os.path.abspath(os.path.expanduser(raw_folder))
             if not os.path.isdir(folder):
                 return self._send(400, {'error': '폴더를 찾지 못했습니다: %s (주소를 다시 확인하세요)' % raw_folder[:200]})
@@ -721,8 +723,10 @@ class H(BaseHTTPRequestHandler):
                             it[k] = ch[k]
                     if 'keep' in ch or 'decided' in ch:
                         it['bulk'] = False   # 하나씩 고른 것은 「일괄 넣음」이 아니다
-                    if 'status' in ch or 'next' in ch:
+                    if 'status' in ch:   # 「다음에 할 일」만 적은 것은 상태를 정한 것이 아니다(규칙이 고른 미결 줄이 적는 도중 1-다에서 사라지던 것)
                         it['status_by'] = '사람'
+                    if 'next' in ch:
+                        it['next_src'] = '사람'
                     for k in ('due_next', 'summary', 'when'):   # 사람이 고친 표시를 남긴다(초안을 다시 만들어도 잃지 않게)
                         if k in ch:
                             it[k] = ch[k]; it[k + '_by'] = '사람'
@@ -778,6 +782,7 @@ class H(BaseHTTPRequestHandler):
             with LOCK:
                 STATE['exports'] = [os.path.basename(x) for x in paths] + [stem + '_원본지문.csv']
                 STATE['step'] = 5
+                STATE['dirty_after_export'] = False   # 방금 내보낸 파일이 지금 초안과 같다(다시 내보내도 「예전 파일」 띠와 .docx 단추가 사라지던 것)
             save_session()
             log('내보내기: ' + ', '.join(STATE['exports']))
             return self._send(200, {'ok': True, 'files': STATE['exports'], 'work': WORK})

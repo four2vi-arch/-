@@ -772,6 +772,11 @@
       setMsg(qs("#fileMsg"), "우편번호 DB를 아직 여는 중입니다. 잠시 뒤 다시 넣어 주세요.", "warn");
       return;
     }
+    var nEd = (S.rows || []).filter(function (r) { return r.edited; }).length;   // 직접 고친 우편번호가 말없이 사라지던 것(어르신 넘기기·QR·예시는 그쪽에서 이미 물음)
+    if (!S.asked && nEd && !confirm("직접 고친 우편번호가 " + nEd + "건 있는 주소록을 새 파일로 바꿀까요? 고친 내용은 사라집니다(먼저 내려받아 두세요).")) {
+      return;
+    }
+    S.asked = false;
     if (/\.(hwpx?|pdf|docx?|pptx?)$/i.test(a.name || "")) {
       return setMsg(qs("#fileMsg"), /고시|별표/.test(a.name) ? "우편번호 고시 본문 문서입니다. 주소록이 아니라면, 그 공문 붙임의 「별표 5」 압축파일을 「DB 최신화」에 넣어 주세요." : "이 형식(" + a.name.replace(/^.*\./, "") + ")은 주소록으로 읽지 못합니다. 엑셀·한셀·CSV로 저장해 넣어 주세요.", "warn");
     }
@@ -1953,7 +1958,7 @@
     var b = [a.r.addr1, a.r.addr2].filter(Boolean).join(" ");
     var c = deliveryOffice(a.zip);
     var d = privacyMask.on && !privacyMask.reveal[a.i];
-    return "<tr data-i=\"" + a.i + "\"" + (d ? " class=\"masked\"" : "") + "><td class=\"c-no\">" + (a.i + 1) + (d ? "<button type=\"button\" class=\"eye\" title=\"" + privacyMask.SECONDS + "초 동안 이 줄만 보기\">보기</button>" : "") + "</td><td>" + escHtml(maskedValue(a, a.addr, "addr")) + (a.detail ? " <span class=\"note\">" + escHtml(maskedValue(a, a.detail, "addr2")) + "</span>" : "") + "</td><td class=\"c-zip\"><input class=\"zipin" + (a.edited ? " edited" : "") + "\" type=\"text\" inputmode=\"numeric\" maxlength=\"5\" value=\"" + escHtml(a.zip) + "\" aria-label=\"" + (a.i + 1) + "행 우편번호\">" + (c ? "<span class=\"off\">" + escHtml(c) + "</span>" : "") + (a.old && a.old !== a.zip ? "<span class=\"was\">기존 " + escHtml(a.old) + "</span>" : "") + "</td><td class=\"c-gr\">" + gradeBadge(a) + "<button type=\"button\" class=\"findbtn\" title=\"주소 찾기로 고치기\">찾기</button></td><td class=\"note\">" + escHtml(a.note) + "</td><td>" + (a.status === "실패" ? "" : escHtml(maskedValue(a, b, "addr"))) + "</td></tr>";
+    return "<tr data-i=\"" + a.i + "\"" + (d ? " class=\"masked\"" : "") + "><td class=\"c-no\">" + rowNo(a.i) + (d ? "<button type=\"button\" class=\"eye\" title=\"" + privacyMask.SECONDS + "초 동안 이 줄만 보기\">보기</button>" : "") + "</td><td>" + escHtml(maskedValue(a, a.addr, "addr")) + (a.detail ? " <span class=\"note\">" + escHtml(maskedValue(a, a.detail, "addr2")) + "</span>" : "") + "</td><td class=\"c-zip\"><input class=\"zipin" + (a.edited ? " edited" : "") + "\" type=\"text\" inputmode=\"numeric\" maxlength=\"5\" value=\"" + escHtml(a.zip) + "\" aria-label=\"" + (a.i + 1) + "행 우편번호\">" + (c ? "<span class=\"off\">" + escHtml(c) + "</span>" : "") + (a.old && a.old !== a.zip ? "<span class=\"was\">기존 " + escHtml(a.old) + "</span>" : "") + "</td><td class=\"c-gr\">" + gradeBadge(a) + "<button type=\"button\" class=\"findbtn\" title=\"주소 찾기로 고치기\">찾기</button></td><td class=\"note\">" + escHtml(a.note) + "</td><td>" + (a.status === "실패" ? "" : escHtml(maskedValue(a, b, "addr"))) + "</td></tr>";
   }
   function refreshRow(a) {
     var b = qs("#resultTable tbody tr[data-i=\"" + a + "\"]");
@@ -2000,7 +2005,7 @@
   }
   var EPOST_HEADERS = ["발송인명\n(띄어쓰기 포함 \n16자 이내)", "우편번호\n(예시:06267)", "발송인주소1 - 동/읍/면/로 까지\n① 예시1 : 서울특별시 영등포구 영중로83\n② 예시2 : 경기도 가평군 가평읍\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "발송인주소2(나머지주소-필수입력)\n① 예시1 : 한국우편사업진흥원\n② 예시2 : 개곡리 123-4번지\n③ 예시3 : 나머지 주소가 없을 때 임의문자 한 글자라도 추가 ( 점 (.)표시)\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "발송인 일반전화\n(예시:02-1234-4567)\n\n* 발송인 일반전화 또는 \n휴대전화 중 1개만 입력", "발송인 휴대전화\n(예시:010-1234-4567)\n\n* 발송인 일반전화 또는 \n휴대전화 중 1개만 입력", "수취인명\n(띄어쓰기 포함\n 15자 이내)", "우편번호\n(예시:06267)", "수취인주소1 - 동/읍/면/로 까지\n① 예시1 : 서울특별시 영등포구 영중로83\n② 예시2 : 경기도 가평군 가평읍\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "수취인주소2(나머지주소-필수입력)\n① 예시1 : 한국우편사업진흥원\n② 예시2 : 개곡리 123-4번지\n③ 예시3 : 나머지 주소가 없을 때 임의문자 한 글자라도 추가 ( 점 (.)표시)\n\n특수문자 입력 금지 [ | \\ \" ' < > & ] ", "받는분 일반전화\n(예시:02-1234-4567)\n\n* 받는분 일반전화 또는 휴대전화 중 1개만 입력", "받는분 휴대전화\n(예시:010-1234-4567)\n\n* 받는분 일반전화 또는 휴대전화 중 1개만 입력"];
   var EPOST_SOURCES = ["senderName", "senderZip", "senderAddr1", "senderAddr2", "senderTelOnly", "senderMobile", "name", "zip", "addr1", "addr2", "telOnly", "mobile1"];
-  var CUSTOM_SOURCES = [["name", "받는 분"], ["zip", "우편번호"], ["addrFull", "주소(전체)"], ["addrStd", "주소(표준 표기 · 시·도 생략)"], ["addrMain", "주소(표준 표기 · 상세 뺌)"], ["addrDetail", "상세주소(동·호수 등)"], ["addr1", "주소1(기본)"], ["addr2", "주소2(상세)"], ["phone", "전화(휴대전화 우선)"], ["tel", "일반전화"], ["mobile", "휴대전화"], ["item", "상품명"], ["memo", "배송 메시지"], ["seq", "일련번호"], ["const", "고정값(오른쪽 칸)"], ["blank", "빈칸"], ["grade", "검색결과"], ["note", "근거"], ["office", "배달 우체국"], ["senderName", "보내는 분 이름"], ["senderZip", "보내는 분 우편번호"], ["senderAddr1", "보내는 분 주소1"], ["senderAddr2", "보내는 분 주소2"], ["senderAddrFull", "보내는 분 주소(전체)"], ["senderPhone", "보내는 분 전화"]];
+  var CUSTOM_SOURCES = [["name", "받는 분"], ["zip", "우편번호"], ["addrFull", "주소(전체)"], ["addrStd", "주소(표준 표기 · 시·도 생략)"], ["addrMain", "주소(표준 표기 · 상세 뺌)"], ["addrMainFull", "주소(번지까지 · 시·도 포함)"], ["addrDetail", "상세주소(동·호수 등)"], ["addr1", "주소1(기본)"], ["addr2", "주소2(상세)"], ["phone", "전화(휴대전화 우선)"], ["tel", "일반전화"], ["mobile", "휴대전화"], ["item", "상품명"], ["memo", "배송 메시지"], ["seq", "일련번호"], ["const", "고정값(오른쪽 칸)"], ["blank", "빈칸"], ["grade", "검색결과"], ["note", "근거"], ["office", "배달 우체국"], ["senderName", "보내는 분 이름"], ["senderZip", "보내는 분 우편번호"], ["senderAddr1", "보내는 분 주소1"], ["senderAddr2", "보내는 분 주소2"], ["senderAddrFull", "보내는 분 주소(전체)"], ["senderPhone", "보내는 분 전화"]];
   var PRESETS = {
     orig: {
       name: "원본 + 우편번호",
@@ -2134,7 +2139,17 @@
       tel: normPhone(qs("#sdTel") && qs("#sdTel").value)
     };
   }
+  function splitPhones(x) {   // 한 칸에 번호 두 개(「010-…, 063-…」「063-… / 010-…」). 조각마다 숫자가 8자리 이상일 때만 나눈다(띄어 쓴 번호 하나를 쪼개지 않게)
+    var p = String(x == null ? "" : x).split(/\s*[,\/;·]\s*/).map(clean).filter(Boolean);
+    return p.length > 1 && p.every(function (y) { return y.replace(/[^\d]/g, "").length >= 8; }) ? p.map(normPhone) : null;
+  }
   function telPair(t, m) {
+    var st = splitPhones(t), sm = splitPhones(m);
+    if (st || sm) {
+      var all = (st || [normPhone(t)]).concat(sm || [normPhone(m)]).filter(Boolean);
+      var mob = all.filter(isMobile), lan = all.filter(function (x) { return !isMobile(x); });
+      return [lan[0] || "", mob[0] || ""];
+    }
     var a = normPhone(t);
     var b = normPhone(m);
     if (!b && a && isMobile(a)) {
@@ -2167,7 +2182,7 @@
         tp = telPair(row.s.tel, row.s.mobile);
       }
     }
-    var found = row.status !== "실패" && row.r && row.r.addr1;
+    var found = (row.status !== "실패" || row.r && row.r.picked) && row.r && row.r.addr1;   // picked: 「주소 찾기」에서 고른 주소
     return {
       name: name,
       tel: tp[0],
@@ -2251,13 +2266,16 @@
   }
   // 양식1·2의 「주소」·「상세주소」: 표준 표기에서 시·도를 떼고, 도로명은 건물번호까지, 지번은 번지까지를 주소로 둔다.
   // 나머지(동·호수·층, 참고항목 괄호)는 상세주소. 못 찾은 행(실패)은 원문 주소·상세를 그대로 둔다.
-  function splitStdAddress(row, rec) {
+  function splitStdAddress(row, rec, keepSido) {
     if (row.status === "실패" && !row.edited) {
       return [clean(rec.addr1), clean(rec.addr2)];
     }
     var kind = row.r && row.status !== "실패" ? row.r.kind : "";
-    var whole = standardAddress(rec.addr1, "", kind);
+    var whole = keepSido ? clean(rec.addr1).replace(/\s+\(/g, "(") : standardAddress(rec.addr1, "", kind);   // keepSido: 기관 양식(사용자 지정)은 시·도를 둔다
     var det = clean(rec.addr2).replace(/\s+\(/g, "(").replace(/^,\s*/, "");
+    if (kind === "pobox" && det) {   // 사서함은 「정읍시 정읍우체국 사서함 1호」 한 칸(주소 칸에 「정읍시」만 남던 것)
+      return [whole + " " + det.replace(/(\S)사서함/, "$1 사서함"), ""];
+    }
     if (det && (kind === "jibun" || /(로|길)$/.test(whole))) {   // 지번의 리·번지, 건물번호 없는 도로명의 번호는 주소 쪽으로
       var m = det.match(/^((?:\S+리\s+)?(?:산\s*)?\d+(?:-\d+)?)(?:\s+|,\s*|(?=\())?(.*)$/);
       if (m && !/^\d+(?:-\d+)?(?:호|층|동)/.test(det)) {
@@ -2308,6 +2326,8 @@
         return standardAddress(rec.addr1, rec.addr2, a.r && a.status !== "실패" ? a.r.kind : "");
       case "addrMain":
         return splitStdAddress(a, rec)[0];
+      case "addrMainFull":
+        return splitStdAddress(a, rec, true)[0];
       case "addrDetail":
         return splitStdAddress(a, rec)[1];
       case "phone":
@@ -2397,8 +2417,10 @@
       return !!d;
     }
   }
+  function isDirect() { return S.fileName === "직접입력.xlsx"; }   // 「직접 입력」은 맨 위에 「주소」 제목 줄을 덧붙인다
+  function rowNo(i) { return isDirect() ? i : i + 1; }   // 화면·안내의 행 번호(직접 입력은 몇 번째 줄)
   function rowListText(a, n) {   // 넣은 파일(원본)의 행 번호. 내려받은 양식은 연번으로 세므로 「원본」을 붙인다
-    return "원본 " + a.join("·") + "행" + (n > a.length ? " 외" : "");
+    return (isDirect() ? a.join("·") + "번째 줄" : "원본 " + a.join("·") + "행") + (n > a.length ? " 외" : "");
   }
   function buildPresetRows(a) {
     var isE = !!a.sender;
@@ -2437,6 +2459,11 @@
       noTelRows: [],
       noMob: 0,
       noMobRows: [],
+      noName: 0,
+      noNameRows: [],
+      check: 0,
+      checkRows: [],
+      nozipRows: [],
       qtyAdded: 0,
       self: 0,
       sBad: 0,
@@ -2448,6 +2475,8 @@
     };
     var seenKey = {};
     var flags = typeof Map === "function" ? new Map() : null;   // 내보낸 행 → {sim: 유사 미확인, noMob: 필수 핸드폰 빔}(양식1·2 엑셀 칸 색칠)
+    var needName = (S.preset === "reg" || S.preset === "parcel") && a.cols.some(function (c) { return c.src === "name"; });   // 등기·소포는 수취인이 필수
+    var hasMemoCol = a.cols.some(function (c) { return c.src === "memo"; });
     var needMob = !!(PRESETS[S.preset] && PRESETS[S.preset].needMobile) && a.cols.some(function (c) {
       return c.src === "mobile";
     });
@@ -2457,7 +2486,7 @@
         if (seenKey[dk]) {
           W.dup++;
           if (W.dupRows.length < 10) {
-            W.dupRows.push(row.i + 1);
+            W.dupRows.push(rowNo(row.i));
           }
         }
         seenKey[dk] = 1;
@@ -2465,18 +2494,21 @@
       if ((row.addr || row.detail) && row.status === "유사" && !row.edited) {
         W.similar++;
         if (W.similarRows.length < 10) {
-          W.similarRows.push(row.i + 1);
+          W.similarRows.push(rowNo(row.i));
         }
       }
       if (!row.addr && !row.detail) {
         W.empty++;
         if (W.emptyRows.length < 10) {
-          W.emptyRows.push(row.i + 1);
+          W.emptyRows.push(rowNo(row.i));
         }
         return;
       }
       if (!row.zip) {
         W.nozip++;
+        if (W.nozipRows.length < 10) {
+          W.nozipRows.push(rowNo(row.i));
+        }
         if (skipFail) {
           W.skipped++;
           return;
@@ -2504,7 +2536,7 @@
         if (snd.bad) {
           W.sBad++;
           if (W.sBadRows.length < 10) {
-            W.sBadRows.push(row.i + 1);
+            W.sBadRows.push(rowNo(row.i));
           }
         }
         if ((snd.name || "").length > 16) {
@@ -2520,7 +2552,7 @@
         } else {
           W.noTel++;
           if (W.noTelRows.length < 10) {
-            W.noTelRows.push(row.i + 1);
+            W.noTelRows.push(rowNo(row.i));
           }
         }
       }
@@ -2528,14 +2560,31 @@
       if (noMob) {
         W.noMob++;
         if (W.noMobRows.length < 10) {
-          W.noMobRows.push(row.i + 1);
+          W.noMobRows.push(rowNo(row.i));
         }
       }
       var simRow = row.status === "유사" && !row.edited;
+      var noName = needName && !rec.name;
+      if (noName) {
+        W.noName++;
+        if (W.noNameRows.length < 10) {
+          W.noNameRows.push(rowNo(row.i));
+        }
+      }
+      // 넘겨받은 어르신 입력·QR 메모의 비고(「창구 확인 필요」「AI 도움」)와 주소 찾기에서 번호만 고른 행: 비고 열이 없는 양식에서도 직원이 다시 보게(11.2. 비고 열을 없애며 사라지던 것)
+      var memoTxt = S.cols.memo >= 0 ? clean((S.aoa[row.i] || [])[S.cols.memo]) : "";
+      var chk = !!row.findNoAddr || (!hasMemoCol && /창구 확인|AI 도움|접수 전 확인/.test(memoTxt));
+      if (chk) {
+        W.check++;
+        if (W.checkRows.length < 10) {
+          W.checkRows.push(rowNo(row.i));
+        }
+      }
+      var nz = !row.zip;
       if (a.sanitize && (rec.name || "").length > 15) {
         W.longName++;
         if (W.longRows.length < 10) {
-          W.longRows.push(row.i + 1);
+          W.longRows.push(rowNo(row.i));
         }
       }
       for (var k = 0; k < n; k++) {
@@ -2558,8 +2607,8 @@
           }
           return v;
         }));
-        if (flags && (simRow || noMob)) {
-          flags.set(out[out.length - 1], {sim: simRow, noMob: noMob});
+        if (flags && (simRow || noMob || noName || chk || nz)) {
+          flags.set(out[out.length - 1], {sim: simRow, noMob: noMob, noName: noName, check: chk, nozip: nz});
         }
         meta.push({
           i: row.i,
@@ -3004,14 +3053,16 @@
     files.forEach(function (f, k) {
       setTimeout(function () {
         var top = [];
-        for (var tb = 0; tb < (c.custom ? +(PRESETS[S.preset].top || 0) : 0); tb++) {
+        for (var tb = 0; tb < (c.custom && a !== "csv" ? +(PRESETS[S.preset].top || 0) : 0); tb++) {   // CSV는 맨 위 빈 줄 없이(다른 프로그램이 첫 줄을 제목으로 읽게)
           top.push([]);
         }
         var off = top.length + (r ? 1 : 0);
         var paint = null;
-        if ((S.preset === "reg" || S.preset === "parcel") && g.flags && g.flags.size && a !== "csv") {
+        if ((S.preset === "reg" || S.preset === "parcel") && g.flags && g.flags.size && a === "xlsx") {   // xls(BIFF8)는 칸 색을 담지 못한다
           var zc = c.cols.findIndex(function (x) { return x.src === "zip"; });
           var mc = c.cols.findIndex(function (x) { return x.src === "mobile"; });
+          var ac = c.cols.findIndex(function (x) { return /^addr(Main|MainFull|Std|Full|1)$/.test(x.src); });
+          var nc = c.cols.findIndex(function (x) { return x.src === "name"; });
           var cells = {};
           f.rows.forEach(function (rw, k) {
             var fl = g.flags.get(rw);
@@ -3023,6 +3074,15 @@
             }
             if (fl.noMob && mc >= 0) {
               cells[(off + k) + "," + mc] = "sim2";
+            }
+            if (fl.check && ac >= 0) {
+              cells[(off + k) + "," + ac] = "sim";
+            }
+            if (fl.noName && nc >= 0) {
+              cells[(off + k) + "," + nc] = "sim2";
+            }
+            if (fl.nozip && zc >= 0) {
+              cells[(off + k) + "," + zc] = "fail";
             }
           });
           paint = {styled: true, cells: cells};
@@ -3052,7 +3112,13 @@
       t.push("받는 분 전화가 없는 행 " + fmtNum(W.noTel) + "건(" + rowListText(W.noTelRows, W.noTel) + ").");
     }
     if (W.noMob) {
-      t.push("연락처1(핸드폰)이 빈 행 " + fmtNum(W.noMob) + "건(" + rowListText(W.noMobRows, W.noMob) + ") · 소포 접수에는 핸드폰 번호가 필요합니다. 원본에 넣거나 접수 때 받으세요" + (a === "csv" ? "." : "(엑셀 칸 주황색)."));
+      t.push("연락처1(핸드폰)이 빈 행 " + fmtNum(W.noMob) + "건(" + rowListText(W.noMobRows, W.noMob) + ") · 소포 접수에는 핸드폰 번호가 필요합니다. 원본에 넣거나 접수 때 받으세요" + (a === "xlsx" ? "(엑셀 칸 주황색)." : "."));
+    }
+    if (W.noName) {
+      t.push("수취인이 빈 행 " + fmtNum(W.noName) + "건(" + rowListText(W.noNameRows, W.noName) + ") · 접수 때 받으세요" + (a === "xlsx" ? "(엑셀 칸 주황색)." : "."));
+    }
+    if (W.check) {
+      t.push("창구에서 확인할 행 " + fmtNum(W.check) + "건(" + rowListText(W.checkRows, W.check) + ") · 넘겨받은 어르신 입력·QR 메모의 「창구 확인 필요」「AI 도움」이나 주소 찾기에서 번호만 고른 행입니다. 접수 전에 주소를 확인하세요" + (a === "xlsx" && (S.preset === "reg" || S.preset === "parcel") ? "(엑셀 주소 칸 노란색)." : "."));
     }
     if (W.sBad) {
       t.push("보내는 분 우편번호를 못 찾은 행 " + fmtNum(W.sBad) + "건(" + rowListText(W.sBadRows, W.sBad) + ") · 원본의 보내는 분 주소를 확인하세요.");
@@ -3063,7 +3129,7 @@
     if (W.skipped) {
       t.push("우편번호 없는 " + fmtNum(W.skipped) + "건은 뺐습니다(점검표에서 확인).");
     } else if (W.nozip) {
-      t.push("우편번호 없는 행이 " + fmtNum(W.nozip) + "건 들어 있습니다.");
+      t.push("우편번호를 못 찾은 행 " + fmtNum(W.nozip) + "건(" + rowListText(W.nozipRows, W.nozip) + ") · 점검표에서 확인하세요" + (a === "xlsx" && (S.preset === "reg" || S.preset === "parcel") ? "(엑셀 우편번호 칸 빨간색)." : "."));
     }
     var longCells = 0;
     if (a === "xls") {
@@ -3085,7 +3151,7 @@
       t.push("받는 분·주소가 같은 행이 " + fmtNum(W.dup) + "건 있습니다(" + rowListText(W.dupRows, W.dup) + ") · 중복 발송인지 확인하세요.");
     }
     if (W.similar) {
-      t.push("비슷한 주소로 추정한(유사) 행 " + fmtNum(W.similar) + "건(" + rowListText(W.similarRows, W.similar) + ")은 접수 전에 주소를 확인하세요" + (S.preset === "reg" || S.preset === "parcel" ? (a === "csv" ? "(점검표로 모아 볼 수 있음. CSV에는 색이 없음)." : "(엑셀의 우편번호 칸 노란색, 점검표로도 모아 볼 수 있음).") : "(점검표로 모아 볼 수 있음)."));
+      t.push("비슷한 주소로 추정한(유사) 행 " + fmtNum(W.similar) + "건(" + rowListText(W.similarRows, W.similar) + ")은 접수 전에 주소를 확인하세요" + (S.preset === "reg" || S.preset === "parcel" ? (a === "xlsx" ? "(엑셀의 우편번호 칸 노란색, 점검표로도 모아 볼 수 있음)." : "(점검표로 모아 볼 수 있음. xls·CSV에는 칸 색이 없음).") : "(점검표로 모아 볼 수 있음)."));
     }
     if (W.longName) {
       t.push("수취인명이 15자를 넘는 행 " + fmtNum(W.longName) + "건(" + rowListText(W.longRows, W.longName) + ").");
@@ -3096,7 +3162,15 @@
     if (files.length > 1) {
       t.push("브라우저가 여러 파일 내려받기를 물으면 「허용」을 누르세요.");
     }
-    setMsg(dlMsgEl, t.join(" "), W.nozip || W.similar || W.dup || longCells || W.longName || W.noTel || W.noMob || W.sBad || W.empty || W.longSender ? "warn" : "ok");
+    if (S.preset === "biz") {   // 계약소포: 상품명이 비면 접수 파일이 반려될 수 있다
+      var ic = c.cols.findIndex(function (x) { return x.src === "item"; });
+      var nI = ic < 0 ? 0 : g.rows.filter(function (rw) { return !String(rw[ic] == null ? "" : rw[ic]).trim(); }).length;
+      if (nI) {
+        t.push("상품명이 빈 행 " + fmtNum(nI) + "건 · 원본에 상품명 열을 넣거나 「상품명」 기본값을 채우세요.");
+        W.noItem = nI;
+      }
+    }
+    setMsg(dlMsgEl, t.join(" "), W.nozip || W.similar || W.dup || longCells || W.longName || W.noTel || W.noMob || W.noName || W.check || W.noItem || W.sBad || W.empty || W.longSender ? "warn" : "ok");
   }
   function suggestCandidates(f) {
     if (f.status === "정확" && !f.changed) {
@@ -3121,7 +3195,7 @@
     var b = [["원본 행", "받는 분", "원본 주소", "기존 우편번호", "입력된 우편번호", "배달 우체국", "검색결과", "근거", "정제 주소", "추천 후보(우편번호 · 구간, 최대 3개)"]];
     var c = ["head"];
     a.forEach(function (f) {
-      b.push([String(f.i + 1), S.cols.name >= 0 ? clean(S.aoa[f.i][S.cols.name]) : "", [f.addr, f.detail].filter(Boolean).join(" "), f.old, f.zip, deliveryOffice(f.zip), f.edited ? "수정" : f.status + (f.conf ? "·" + f.conf : ""), f.note, f.status === "실패" ? "" : [f.r.addr1, f.r.addr2].filter(Boolean).join(" "), suggestCandidates(f)]);
+      b.push([String(rowNo(f.i)), S.cols.name >= 0 ? clean(S.aoa[f.i][S.cols.name]) : "", [f.addr, f.detail].filter(Boolean).join(" "), f.old, f.zip, deliveryOffice(f.zip), f.edited ? "수정" : f.status + (f.conf ? "·" + f.conf : ""), f.note, f.status === "실패" ? "" : [f.r.addr1, f.r.addr2].filter(Boolean).join(" "), suggestCandidates(f)]);
       c.push(f.edited ? "edit" : f.status === "정확" ? "" : f.status === "유사" ? f.conf === "하" ? "sim2" : "sim" : "fail");
     });
     var d = {
@@ -3143,7 +3217,9 @@
       if (!b.cols.length) {
         return setMsg(qs("#dlMsg"), "열 구성이 비어 있습니다.", "warn");
       }
-      a = buildPresetRows(b).rows;
+      var bw = buildPresetRows(b);
+      a = bw.rows;
+      var W = bw.warn, chkTxt = [W.similar ? "유사 " + rowListText(W.similarRows, W.similar) : "", W.check ? "창구 확인 " + rowListText(W.checkRows, W.check) : "", W.nozip ? "우편번호 없음 " + rowListText(W.nozipRows, W.nozip) : "", W.noMob ? "핸드폰 빔 " + rowListText(W.noMobRows, W.noMob) : "", W.noName ? "수취인 빔 " + rowListText(W.noNameRows, W.noName) : "", W.dup ? "중복 " + rowListText(W.dupRows, W.dup) : ""].filter(Boolean).join(" · ");   // 표 복사도 내려받기와 같이 확인할 행을 알린다
     }
     var c = a.map(function (g) {
       return g.map(function (h) {
@@ -3152,7 +3228,7 @@
     }).join("\r\n");
     addLog("표 복사", a.length, "클립보드");
     function d() {
-      setMsg(qs("#dlMsg"), fmtNum(a.length) + "행을 복사했습니다. 공식 양식 파일의 첫 자료 칸에 붙여 넣으세요" + (S.preset === "orig" ? "." : " (제목 줄 제외)") + " 클립보드에 개인정보가 남으니 붙여 넣은 뒤에는 다른 것을 한 번 복사해 두세요.", "ok");
+      setMsg(qs("#dlMsg"), fmtNum(a.length) + "행을 복사했습니다. 공식 양식 파일의 첫 자료 칸에 붙여 넣으세요" + (S.preset === "orig" ? "." : " (제목 줄 제외)") + (typeof chkTxt === "string" && chkTxt ? " 확인할 행: " + chkTxt + "." : "") + " 클립보드에 개인정보가 남으니 붙여 넣은 뒤에는 다른 것을 한 번 복사해 두세요.", typeof chkTxt === "string" && chkTxt ? "warn" : "ok");
     }
     function f() {
       var g = document.createElement("textarea");
@@ -3449,7 +3525,7 @@
       if (d) {
         return "senderAddr2";
       } else {
-        return "addr2";
+        return "addrDetail";   // 지번의 번지·리가 상세 칸으로 가지 않게(양식1과 같은 나눔)
       }
     }
     if (/주소|소재지|배송지|addr/i.test(c)) {
@@ -3460,10 +3536,16 @@
           return "senderAddrFull";
         }
       } else if (f) {
-        return "addr1";
+        return "addrMainFull";   // 번지까지(시·도 포함). 「주소1」처럼 동까지만 두면 「매탄동 / 823」으로 갈리던 것
       } else {
         return "addrFull";
       }
+    }
+    if (!d && /^(연락처|전화번호|전화)1/.test(c) && !/일반|유선/.test(c)) {
+      return "mobile";   // 창구 접수 양식: 연락처1 = 핸드폰(두 칸 모두 「휴대전화 우선」으로 같은 번호가 들어가던 것)
+    }
+    if (!d && /^(연락처|전화번호|전화)2/.test(c) && !/휴대|핸드폰/.test(c)) {
+      return "tel";   // 연락처2 = 일반전화
     }
     if (/휴대|핸드폰|이동통신|모바일|mobile/i.test(c)) {
       if (d) {
@@ -3554,6 +3636,12 @@
         while (f.length && !f[f.length - 1]) {
           f.pop();
         }
+        if (PRESETS[S.preset] && PRESETS[S.preset].base) {   // 양식1·2를 고른 채 불러오면 사용자 지정 양식으로 옮긴다(양식1 단추인데 열이 바뀌던 것)
+          S.colsByPreset = S.colsByPreset || {};
+          S.colsByPreset[S.preset] = {cols: S.customCols, name: S.customName};
+          S.preset = "custom";
+          settings.set({preset: "custom"});
+        }
         S.customCols = f.map(function (g) {
           var h = guessTemplateSource(g, f);
           var p = {
@@ -3620,6 +3708,9 @@
         if (!b[a]) {
           return setMsg(qs("#dlMsg"), "저장된 양식 이름을 「양식 이름」 칸에 적어 주세요.", "warn");
         }
+        if (!confirm("이 PC에 저장한 양식 「" + a + "」을 지울까요? 되돌릴 수 없습니다.")) {   // 묻지 않고 지우던 것
+          return;
+        }
         delete b[a];
         var c = {
           customs: b
@@ -3634,7 +3725,7 @@
     S.searchFor = a || null;
     var findDlgEl = qs("#findDlg");
     qs("#findQ").value = a ? [a.addr, a.detail].filter(Boolean).join(" ") : "";
-    qs("#findHint").textContent = a ? a.i + 1 + "행에 넣을 우편번호를 고르세요. 목록에서 누르면 그 줄에 바로 들어갑니다." : "도로명·건물번호나 동·리 이름을 넣으면 해당 구간의 우편번호를 보여 줍니다. 예) 정읍시 충정로 146";
+    qs("#findHint").textContent = a ? (isDirect() ? rowNo(a.i) + "번째 줄" : rowNo(a.i) + "행") + "에 넣을 우편번호를 고르세요. 목록에서 누르면 그 줄에 바로 들어갑니다." : "도로명·건물번호나 동·리 이름을 넣으면 해당 구간의 우편번호를 보여 줍니다. 예) 정읍시 충정로 146";
     qs("#findList").innerHTML = "";
     qs("#findBest").innerHTML = "";
     qs("#btnFindCam").hidden = !(window.__cam && __cam.supported());
@@ -3658,6 +3749,7 @@
       return;
     }
     var c = S.engine.lookup(a, b);
+    S.findBest = c.grade === "실패" ? null : c;
     qs("#findBest").innerHTML = c.grade === "실패" ? "<div class=\"fb none\">이 글자로는 주소를 찾지 못했습니다. 도로명이나 동·리 이름만 남기고 다시 찾아 보세요.</div>" : "<div class=\"fb\"><b class=\"z\">" + escHtml(c.zip) + "</b><span class=\"a\">" + escHtml([c.addr1, c.addr2].filter(Boolean).join(" ")) + "</span><span class=\"m\">" + escHtml(c.grade + (c.conf ? "·" + c.conf : "")) + (deliveryOffice(c.zip) ? " · " + escHtml(deliveryOffice(c.zip)) : "") + "</span><button type=\"button\" class=\"btn sm primary\" data-zip=\"" + escHtml(c.zip) + "\">이 번호 쓰기</button></div>";
     var d = S.engine.search(a, 80);
     qs("#findList").innerHTML = d.length ? d.map(function (f) {
@@ -3742,7 +3834,7 @@
     qs("#findQ").value = clean([c.addr1, c.addr2].filter(Boolean).join(" "));
     runFind();
   }
-  function pickFindResult(a) {
+  function pickFindResult(a, c) {
     var b = S.searchFor;
     if (!b) {
       if (navigator.clipboard) {
@@ -3751,10 +3843,17 @@
       qs("#findHint").textContent = a + " 를 복사했습니다.";
       return;
     }
+    var best = S.findBest && S.findBest.zip === a && (!c || c.closest("#findBest")) ? S.findBest : null;   // 맨 위 결과(「이 번호 쓰기」)면 주소까지 넣는다
     b.zip = a;
     b.edited = true;
     b.changed = !!b.old && b.old !== a;
-    b.note = "주소 찾기에서 고름" + (isKnownZip(a) ? "" : " · DB에 없는 번호");
+    if (best && best.addr1) {
+      b.r = {addr1: best.addr1, addr2: best.addr2 || (b.r && b.r.addr2) || b.detail || "", kind: best.kind, picked: true};
+      b.findNoAddr = false;
+    } else {
+      b.findNoAddr = true;   // 목록에서 번호만 고름: 양식 주소는 원문 그대로라 노랑·확인 안내를 남긴다(번호만 바뀌고 유사 표시가 사라지던 것)
+    }
+    b.note = "주소 찾기에서 고름" + (best ? "(" + clean([best.addr1, best.addr2].filter(Boolean).join(" ")) + ")" : " · 주소는 원문") + (isKnownZip(a) ? "" : " · DB에 없는 번호");
     var findDlgEl = qs("#findDlg");
     if (findDlgEl.close) {
       findDlgEl.close();
@@ -3763,7 +3862,7 @@
     }
     renderSummary();
     renderTable(true);
-    setMsg(qs("#dlMsg"), b.i + 1 + "행 우편번호를 " + a + "(으)로 바꿨습니다.", "ok");
+    setMsg(qs("#dlMsg"), (isDirect() ? rowNo(b.i) + "번째 줄" : rowNo(b.i) + "행") + " 우편번호를 " + a + "(으)로 바꿨습니다.", "ok");
   }
   var LABEL_SIZES = [["1x6", "6매 (1열×6행)", 1, 6], ["2x6", "12매 (2열×6행)", 2, 6], ["2x7", "14매 (2열×7행)", 2, 7], ["2x8", "16매 (2열×8행)", 2, 8], ["2x9", "18매 (2열×9행)", 2, 9], ["3x6", "18매 (3열×6행)", 3, 6], ["3x7", "21매 (3열×7행)", 3, 7], ["3x8", "24매 (3열×8행)", 3, 8], ["3x9", "27매 (3열×9행)", 3, 9], ["roll", "롤 스티커(감열 라벨 프린터) · 한 장씩", 1, 1]];
   function openLabelDialog() {
@@ -4358,7 +4457,7 @@
     qs("#findDlg").addEventListener("click", function (b) {
       var c = b.target.closest ? b.target.closest("[data-zip]") : null;
       if (c) {
-        pickFindResult(c.dataset.zip);
+        pickFindResult(c.dataset.zip, c);
       }
     });
     qs("#btnLabel").onclick = openLabelDialog;

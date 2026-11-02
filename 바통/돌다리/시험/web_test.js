@@ -63,7 +63,7 @@ const ok = (name, cond, extra) => { (cond ? pass++ : fail++); console.log((cond 
     // 1-나 반복
     await nav('s1b'); ok('반복 업무: 넣기 전에는 빈 달력 대신 제안 카드부터', (await page.$$eval('#main .cal .m', x => x.length)) === 0 && (await page.$$eval('#main .sug', x => x.length)) >= 1);
     const inB = await page.$('#main .sug button[data-act="in"]'); if (inB) { await inB.click(); await sleep(700); }
-    ok('반복 업무 넣기 → 달력 12칸에 듦', (await page.$$eval('#main .cal .m', x => x.length)) === 12 && (await page.$$eval('#main .cal .m:not(.empty)', x => x.length)) >= 1);
+    ok('반복 업무 넣기 → 달력 12칸에 듦(매월·매주는 달력 위 「달마다·주마다·분기마다」 줄)', (await page.$$eval('#main .cal .m', x => x.length)) === 12 && ((await page.$$eval('#main .cal .m:not(.empty)', x => x.length)) >= 1 || /달마다·주마다·분기마다/.test(await page.innerText('#main'))));
     // 1-다 현안
     await nav('s1c'); const nSug = (await items()).filter(i => i.kind3 === '현안' && i.decided !== true).length;
     const inC = await page.$('#main [data-id] button[data-act="in"]'); await inC.click(); await sleep(700);

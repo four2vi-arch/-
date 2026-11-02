@@ -782,7 +782,7 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                 if k in p and (p.get('decided') or k in ('note', 'seen', 'question', 'answer')):
                     it[k] = p[k]
             if p.get('decided'):
-                for k in ('status_by', 'todo_src'):
+                for k in ('status_by', 'todo_src', 'next_src'):
                     if k in p:
                         it[k] = p[k]
                     else:
@@ -826,7 +826,11 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
                     ph = parts[1].strip()
                     if ph.startswith('010') and d['cls'] == '표·대장':
                         continue   # 표 파일의 휴대전화는 개인 번호일 수 있다(업무 상대는 사무실 번호로)
-                    role = ' · '.join(x for x in parts[2:] if len(x) <= 20 and not re.search(r'\d', x))   # 나머지 칸(주소·생일 등)은 옮기지 않고 짧은 직위·부서만
+                    rest = ' '.join(parts[2:]).replace(parts[0], ' ').replace(ph, ' ')   # 같은 행의 나머지 칸에서 이름·전화를 빼고
+                    rest = re.sub(r'[☎✆]|(?:전화|TEL|Tel|tel)\s*[:：]', ' ', rest)
+                    rest = re.sub(r'\(\s*[,·/]?\s*\)', ' ', rest)   # 이름·전화를 뺀 자리에 남은 빈 괄호
+                    role = re.sub(r'\s+', ' ', ' '.join(t for t in rest.split() if not re.search(r'\d', t))).strip()
+                    role = re.sub(r'\s+(과|와)\s', r'\1 ', BULLET.sub('', role)).rstrip(' ([（,·').strip()[:40]   # 숫자가 든 낱말(계약번호·날짜·주소 번지)만 덜고 국명·직위·업체·비고는 남김(통째로 버려 「무슨 일로」가 비던 것)
                     if ph not in people and parts[0] and parts[0] not in ('담당자', '?'):
                         people[ph] = {'name': parts[0], 'phone': ph, 'line': mask_secret(role)[:40], 'file': d['file'], 'title': mask_secret(d['title']), 'area': d['area']}
                 continue
@@ -881,8 +885,7 @@ def build_docs(files, areas, months=12, model='none', url='http://127.0.0.1:1143
     own = set()   # 자기 사무실 번호는 내보낼 때 소속(1-가) 이름으로 거른다(공문에 자주 나오는 번호는 상대 기관 담당일 수도 있어 여기서 빼지 않는다)
     for it in items:
         it['contacts'] = [c for c in (it.get('contacts') or []) if c['phone'] not in own]
-    in_items = {c['phone'] for it in items for c in (it.get('contacts') or [])}
-    people_list = [v for ph, v in people.items() if ph not in own and ph not in in_items][:200]
+    people_list = [v for ph, v in people.items() if ph not in own][:200]   # 같은 번호가 문서에도 있으면 내보낼 때(export.contact_rows) 한 번만 싣는다. 여기서 빼면 그 문서가 본문에 안 실릴 때 번호가 통째로 사라지던 것
     for p in (prev_items or []):   # 전임자가 직접 적은 항목은 파일이 없으니 그대로 이어 간다
         if p.get('src') == '직접 입력':
             n += 1

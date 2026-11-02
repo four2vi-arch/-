@@ -257,7 +257,8 @@ def contact_rows(session):
     for pp in sorted(info.get('people') or [], key=lambda x: x['phone'].startswith('010')):   # 표·명단 파일에서 찾은 연락처(그 명단 항목을 버리면 함께 뺀다)
         if pp.get('file') and pp['file'] in dropped:
             continue
-        add_c(pp.get('area') or '기타', pp.get('name', ''), pp['phone'], pp.get('line'), pp.get('title', '') + ' (명단)', False, '명단')
+        roster = re.search(r'\.(xlsx|xlsm|xls|csv|ods|cell)$', str(pp.get('file') or ''), re.I)   # 엑셀·CSV 명단만 「(명단)」(메일·보고서 속 연락처까지 「(명단)」으로 붙던 것)
+        add_c(pp.get('area') or '기타', pp.get('name', ''), pp['phone'], pp.get('line'), pp.get('title', '') + (' (명단)' if roster else ''), False, '명단')
     return rows
 
 
@@ -503,7 +504,9 @@ def onnara_sections(session):
             buf.append('   - ' + text)
         elif kind == 'table':
             for r in text['rows']:
-                buf.append('○ ' + ' · '.join(str(v).replace('\n', ' / ') for v in r if str(v).strip()))
+                cells = [re.sub(r'\n(?=\()', ' ', re.sub(r'^(기한|상태)\n', r'\1 ', str(v))).replace('\n', ' / ') for v in r if str(v).strip()]
+                if cells:   # 손글씨용 빈 행(인수자 질문 표)은 붙여넣기 글에서 뺀다(빈 「○」 줄이 생기던 것)
+                    buf.append('○ ' + ' · '.join(cells))
     flush()
     return secs
 

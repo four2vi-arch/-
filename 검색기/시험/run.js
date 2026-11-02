@@ -12,6 +12,7 @@ function parseCsv(p) { const t = fs.readFileSync(p, 'utf8').replace(/^﻿/, '');
   const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });
   const ctx = await browser.newContext({ acceptDownloads: true, locale: 'ko-KR', viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
+  page.on('dialog', d => d.accept());   // v1.11(11.2.): 어르신 입력을 넘길 때 작업 중인 주소록을 바꿀지 묻는다
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') consoleMsgs.push(m.type() + ': ' + m.text()); });
   page.on('pageerror', e => consoleMsgs.push('pageerror: ' + e.message));
   const t0 = Date.now();

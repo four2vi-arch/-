@@ -2,6 +2,7 @@
 //   등기용: 연번·수취인·우편번호·주소·상세주소·연락처1(핸드폰, 선택)·연락처2(일반전화, 선택)
 //   소포용: 연번·수취인·우편번호·주소·상세주소·연락처1(핸드폰, 필수)·연락처2(일반전화, 선택)
 // 주소·상세주소 나누기(도로명은 건물번호까지, 지번은 리·번지까지), 핸드폰·일반전화 자리, 소포용 핸드폰 빈 행 안내와 주황 칸, 유사 주소 노란 칸.
+// 11.2. 최종 점검 추가: 사서함·한 칸에 번호 두 개·수취인 빔·창구 확인 비고·못 찾은 주소·「지하1층」·xls 안내·CSV 첫 줄·기관 양식 연락처1·2.
 // 사용: node form11_test.js <출품본.html> <결과 폴더>   (가상 이름·가상 번호(010-0000-…, 063-000-…)·공개 기관 주소만)
 const { chromium } = require('playwright');
 const fs = require('fs'); const path = require('path');
@@ -81,6 +82,45 @@ const CSV = '﻿받는분,주소,상세주소,휴대전화,전화\r\n' + [
   const f3 = await download('양식2csv'); const csv = fs.readFileSync(f3, 'utf8');
   ok('CSV: 같은 열, 핸드폰 빈 행 안내에 「엑셀 칸 주황색」 대신 마침', /연번,수취인,우편번호,주소,상세주소,연락처1,연락처2/.test(csv) && /연락처1\(핸드폰\)이 빈 행 2건[^]*받으세요\./.test((await page.textContent('#dlMsg')).trim()), (await page.textContent('#dlMsg')).trim().slice(0, 160));
   await page.selectOption('#selFormat', 'xlsx');
+  // ---- 11.2. 최종 점검에서 재현한 것: 사서함·번호 두 개·수취인 빔·창구 확인 비고·못 찾은 주소·「지하1층」
+  const CSV2 = '﻿받는분,주소,상세주소,휴대전화,전화,비고\r\n' + [
+    ['가상육', '정읍우체국 사서함 1호', '', '"010-0000-6666, 063-000-6666"', '', '창구 확인 필요(받는 분 성함 창구 확인)'],
+    ['', '전북특별자치도 정읍시 충정로 234-1', '', '', '063-000-7777 / 010-0000-7777', ''],
+    ['가상팔', '가나다라 마바사', '', '010-0000-8888', '', ''],
+    ['가상구', '서울 마포구 양화로 45 지하1층', '', '010-0000-9999', '', ''],
+  ].map(r => r.join(',')).join('\r\n') + '\r\n';
+  await page.evaluate((csv) => { const f = new File([csv], '양식시험2.csv', { type: 'text/csv' }); const dt = new DataTransfer(); dt.items.add(f); const el = document.querySelector('#fileInput'); el.files = dt.files; el.dispatchEvent(new Event('change', { bubbles: true })); }, CSV2);
+  await page.waitForFunction(() => /양식시험2/.test(document.querySelector('#fileLabel').textContent), null, { timeout: 60000 });
+  await page.waitForFunction(() => document.querySelector('#busy').hidden, null, { timeout: 60000 });
+  if (await page.isVisible('#btnRun')) { await page.click('#btnRun'); }
+  await page.waitForFunction(() => !document.querySelector('#step3').hidden && document.querySelector('#busy').hidden && document.querySelectorAll('#resultTable tbody tr').length === 4, null, { timeout: 120000 });
+  await pick('양식2 · 소포용');
+  const f4 = await download('양식2b'); const x4 = await readBack(f4); const t4 = rowsOf(x4.aoa); const m4 = (await page.textContent('#dlMsg')).trim();
+  const q1 = by(t4.rows, '가상육');
+  ok('사서함: 주소 「정읍시 정읍우체국 사서함 1호」, 상세 빈칸', q1[3] === '정읍시 정읍우체국 사서함 1호' && q1[4] === '', JSON.stringify(q1));
+  ok('한 칸의 번호 두 개를 나눔(핸드폰 → 연락처1, 일반전화 → 연락처2)', q1[5] === '010-0000-6666' && q1[6] === '063-000-6666', q1.slice(5).join(' / '));
+  const q2 = t4.rows.find(r => r[3] === '정읍시 충정로 234-1') || [];
+  ok('「063-… / 010-…」도 나눔', q2[5] === '010-0000-7777' && q2[6] === '063-000-7777', q2.slice(5).join(' / '));
+  const q4 = by(t4.rows, '가상구');
+  ok('「양화로 45 지하1층」은 지상 건물(04036), 「지하1층」은 상세주소', q4[2] === '04036' && q4[3] === '마포구 양화로 45' && /지하\s*1층/.test(q4[4]), JSON.stringify(q4));
+  ok('수취인이 빈 행 안내(원본 3행)', /수취인이 빈 행 1건\(원본 3행\)/.test(m4), m4.slice(0, 260));
+  ok('비고의 「창구 확인 필요」를 안내(원본 2행)', /창구에서 확인할 행 1건\(원본 2행\)/.test(m4));
+  ok('못 찾은 주소 행 번호 안내(원본 4행)', /우편번호를 못 찾은 행 1건\(원본 4행\)/.test(m4));
+  const w1 = t4.h + 2 + t4.rows.indexOf(q1), w2 = t4.h + 2 + t4.rows.indexOf(q2), w3 = t4.h + 2 + t4.rows.findIndex(r => r[1] === '가상팔');
+  ok('칸 색: 창구 확인 행 주소 노랑, 수취인 빔 주황, 못 찾은 우편번호 빨강', x4.fills['D' + w1] === 'FFF3D1' && x4.fills['B' + w2] === 'FFE0C2' && x4.fills['C' + w3] === 'FDDCD9', JSON.stringify(x4.fills));
+  // xls는 색이 없다고 안내, CSV는 맨 위 빈 줄 없이
+  await page.selectOption('#selFormat', 'xls'); await download('양식2xls');
+  { const mx = (await page.textContent('#dlMsg')).trim(); ok('xls: 색 이름(주황·노랑·빨강)을 말하지 않음(xls는 칸 색을 담지 못함)', !/주황색|노란색|빨간색/.test(mx) && /수취인이 빈 행/.test(mx), mx.slice(0, 160)); }
+  await page.selectOption('#selFormat', 'csv'); const fc = await download('양식2csv2');
+  ok('CSV 첫 줄이 제목 줄(위 빈 줄 없음)', /^﻿?연번,수취인,/.test(fs.readFileSync(fc, 'utf8')), fs.readFileSync(fc, 'utf8').slice(0, 30));
+  await page.selectOption('#selFormat', 'xlsx');
+  // 기관 양식 파일(연락처1·연락처2) 불러오기: 양식1을 고른 채여도 사용자 지정으로, 연락처1 = 핸드폰, 주소는 번지까지
+  await pick('양식1 · 등기용');
+  await page.evaluate(() => { const ws = XLSX.utils.aoa_to_sheet([['연번', '수취인', '우편번호', '주소', '상세주소', '연락처1', '연락처2']]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Sheet1'); const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }); const f = new File([buf], '창구양식.xlsx'); const dt = new DataTransfer(); dt.items.add(f); const el = document.querySelector('#cFile'); el.files = dt.files; el.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(800);
+  const cc = await page.evaluate(() => ({ on: (document.querySelector('#presets .preset.on b') || {}).textContent, cols: (window.__zip.S.customCols || []).map(c => c.h + '=' + c.src).join(',') }));
+  ok('양식1을 고른 채 양식 파일을 불러오면 「사용자 지정 양식」으로 바뀜', cc.on === '사용자 지정 양식', cc.on);
+  ok('기관 양식 연락처1 → 휴대전화, 연락처2 → 일반전화, 주소 → 번지까지(시·도 포함), 상세주소 → 상세', /연락처1=mobile/.test(cc.cols) && /연락처2=tel/.test(cc.cols) && /주소=addrMainFull/.test(cc.cols) && /상세주소=addrDetail/.test(cc.cols), cc.cols);
   ok('콘솔 오류 없음', errs.length === 0, errs.slice(0, 2).join(' | '));
   console.log(`\n통과 ${pass} · 실패 ${fail}`); await browser.close(); process.exit(fail ? 1 : 0);
 })();

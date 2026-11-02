@@ -59,7 +59,7 @@ README = '''돌다리 v{ver} 휴대용 묶음(윈도 10·11, 64비트)
 - 작업 기록은 doldari\\app\\작업\\ 에 남습니다. 원본 업무 폴더는 읽기만 합니다. 인수인계가 끝나면 그 폴더를 지우면 됩니다.
 - 받은 압축 파일이 바뀌지 않았는지: 명령 창에서 certutil -hashfile doldari_v{ver_safe}_portable_win64.zip SHA256 을 실행해 GitLab README의 값과 같은지 봅니다.
   풀린 파일은 doldari\\SHA256SUMS.txt(파일마다 SHA-256)로 대조할 수 있습니다.
-- 보안 공지가 나면 보는 곳: 파이썬 {pyver}와 아래 부품 판. 새 판으로 바꾸는 절차는 소스 README 「휴대용 묶음 만들기」.
+- 보안 공지가 나면 보는 곳: 파이썬 {pyver}와 아래 부품 판. 새 판으로 바꾸는 절차는 소스 README 「묶음 만들기(개발자)」.
 
 구성 요소와 라이선스: python(CPython {pyver}, PSF 라이선스, python\\LICENSE.txt), {pkgs}
 만든 날: {day}
