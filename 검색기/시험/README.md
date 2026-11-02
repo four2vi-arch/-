@@ -1,8 +1,8 @@
-# 물어물어 구동 시험 도구(2026-10-09, 10.27. 갱신)
+# 물어물어 구동 시험 도구(2026-10-09, 11.2. 갱신)
 
 헤드리스 크로미움(Playwright)과 모의 AI 서버로 출품본을 자동 구동해 보는 스크립트다. 준비: Node.js 18 이상에서 `npm i playwright` 뒤 `npx playwright install chromium`(크로미움을 Playwright가 내려받음. 설치된 크롬·엣지를 쓰려면 각 스크립트의 `chromium.launch({ … })`에 `channel: 'chrome'` 또는 `'msedge'`를 더한다). 모든 시험은 가짜 프린터·카메라·음성 인식·모델 서버와 가상 자료만 쓰며, 실제 사람·주소록은 넣지 않는다. 결과 폴더는 비어 있는 새 폴더를 준다.
 
-10.27. 통과 기록은 `통과기록_1027.md`.
+최종본(11.2.) 통과 기록은 `통과기록_1102.md`.
 
 | 파일 | 하는 일 |
 |---|---|
@@ -24,12 +24,13 @@
 | `ble_test.js` | v1.7 블루투스(BLE) 직접 인쇄: 가짜 `navigator.bluetooth` 프린터가 받은 바이트로 TSPL 비트맵을 PNG로 되살려 크기·장수·회전·색 반전·ESC/POS·전송 크기 축소·설정 창·직원 라벨 창을 확인. `node ble_test.js <출품본.html> <주소록.xlsx> <결과 폴더>` |
 | `usb_test.js` | v1.8 USB(OTG·WebUSB) 직접 인쇄: 가짜 `navigator.usb` 프린터(제조사 인터페이스+프린터 인터페이스)로 인터페이스 선택·선택 창 1회·재연결·취소·보호 클래스 거부·stall 복구·케이블 빠짐·설정 창·직원 롤 스티커·USB 없음 대체 인쇄 확인. `node usb_test.js <출품본.html> <주소록.xlsx> <결과 폴더>` |
 
-## v1.10·v1.11 추가 시험(2026-10-18 ~ 10-27)
+## v1.10·v1.11 추가 시험(2026-10-18 ~ 11-02)
 | 파일 | 하는 일 |
 |---|---|
 | `elder_test.js` | 70대 어르신 모의 사용 시나리오 22항목(번호가 하나로 정해지지 않으면 숫자를 보이지 않고 창구 확인, 아파트 이름 찾기, 같은 이름 건물 구분, 직원 도움, 마침 화면). `node elder_test.js <출품본.html>` |
 | `v111_test.js` | v1.11 태블릿 인쇄·말로 하기·직원 설정 124항목(가짜 BLE 프린터로 주소 쪽지·스티커, 보내는 동안 단추 막기, 끊김 띠, 제조사 앱 보내기, 직원 2초 단추, 말로 하기 오류 종류·숨김·다시 켜기, 화면 꺼짐 막기). `node v111_test.js <출품본.html> <주소록.xlsx> <결과 폴더>` |
 | `rv2_test.js` | 10.27. 검토 반영 17항목(내장 DB 지문 대조와 바꿔치기 감지, AI에 보내는 글에서 전화·호칭 이름 제거(가짜 모델 서버 127.0.0.1:11465), 「아니요」 때 적은 글 유지, 성함 「모르겠어요」, 적다 만 글의 자리 비움 확인, 말로 하기 첫 사용 동의 창, A4로 뽑은 뒤 안내·3분 규칙, 뒷화면 inert, 1024x768 안내 창 단추, 처리 이력 파일 이름 가림, 사서함 머리글 분류). `node rv2_test.js <출품본.html> <결과 폴더>` |
+| `form11_test.js` | 11.2. 등기·소포 양식 열 구성 18항목(연번·수취인·우편번호·주소·상세주소·연락처1·2, 도로명·지번·리 주소 나누기, 핸드폰·일반전화 자리, 소포용 핸드폰 빈 행 안내와 주황 칸, 유사 행 우편번호 노란 칸, CSV). 가상 이름·가상 번호·공개 기관 주소로 만든 CSV를 스스로 넣음. `node form11_test.js <출품본.html> <결과 폴더>` |
 | `mockai.js` | 위 `run.js`·`tail.js`가 쓰는 OpenAI 호환 가짜 모델 서버. `PORT=11434 node mockai.js` |
 
-돌리는 순서 예(리눅스·윈도 같음): `PORT=11434 node mockai.js &` → `node elder_test.js <html>` → `node form_test.js <html> <주소록.xlsx> <결과>` → `node label_test.js …` → `node ble_test.js …` → `node usb_test.js …` → `node v111_test.js …` → `node rv2_test.js <html> <결과>`. 주소록은 `python 양식시험_주소록_만들기.py <출력.xlsx>`로 만든다. `cam_test.js`는 시험 사진 폴더(가상 문자 화면 그림, 저장소에 없음)가 있어야 한다.
+돌리는 순서 예(리눅스·윈도 같음): `PORT=11434 node mockai.js &` → `node elder_test.js <html>` → `node form_test.js <html> <주소록.xlsx> <결과>` → `node label_test.js …` → `node ble_test.js …` → `node usb_test.js …` → `node v111_test.js …` → `node rv2_test.js <html> <결과>` → `node form11_test.js <html> <결과>`. 주소록은 `python 양식시험_주소록_만들기.py <출력.xlsx>`로 만든다. `cam_test.js`는 시험 사진 폴더(가상 문자 화면 그림, 저장소에 없음)가 있어야 한다.
