@@ -1,7 +1,7 @@
 // 물어물어 양식1(등기용)·양식2(소포용) 열 구성 시험(2026-11-02 사용자 지정 양식)
 //   등기용: 연번·수취인·우편번호·주소·상세주소·연락처1(핸드폰, 선택)·연락처2(일반전화, 선택)
 //   소포용: 연번·수취인·우편번호·주소·상세주소·연락처1(핸드폰, 필수)·연락처2(일반전화, 선택)
-// 주소·상세주소 나누기(11.2. 사용자 지정: 주소는 시·도~시·군·구까지, 나머지는 상세주소), 핸드폰·일반전화 자리, 소포용 핸드폰 빈 행 안내와 주황 칸, 유사 주소 노란 칸.
+// 주소·상세주소 나누기(11.2. 사용자 지정: 시행령 제6조 1~3호 시·도·시·군·구·행정구·읍·면은 주소, 도로명·건물번호부터는 상세주소), 핸드폰·일반전화 자리, 소포용 핸드폰 빈 행 안내와 주황 칸, 유사 주소 노란 칸.
 // 11.2. 최종 점검 추가: 사서함·한 칸에 번호 두 개·수취인 빔·창구 확인 비고·못 찾은 주소·「지하1층」·xls 안내·CSV 첫 줄·기관 양식 연락처1·2.
 // 사용: node form11_test.js <출품본.html> <결과 폴더>   (가상 이름·가상 번호(010-0000-…, 063-000-…)·공개 기관 주소만)
 const { chromium } = require('playwright');
@@ -58,7 +58,7 @@ const CSV = '﻿받는분,주소,상세주소,휴대전화,전화\r\n' + [
   ok('지번: 주소는 시·군까지, 상세주소는 동·번지·동·호수', r2[3] === '전북특별자치도 정읍시' && r2[4] === '수성동 689-3, 102동 304호', JSON.stringify(r2));
   ok('일반전화만 있으면 연락처1은 비우고 연락처2에', r2[5] === '' && r2[6] === '063-000-2222', r2.slice(5).join(' / '));
   const r4 = by(t1.rows, '가상사');
-  ok('지번(군·읍·리): 주소 「부산광역시 기장군」, 상세 「기장읍 시랑리 400-1」', r4[3] === '부산광역시 기장군' && r4[4] === '기장읍 시랑리 400-1', JSON.stringify(r4));
+  ok('읍·면(시행령 제6조 3호)까지 주소: 「부산광역시 기장군 기장읍」, 상세 「시랑리 400-1」', r4[3] === '부산광역시 기장군 기장읍' && r4[4] === '시랑리 400-1', JSON.stringify(r4));
   const r5 = by(t1.rows, '가상오');
   ok('행정구: 주소 「전북특별자치도 전주시 완산구」(구까지), 상세 「효자로 225, 302호」, 핸드폰 010-0000-4444', r5[5] === '010-0000-4444' && r5[3] === '전북특별자치도 전주시 완산구' && r5[4] === '효자로 225, 302호', JSON.stringify(r5));
   ok('연번은 1부터 숫자', t1.rows.map(r => r[0]).join(',') === '1,2,3,4,5', t1.rows.map(r => r[0]).join(','));
@@ -88,12 +88,13 @@ const CSV = '﻿받는분,주소,상세주소,휴대전화,전화\r\n' + [
     ['', '전북특별자치도 정읍시 충정로 234-1', '', '', '063-000-7777 / 010-0000-7777', ''],
     ['가상팔', '가나다라 마바사', '', '010-0000-8888', '', ''],
     ['가상구', '서울 마포구 양화로 45 지하1층', '', '010-0000-9999', '', ''],
+    ['가상십', '부산 기장군 기장읍 기장해안로 216', '3층', '010-0000-1010', '', ''],
   ].map(r => r.join(',')).join('\r\n') + '\r\n';
   await page.evaluate((csv) => { const f = new File([csv], '양식시험2.csv', { type: 'text/csv' }); const dt = new DataTransfer(); dt.items.add(f); const el = document.querySelector('#fileInput'); el.files = dt.files; el.dispatchEvent(new Event('change', { bubbles: true })); }, CSV2);
   await page.waitForFunction(() => /양식시험2/.test(document.querySelector('#fileLabel').textContent), null, { timeout: 60000 });
   await page.waitForFunction(() => document.querySelector('#busy').hidden, null, { timeout: 60000 });
   if (await page.isVisible('#btnRun')) { await page.click('#btnRun'); }
-  await page.waitForFunction(() => !document.querySelector('#step3').hidden && document.querySelector('#busy').hidden && document.querySelectorAll('#resultTable tbody tr').length === 4, null, { timeout: 120000 });
+  await page.waitForFunction(() => !document.querySelector('#step3').hidden && document.querySelector('#busy').hidden && document.querySelectorAll('#resultTable tbody tr').length === 5, null, { timeout: 120000 });
   await pick('양식2 · 소포용');
   const f4 = await download('양식2b'); const x4 = await readBack(f4); const t4 = rowsOf(x4.aoa); const m4 = (await page.textContent('#dlMsg')).trim();
   const q1 = by(t4.rows, '가상육');
@@ -103,6 +104,8 @@ const CSV = '﻿받는분,주소,상세주소,휴대전화,전화\r\n' + [
   ok('「063-… / 010-…」도 나눔', q2[5] === '010-0000-7777' && q2[6] === '063-000-7777', q2.slice(5).join(' / '));
   const q4 = by(t4.rows, '가상구');
   ok('「양화로 45 지하1층」은 지상 건물(04036), 주소 「서울특별시 마포구」, 상세 「양화로 45, 지하1층」', q4[2] === '04036' && q4[3] === '서울특별시 마포구' && q4[4] === '양화로 45, 지하1층', JSON.stringify(q4));
+  const q5 = by(t4.rows, '가상십');
+  ok('읍 지역 도로명: 주소 「부산광역시 기장군 기장읍」, 상세 「기장해안로 216, 3층」', q5[3] === '부산광역시 기장군 기장읍' && q5[4] === '기장해안로 216, 3층', JSON.stringify(q5));
   ok('수취인이 빈 행 안내(원본 3행)', /수취인이 빈 행 1건\(원본 3행\)/.test(m4), m4.slice(0, 260));
   ok('비고의 「창구 확인 필요」를 안내(원본 2행)', /창구에서 확인할 행 1건\(원본 2행\)/.test(m4));
   ok('못 찾은 주소 행 번호 안내(원본 4행)', /우편번호를 못 찾은 행 1건\(원본 4행\)/.test(m4));
