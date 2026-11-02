@@ -452,26 +452,43 @@ def list_dir(path):
 
 
 def reclassify_areas():
-    """업무 키워드를 바꾼 뒤 사람이 고르지 않은 줄의 업무를 다시 정한다. 처음 초안(docs.plan_docs)과 같은 규칙."""
+    """업무 키워드를 바꾼 뒤 사람이 고르지 않은 줄의 업무를 다시 정한다. 처음 초안(docs.plan_docs·반복 문장)과 같은 규칙.
+    본문 글자가 아직 없는 파일(재시작 직후 되읽는 중, 폴더 연결 끊김)은 지금 업무가 새 목록에 있으면 그대로 둔다(제목만으로 덮지 않게)."""
     areas = STATE['areas']
-    text = lambda f: docs.text_of({'units': _units.get(f.replace('\\', '/'), [])})
-    doc_area = {}
+    names = {a['name'] for a in areas} | {'기타'}
+    key = lambda f: f.replace('\\', '/')
+    text = lambda f: docs.text_of({'units': _units.get(key(f), [])})
+    doc_area, doc_cls, doc_title = {}, {}, {}
     for it in STATE['items']:
         f = it.get('file', '')
-        if f and not it.get('rkey') and f not in doc_area:
+        if f and not it.get('rkey') and f not in doc_area and key(f) in _units:
             doc_area[f] = docs.area_of(it.get('title', ''), text(f), areas, f)
+            doc_cls[f], doc_title[f] = it.get('cls', ''), it.get('title', '')
+
+    def area_of_file(f):   # 문서 줄이 없는 파일(매뉴얼·기간 밖 문서)의 문서 업무: 초안처럼 문서 제목 + 본문
+        if f not in doc_area:
+            t = text(f)
+            doc_title[f] = docs.doc_title({'file': f, 'units': _units.get(key(f), [])}, t)
+            doc_area[f] = docs.area_of(doc_title[f], t, areas, f)
+        return doc_area[f]
     for it in STATE['items']:
         if it.get('area_by') == '사람':
             continue
         f = it.get('file', '')
+        if f and key(f) not in _units:   # 본문 없이 다시 나누면 맞던 업무가 제목만으로 바뀜
+            if it.get('area') not in names:
+                it['area'] = docs.area_of(it.get('title', ''), '', areas, f)
+            continue
         if not it.get('rkey'):
             it['area'] = doc_area.get(f) or docs.area_of(it.get('title', ''), '', areas, f)
             continue
-        line = it.get('title', '')   # 반복 문장: 줄에 적힌 업무 이름 → 매뉴얼·인수인계서는 줄 위 제목 → 그 문서의 업무
+        line = it.get('title', '')   # 반복 문장: 줄에 적힌 업무 이름 → 매뉴얼·인수인계서·연간 일정 표는 줄 위 제목 → 그 문서의 업무
         a = docs.area_by_tag(line, areas)
-        if not a and f and it.get('cls') in ('인수인계서', '매뉴얼'):
+        cls, ttl = it.get('cls', ''), doc_title.get(f, '')
+        annual = cls in ('인수인계서', '매뉴얼') or (cls == '표·대장' and re.search(r'일정|계획|달력|캘린더', ttl or ''))
+        if not a and f and annual:
             a = docs.area_by_heading(text(f), it.get('quote') or line, areas)
-        it['area'] = a or doc_area.get(f) or docs.area_of(line, '', areas, f)
+        it['area'] = a or (area_of_file(f) if f else docs.area_of(line, '', areas, f))
 
 
 class H(BaseHTTPRequestHandler):
@@ -687,7 +704,11 @@ class H(BaseHTTPRequestHandler):
             bad = check_settings(body)   # 값 꼴 검사(「months: abc」가 저장돼 이후 읽기·내보내기가 500으로 막히던 것)
             if bad:
                 return self._send(400, {'error': bad})
+            if 'areas_text' in body and STATE.get('reloading'):   # 본문 글자를 되읽는 동안 다시 나누면 제목만 보고 나눔
+                return self._send(409, {'error': '이전 폴더의 글자를 아직 되읽는 중입니다(큰 폴더는 몇 분). 끝난 뒤 업무 키워드를 다시 적용하세요.'})
             with LOCK:
+                DIRTY = ('overview', 'assets', 'handover_from', 'handover_to', 'witness', 'handover_date', 'org', 'title', 'manual_path', 'contact_excl')
+                before = json.dumps([STATE.get(k) for k in DIRTY] + [STATE.get('areas')], ensure_ascii=False, sort_keys=True, default=str)
                 for k in ('model', 'key', 'include_tables', 'recent_years', 'title', 'max_calls', 'skip_reference', 'overview', 'handover_from', 'handover_to', 'assets', 'keyfiles', 'months', 'model_scope', 'witness', 'handover_date', 'org', 'manual_path', 'ocr', 'ocr_pages', 'ocr_images', 'areas_mode', 'contact_excl'):
                     if k in body:
                         if k == 'contact_excl':   # 4절에서 뺀 연락처(전화번호 목록): 결과물·화면 모두에서 뺀다
@@ -696,11 +717,11 @@ class H(BaseHTTPRequestHandler):
                             STATE[k] = dict(STATE[k], **body[k])   # 창이 둘 열려 있어도 서로의 업무 설명·물품 칸을 지우지 않게(칸 단위로 합침)
                         else:
                             STATE[k] = body[k]
-                if STATE.get('exports') and any(k in body for k in ('overview', 'assets', 'handover_from', 'handover_to', 'witness', 'handover_date', 'org', 'title', 'areas_text', 'manual_path', 'contact_excl')):
-                    STATE['dirty_after_export'] = True   # 내려받은 뒤 고침(다시 열어도 「예전 파일」 안내가 남게)
                 if 'areas_text' in body:
                     STATE['areas'] = docs.parse_areas(body['areas_text']) or core.DEFAULT_AREAS; STATE['areas_src'] = '사람' if body['areas_text'].strip() else '기본'
                     reclassify_areas()   # 처음 초안과 같은 규칙(본문까지 본다). 제목만 보던 것은 본문에만 키워드가 있는 문서를 「기타」로 보냈다
+                if STATE.get('exports') and json.dumps([STATE.get(k) for k in DIRTY] + [STATE.get('areas')], ensure_ascii=False, sort_keys=True, default=str) != before:
+                    STATE['dirty_after_export'] = True   # 내려받은 뒤 결과물에 실리는 값이 실제로 바뀜(모델·규칙/AI만 바꾸면 그대로. 다시 열어도 「예전 파일」 안내가 남게)
                 if 'url' in body:
                     if not core.is_local_url(str(body['url'])):
                         return self._send(400, {'error': '모델 주소는 이 PC(127.0.0.1·localhost)만 허용합니다. 기관 모델 서버는 「돌다리_실행.bat --allow-model-host 주소:포트」로 실행하면 받습니다'})

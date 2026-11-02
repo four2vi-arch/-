@@ -27,6 +27,8 @@ const WORK0 = process.argv[2] || '/tmp/돌다리_simple시험'; fs.rmSync(WORK0,
   ok('자동 검색어: 이름·부서명은 빼고 조사는 떼고 겹치는 말은 하나만', !kw.some(w => /홍길동|영업과|우편영업실/.test(w)) && !kw.some(w => /[을를]$/.test(w)) && kw.includes('재고') && kw.includes('기한') && !(kw.includes('우편매출액') && kw.includes('우편매출')), kw.join(', '));
   const kw2 = await p.evaluate(() => keywordsOf(['매대', '재고', '후납', '소포', '회의', '실적', '점검', '교육'].map(w => ({ title: '우편물 ' + w })), 10, 0.5));
   ok('자동 검색어: 절반 넘는 문서에 나오는 말(우편물)은 단추로 내지 않음', !kw2.includes('우편물') && kw2.length >= 5, kw2.join(', '));
+  const kw3 = await p.evaluate(() => keywordsOf([{ title: '요금후납신청 접수' }, { title: '소포방문신청 안내' }, { title: '판매가 조정' }, { title: '주간회의 결과' }, { title: '추진결과 보고' }, { title: '정읍세무서 협조' }, { title: '전북지방우정청 지시' }], 12));
+  ok('자동 검색어: 「…신청」「판매가」「주간회의」「추진결과」는 그대로, 「○○청」은 기관 이름으로 뺌', ['요금후납신청', '소포방문신청', '판매가', '주간회의', '추진결과'].every(w => kw3.includes(w)) && !kw3.some(w => /우정청$/.test(w)) , kw3.join(', '));
   ok('조사: 받침 있으면 「이」, 없으면 「가」', await p.evaluate(() => josa('요금후납', '이', '가') === '이' && josa('매대', '이', '가') === '가' && josa('EMS', '이', '가') === '가'));
   // 자동 검색어
   const chips = await p.$$eval('#qchips [data-q]', x => x.map(b => b.textContent));
@@ -37,7 +39,8 @@ const WORK0 = process.argv[2] || '/tmp/돌다리_simple시험'; fs.rmSync(WORK0,
   await p.fill('#q', '요금후납'); await p.evaluate(() => $('#q').oninput()); await sleep(1200);
   ok('찾기 결과 머리말 조사: 「요금후납」이 든 파일', /「요금후납」이 든 파일/.test(await p.innerText('#answers')), (await p.innerText('#answers')).slice(0, 30));
   { const gb = await p.$('#answers [data-goto]'); ok('찾기 결과마다 「이 문서 줄로 가기」', !!gb);
-    if (gb) { const gid = await gb.getAttribute('data-goto'); await gb.click(); await sleep(700);
+    if (gb) { const gf = await gb.getAttribute('data-goto'); ok('「이 문서 줄로 가기」는 항목 번호가 아니라 파일로 찾음(초안을 다시 만들어 번호가 바뀌어도)', !/^\d+$/.test(gf), gf.slice(0, 30));
+      const gid = String(await p.evaluate(f => (ITEMS.find(i => i.file === f && !i.rkey && i.keep !== false && !i.private) || {}).id, gf)); await gb.click(); await sleep(700);
       const r = await p.evaluate(id => { const el = document.querySelector(`#main [data-id="${id}"]`); const fl = document.querySelector('#main .flash'); const rc = el && el.getBoundingClientRect(); return { sec, found: !!el, flash: !!fl && (fl.dataset.id === id || !!fl.querySelector(`[data-id="${id}"]`)), inView: !!rc && rc.top >= 0 && rc.bottom <= innerHeight + 2 }; }, gid);
       ok('「이 문서 줄로 가기」를 누르면 그 줄이 있는 절로 가서 줄을 화면 가운데에 표시', r.found && r.flash && r.inView, JSON.stringify(r)); } }
   await p.setViewportSize({ width: 1280, height: 800 }); await sleep(300);
@@ -47,7 +50,9 @@ const WORK0 = process.argv[2] || '/tmp/돌다리_simple시험'; fs.rmSync(WORK0,
   await go('s1a'); const btn = await p.$('#btnAutoDesc'); ok('1-가 「빈 설명 n개 자동으로 채우기」 단추', !!btn, btn ? await btn.innerText() : '');
   if (btn) { await btn.click(); await sleep(900); }
   const descs = await p.$$eval('input[data-ov="desc"]', x => x.map(i => i.dataset.a + ' → ' + i.value)); descs.forEach(d => console.log('   ' + d));
-  ok('업무 설명이 모두 채워지고 「자동 초안」 표시', descs.every(d => / → .+/.test(d)) && (await p.$$('.chip.st')).length >= descs.length, String((await p.$$('.chip.st')).length));
+  ok('업무 설명이 모두 채워지고 칸마다 「자동 초안」 표시', descs.every(d => / → .+/.test(d)) && (await p.$$('.autochip')).length === descs.length, String((await p.$$('.autochip')).length));
+  { await p.click('#prog'); await sleep(500); const f0 = await p.evaluate(() => document.activeElement && document.activeElement.dataset.ov); await p.reload(); await sleep(1500); const o = (await api('/api/state')).overview;
+    ok('자동 초안 칸에 커서를 둔 채 새로 고쳐도(고치지 않음) 「자동 초안」 표시가 남음', f0 === 'desc' && Object.values(o).filter(x => x.desc_auto).length === descs.length, Object.values(o).filter(x => x.desc_auto).length + '/' + descs.length); await go('s1a'); }
   { const bt = await p.$('#btnAutoDesc'); ok('다 채운 뒤 단추는 「빈 설명 없음」(누를 수 없음)', !!bt && await bt.isDisabled() && /빈 설명 없음/.test(await bt.innerText()), bt ? await bt.innerText() : '없음'); }
   { const nb = await p.innerText('#nav a[data-s="s1a"]'); const as = await p.innerText('aside');
     ok('자동 초안 그대로는 「작성」으로 세지 않음(목차 0/n, 오른쪽 「자동 초안 확인」)', /0\/\d/.test(nb) && /자동 초안/.test(as) && !/완료/.test(as.split('\n').filter(l => /자동 초안/.test(l)).join('')), nb.replace(/\s+/g, ' ')); }
@@ -64,14 +69,17 @@ const WORK0 = process.argv[2] || '/tmp/돌다리_simple시험'; fs.rmSync(WORK0,
   // 이미 넘긴 업무: 자동 초안을 비우고 「인계 완료」만
   { const gs = await p.$$('[data-gone]'); const g = gs[gs.length - 1]; const ga = await g.getAttribute('data-gone'); await g.click(); await sleep(1000);
     const o = (await api('/api/state')).overview[ga] || {};
-    ok('「이미 넘김」으로 표시한 업무는 자동 초안을 비움', !!o.gone && !o.desc && !o.desc_auto, ga + ' ' + JSON.stringify(o)); }
+    ok('「이미 넘김」으로 표시한 업무는 자동 초안을 비움', !!o.gone && !o.desc && !o.desc_auto, ga + ' ' + JSON.stringify(o));
+    ok('넘긴 업무는 설명을 채운 것으로 셈(완성도를 눌러도 그 업무로 가지 않음)', await p.evaluate(a => completeness(a).desc, ga)); }
   // 표 보기 일괄 선택(1-다)
   await go('s1c'); const tv = await p.$('#viewSeg button[data-v="table"]'); if (tv) { await tv.click(); await sleep(400); }
   { const ob = await p.$('#main table.tri .doc-open'); if (ob) { await ob.click(); await sleep(800); }
     const tw = await p.evaluate(() => { const t = document.querySelector('#main table.tri'); const box = t.querySelector('td[colspan]'); return { ratio: t.offsetWidth / t.parentElement.clientWidth, span: box ? +box.getAttribute('colspan') : -1, cols: t.rows[0].cells.length }; });
     ok('표 보기에서 「원문 ▸」을 펼쳐도 표가 본문 폭을 다 쓰고 펼친 줄은 표의 칸 수만큼', tw.ratio > 0.95 && tw.span === tw.cols, JSON.stringify(tw));
-    if (ob) { await ob.click(); await sleep(400); } }
-  ok('표의 할 일·다음 칸에 마우스를 올리면 글 전체(잘린 글)', await p.$$eval('#main table.tri input[data-k="todo"]', x => x.length > 0 && x.every(i => (i.title || '').length > 0)));
+    if (ob) { await ob.click(); await sleep(400); ok('「원문 ▾」를 다시 누르면 원문 줄이 닫힘(하나 더 생기지 않음)', (await p.$$('#main table.tri tr.docview')).length === 0 && /원문 ▸/.test(await ob.innerText())); } }
+  { const r = await p.$$eval('#main table.tri input[data-k="todo"]', x => ({ n: x.length, ok: x.every(i => i.value ? i.title === i.value : i.title === i.placeholder || /할 일/.test(i.title)) }));
+    const t0 = await p.$('#main table.tri input[data-k="todo"]'); await t0.fill('가상 할 일: 매대 재고 점검 결과를 과장에게 보고'); const tt = await t0.getAttribute('title');
+    ok('표의 할 일 칸 마우스 설명은 칸의 글 전체이고, 고치면 바로 따라감', r.n > 0 && r.ok && tt === '가상 할 일: 매대 재고 점검 결과를 과장에게 보고', JSON.stringify(r)); await t0.press('Tab'); await sleep(900); }
   const picks = await p.$$('#main input.pick'); ok('표 보기 확인 전 줄마다 고르기 칸', picks.length >= 5, String(picks.length));
   // 고른 채 절을 옮기면 풀림(보이지 않는 줄이 바뀌던 것), 초안을 다시 만들어 번호가 바뀐 줄은 고르지 않음
   await picks[0].check(); await sleep(200); await go('s2');
@@ -95,6 +103,13 @@ const WORK0 = process.argv[2] || '/tmp/돌다리_simple시험'; fs.rmSync(WORK0,
   await p.click('#main input.pickall'); await sleep(300); const nAll = await p.$$eval('#main input.pick:checked', x => x.length);
   ok('「모두 고르기」는 그 표의 확인 전 줄을 모두 고름', nAll >= 1 && /고른 줄 \d+건/.test(await p.innerText('#selBar')), String(nAll));
   await p.click('#selBar [data-sa="none"]'); await sleep(400); ok('「고르기 풀기」', await p.$eval('#selBar', e => e.hidden) && (await p.$$('#main input.pick:checked')).length === 0);
+  ok('고르기 띠는 본문 바로 뒤(Tab으로 가깝게)에 있고 나타나면 화면낭독기에 알림', await p.evaluate(() => { const b = $('#selBar'); return b.previousElementSibling === $('#main') && b.getAttribute('aria-live') === 'polite' && b.getAttribute('role') === 'region'; }));
+  { const c = (await p.$$('#main input.pick'))[0]; const id = +(await c.getAttribute('data-id')); await c.check(); await sleep(200);
+    const ti = await p.$(`#main tr.trow[data-id="${id}"] input[data-k="title"]`); await ti.fill('가상 현안 제목 고침'); await ti.press('Tab'); await sleep(900);
+    await p.click('#selBar [data-sa="in"]'); await sleep(1200); const it = (await api('/api/items')).items.find(i => i.id === id);
+    ok('고른 줄의 제목을 고친 뒤 띠의 「넣기」도 그 줄에 들어감', it.decided === true && it.keep === true && it.title === '가상 현안 제목 고침', it.title); }
+  { const c = (await p.$$('#main input.pick'))[0]; await c.check(); await sleep(200); await p.click('#btnPreview'); await sleep(1200);
+    ok('고른 채 「미리보기」로 가면 띠가 사라짐(화면에 없는 줄을 바꾸지 않게)', await p.evaluate(() => SEL.size === 0 && $('#selBar').hidden)); await go('s1c'); }
   // 2절: 문서 줄만 고르기, 「모두 고르기」로 넣으면 [일괄 넣음]
   await go('s2');
   ok('2절 고르기 칸은 문서 줄에만(현안·반복은 그 절에서)', await p.evaluate(() => { const c = [...document.querySelectorAll('#main input.pick')]; return c.length > 0 && c.every(x => (ITEMS.find(i => i.id === +x.dataset.id) || {}).kind3 === '문서'); }));
@@ -116,6 +131,8 @@ const WORK0 = process.argv[2] || '/tmp/돌다리_simple시험'; fs.rmSync(WORK0,
   const zl = require('child_process').execSync(`python3 -c "import zipfile,sys;print('\\n'.join(zipfile.ZipFile(sys.argv[1]).namelist()))" ${zp}`).toString().trim().split('\n');
   ok('「네 파일 한 번에 받기(.zip)」에 .docx·.md·온나라·원본지문 4개', zl.length === 4 && ['.docx', '.md', '_온나라.txt', '_원본지문.csv'].every(s => zl.some(n => n.endsWith(s))), zl.join(', '));
   // 내려받은 뒤 고치면: 같은 화면의 상자가 바로 「다시 내려받으세요」로 바뀌고, zip 주소도 예전 파일을 주지 않음
+  { await api('/api/settings', { model: '', handover_date: '2026-03-02', months: 12 }); const r0 = await fetch(`http://127.0.0.1:${PORT}/api/download_all`);
+    ok('내려받은 뒤 모델·기간처럼 결과물에 안 실리는 것만 다시 저장하면 zip은 그대로 받음', r0.status === 200 && !(await api('/api/state')).dirty_after_export, String(r0.status)); }
   { await go('s1a'); await p.evaluate(() => { const old = document.querySelector('#exportBox'); if (!old) showExports(); }); const d = (await p.$$('input[data-ov="desc"]'))[1]; await d.fill('창구 매대 재고 확인과 공급업체 연락'); await d.press('Tab'); await sleep(900);
     ok('내려받은 뒤 고치면 그 화면의 결과물 상자가 바로 「고친 내용이 있습니다」(예전 zip·.docx 단추 숨김)', /내려받은 뒤 고친 내용/.test(await p.innerText('#exportBox')) && !(await p.$('#dlAll')));
     const r1 = await fetch(`http://127.0.0.1:${PORT}/api/download_all`); const r2 = await fetch(`http://127.0.0.1:${PORT}/api/download_all`, { headers: { Accept: 'text/html' } }); const t2 = await r2.text();
@@ -135,7 +152,9 @@ const WORK0 = process.argv[2] || '/tmp/돌다리_simple시험'; fs.rmSync(WORK0,
   ok('업무 키워드: 「기타」로 남은 문서의 자주 나온 말과 「이 말로 새 업무 줄 더하기」', !!(await p.$('#btnKwAdd')), '기타 ' + k0);
   if (await p.$('#btnKwAdd')) { await p.click('#btnKwAdd'); await sleep(300); const ta = await p.inputValue('#areas');
     ok('업무 키워드 맨 아래에 「새 업무: …」 줄', /\n새 업무: \S+/.test(ta), ta.split('\n').pop());
-    await p.fill('#areas', ta.replace('새 업무:', '창구 운영:')); await p.click('#btnAreas'); await sleep(1500); await api('/api/draft', { model: '' }); for (let i = 0; i < 100; i++) { const s = await api('/api/state'); if (!s.running) break; await sleep(300); }
+    await p.keyboard.type('창구 운영'); const ta2 = await p.inputValue('#areas');   // 안내대로 골라진 「새 업무」 자리에 이름을 침
+    ok('골라진 「새 업무」 자리에 이름을 치면 쌍점은 남음(「창구 운영: …」)', /\n창구 운영: \S+/.test(ta2), ta2.split('\n').pop());
+    await p.click('#btnAreas'); await sleep(1500); await api('/api/draft', { model: '' }); for (let i = 0; i < 100; i++) { const s = await api('/api/state'); if (!s.running) break; await sleep(300); }
     const k1 = n기타((await api('/api/items')).items); ok('새 업무 줄을 적용하고 초안을 다시 만들면 「기타」가 줄어듦', k1 < k0, `${k0} → ${k1}`); }
   // 업무 키워드 「적용」만 눌렀을 때(초안을 다시 만들기 전)의 업무 = 초안을 다시 만든 업무(본문까지 봄. 제목만 보면 본문에만 키워드가 있는 문서가 「기타」로 갔다)
   { const AT = '창구전시판매: 매대, 재고, 공급업체\n요금후납·계약: 후납, 계약\n매출·실적: 매출, 실적, 목표';
@@ -143,6 +162,16 @@ const WORK0 = process.argv[2] || '/tmp/돌다리_simple시험'; fs.rmSync(WORK0,
     await api('/api/draft', { model: '' }); for (let i = 0; i < 100; i++) { const s = await api('/api/state'); if (!s.running) break; await sleep(300); }
     const A2 = (await api('/api/items')).items.filter(i => i.file); const diff = A2.filter(i => A1.has(i.rkey || i.file) && A1.get(i.rkey || i.file) !== i.area);
     ok('업무 키워드 「적용」 직후의 업무가 초안을 다시 만든 업무와 같음(본문까지 봄)', A2.length > 10 && diff.length === 0, `${A2.length}줄 중 다름 ${diff.length}` + (diff[0] ? ` 예) ${diff[0].title.slice(0, 20)}: ${A1.get(diff[0].rkey || diff[0].file)} → ${diff[0].area}` : '')); }
+  // 서버 다시 나누기(서버 함수 직접): 본문을 아직 되읽지 못한 파일은 맞는 업무를 덮지 않고, 문서 줄 없는 매뉴얼의 반복 문장은 문서 제목+본문으로
+  { const py = `
+import sys, json; sys.path.insert(0, ${JSON.stringify(R)}); import server, docs
+server.STATE['areas'] = docs.parse_areas('창구전시판매: 매대, 재고, 공급업체\\n매출·실적: 매출, 실적, 목표')
+server._units.clear(); server._units['b/매뉴얼.txt'] = [{'text': '창구 업무 매뉴얼\\n매대 재고와 공급업체 관리 방법\\n매주 금요일 오후 점검표 작성'}]
+server.STATE['items'] = [{'id': 1, 'file': 'a/공문.odt', 'title': '협조 요청', 'area': '매출·실적', 'kind3': '현안'},
+  {'id': 2, 'file': 'b/매뉴얼.txt', 'rkey': 'R:x', 'cls': '매뉴얼', 'title': '매주 금요일 오후 점검표 작성', 'quote': '매주 금요일 오후 점검표 작성', 'area': '기타', 'kind3': '반복'}]
+server.reclassify_areas(); print(json.dumps([i['area'] for i in server.STATE['items']], ensure_ascii=False))`;
+    const out = require('child_process').execSync('python3 -B -', { input: py, cwd: R }).toString().trim().split('\n').pop();
+    ok('업무 키워드 「적용」: 본문을 아직 못 읽은 파일은 업무를 그대로 두고, 문서 줄 없는 매뉴얼의 반복 문장은 문서 제목·본문으로', out === '["매출·실적", "창구전시판매"]', out); }
   ok('화면 오류 없음', errs.length === 0, errs.join(' | '));
   await b.close(); srv.kill(); console.log(`\n통과 ${pass} · 실패 ${fail}`); setTimeout(() => process.exit(fail ? 1 : 0), 300);
 })();

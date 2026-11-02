@@ -39,8 +39,9 @@ function keywordsOf(items, n, maxShare) {
   items.forEach(i => { if (i.private || i.keep === false) return; tot++; const seen = new Set();
     const t0 = String(i.title || ''); const names = new Set(); t0.replace(/([가-힣]{2,4})\s*(과장|주무관|주사|팀장|국장|실장|대리|계장|님|씨|담당자)/g, (m, x) => { names.add(x); return m; });   // 「홍길동 과장」의 이름
     t0.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').split(/[^가-힣A-Za-z0-9]+/).forEach(w0 => {
-      let w = w0.length >= 3 ? w0.replace(/(의|을|를|은|는|이|가|에서|으로|에)$/, '') : w0;   // 「기한을」「재고를」→ 기한·재고
-      if (names.has(w) || names.has(w0) || orgW.has(w) || (w.length >= 3 && /(과|실|팀|국|청|센터|본부)$/.test(w))) return;   // 이름·부서명(영업과·우편영업실)
+      let w = w0.length >= 3 ? w0.replace(/(을|를|은|는|에서|으로|에)$/, '') : w0;   // 「기한을」「재고를」→ 기한·재고(「판매가」「추진회의」처럼 말 끝의 가·이·의는 떼지 않음)
+      if (w.length >= 4 && /의$/.test(w) && !/(회의|협의|합의|논의|심의|건의|문의|동의|토의|결의|민의)$/.test(w)) w = w.slice(0, -1);   // 「업무의」→ 업무
+      if (names.has(w) || names.has(w0) || orgW.has(w) || (/^[가-힣]{1,4}(과|실|팀|국)$/.test(w) && w.length >= 3 && !/(결과|효과|성과|사과|교과|회의실|사무실)$/.test(w)) || /(센터|본부)$/.test(w) || (w.length >= 3 && /청$/.test(w) && !/(신청|요청|초청|경청)$/.test(w))) return;   // 이름·부서명(영업과·우편영업실·○○청)
       if (w.length < 2 || w.length > 12 || /^\d/.test(w) || KW_STOP.has(w) || /(하여|하고|한다|하는|하며|하기|합니다|하였다|했다|된다|되어|되는|하도록|토록|까지|부터|에게|이며|이고|없이|있는|없는)$/.test(w) || /(님|씨|주무관|주사|과장|팀장|국장|실장)$/.test(w) || seen.has(w)) return;
       seen.add(w); cnt.set(w, (cnt.get(w) || 0) + 1); if (!first.has(w)) first.set(w, k++); }); });
   const out = [];
@@ -90,7 +91,7 @@ function progText(pr) {
 function completeness(a) {
   const rows = ITEMS.filter(i => areaOf(i) === a);
   const ov = OV[a] || {};
-  const desc = !!(ov.desc || '').trim() && !ov.desc_auto;   // 자동 초안 그대로면 아직 쓰지 않은 것으로 센다
+  const desc = (!!(ov.desc || '').trim() && !ov.desc_auto) || !!(ov.gone || '').trim();   // 자동 초안 그대로면 아직 쓰지 않은 것으로 센다. 이미 넘긴 업무는 「인계 완료」 한 줄로 끝
   const auto = !!(ov.desc || '').trim() && !!ov.desc_auto;
   const sug = rows.filter(i => isSug(i) && i.kind3 !== '문서').length;
   const noNext = rows.filter(i => i.keep && !isSug(i) && i.kind3 === '현안' && !(i.next || '').trim() && !(i.todo || '').trim()).length;
@@ -112,7 +113,7 @@ function renderNav() {
   const badge = id => {
     if (!ITEMS.length) return '';
     const sugN = r => r.filter(isSug).length;
-    if (id === 's1a') { const n = bodyAreas().filter(a => (OV[a] || {}).desc && !(OV[a] || {}).desc_auto).length; return n === bodyAreas().length ? '<span class="st ok">작성</span>' : `<span class="st todo">${n}/${bodyAreas().length}</span>`; }
+    if (id === 's1a') { const n = bodyAreas().filter(a => completeness(a).desc).length; return n === bodyAreas().length ? '<span class="st ok">작성</span>' : `<span class="st todo">${n}/${bodyAreas().length}</span>`; }
     if (id === 's1b') { const r = recurs(); const s = sugN(r); return s ? `<span class="st ai">확인 전 ${s}</span>` : `<span class="st ok">${r.filter(i => i.keep).length}건</span>`; }
     if (id === 's1c') { const r = issues(); const s = sugN(r); return s ? `<span class="st ai">확인 전 ${s}</span>` : `<span class="st ok">${r.filter(i => i.keep && i.status !== '미결').length}건</span>`; }
     if (id === 's1d') { return `<span class="st">${issues().filter(i => i.keep && !isSug(i) && i.status === '미결').length}건</span>`; }
@@ -254,7 +255,7 @@ const SEL = new Map();   // id → {title, all}: 초안을 다시 만들어 id�
 const selOk = (id, v) => ITEMS.some(i => i.id === id && i.title === v.title && isSug(i));
 function clearSel() { SEL.clear(); const b = $('#selBar'); if (b) b.hidden = true; }
 function selBar() {
-  let b = $('#selBar'); if (!b) { b = document.createElement('div'); b.id = 'selBar'; b.className = 'selbar'; document.body.appendChild(b); }
+  let b = $('#selBar'); if (!b) { b = document.createElement('div'); b.id = 'selBar'; b.className = 'selbar'; b.setAttribute('role', 'region'); b.setAttribute('aria-label', '고른 줄 처리'); b.setAttribute('aria-live', 'polite'); $('#main').after(b); }   // 본문 바로 뒤(Tab으로 오른쪽 칸을 지나지 않고 닿게)
   const vis = new Set([...document.querySelectorAll('#main input.pick')].map(c => +c.dataset.id));   // 지금 화면에 보이는 고르기 칸만(다른 절·카드 보기에서 보이지 않는 줄이 바뀌던 것)
   [...SEL.keys()].forEach(id => { if (!vis.has(id) || !selOk(id, SEL.get(id))) SEL.delete(id); });
   const ids = [...SEL.keys()];
@@ -278,8 +279,9 @@ function bindCards(root) {
   bindPick(root);
   root.querySelectorAll('.sug[data-id], .trow[data-id]').forEach(el => {
     const id = +el.dataset.id; const it = ITEMS.find(i => i.id === id); if (!it) return;
-    el.querySelectorAll('[data-k]').forEach(inp => { inp.onchange = () => { mark(id, inp.dataset.k, inp.value); if (inp.dataset.autoin && isSug(it)) { mark(id, 'keep', true); mark(id, 'decided', true); } if (inp.dataset.k === 'area' || inp.dataset.k === 'kind3') { renderNav(); renderAside(); } };   // 업무·절을 바꿔도 카드는 다음 화면 이동 때까지 제자리(바뀌어 사라진 줄 알던 것)
-      if (inp.matches('input.text, input.memo, input.when, textarea')) debounceInput(inp, () => { if (inp.value !== (it[inp.dataset.k] || '')) inp.onchange(); }); });
+    el.querySelectorAll('[data-k]').forEach(inp => { inp.onchange = () => { if (inp.matches('input.text, input.memo, input.when, textarea') && inp.value === String(it[inp.dataset.k] || '')) return; mark(id, inp.dataset.k, inp.value); if (inp.dataset.autoin && isSug(it)) { mark(id, 'keep', true); mark(id, 'decided', true); } if (inp.dataset.k === 'area' || inp.dataset.k === 'kind3') { renderNav(); renderAside(); } };   // 업무·절을 바꿔도 카드는 다음 화면 이동 때까지 제자리(바뀌어 사라진 줄 알던 것)
+      if (inp.matches('input.text, input.memo, input.when, textarea')) debounceInput(inp, () => { if (inp.value !== (it[inp.dataset.k] || '')) inp.onchange(); });
+      if (inp.dataset.k === 'todo' || inp.dataset.k === 'next') inp.addEventListener('input', () => { inp.title = inp.value || inp.placeholder; }); });
     el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { const on = b.dataset.act === 'in';
       if (!on && it.kind3 === '현안' && it.recur && it.recur.years) {
         if (confirm(`「${it.title}」은(는) 해마다 오는 업무입니다(${it.recur.years.join('·')}). 현안에서는 빼고 1-나 반복 업무로 남길까요?\n[확인] 반복 업무로 남김  [취소] 그만두기(바꾸지 않음)`)) { mark(id, 'kind3', '반복'); mark(id, 'keep', true); mark(id, 'decided', true); rerenderFocus(id); return; }
@@ -292,7 +294,7 @@ function bindCards(root) {
 }
 // 원문 보기: 앞 30줄과 기한·미결·후임 같은 말이 든 줄(파일을 따로 열지 않고 넣기·버리기를 판단)
 async function toggleDoc(el, btn) {
-  const old = el.querySelector('.docview'); if (old) { old.remove(); btn.textContent = '원문 ▸'; return; }
+  const nx = el.nextElementSibling, old = el.tagName === 'TR' ? (nx && nx.classList.contains('docview') ? nx : null) : el.querySelector('.docview'); if (old) { old.remove(); btn.textContent = '원문 ▸'; return; }   // 표는 원문 줄이 다음 줄(닫히지 않고 하나 더 생기던 것)
   try { const j = await api('/api/doc?file=' + encodeURIComponent(btn.dataset.f));
     const box = document.createElement(el.tagName === 'TR' ? 'tr' : 'div'); box.className = 'docview';
     const inner = `${j.hot.length ? `<div class="hot"><b>눈여겨볼 줄</b>${j.hot.map(l => `<div>${esc(l)}</div>`).join('')}</div>` : ''}<div class="head"><b>앞부분</b>${j.head.map(l => `<div>${esc(l)}</div>`).join('')}${j.n_lines > 30 ? `<div class="s">… 전체 ${j.n_lines}줄</div>` : ''}</div>`;
@@ -302,7 +304,7 @@ async function toggleDoc(el, btn) {
 }
 function dateText(it) { const d = String(it.date || ''); if (!d) return it.when ? String(it.when) : '날짜 없음'; if (it.date_src === '연도만') return d.slice(0, 4) + '년'; return d + (it.date_src === '수정일' ? '(수정일)' : ''); }
 let dirtyAfterExport = false;
-function mark(id, k, v) { if (!dirtyAfterExport && (ST.exports || []).length && $('#exportBox')) setTimeout(showExports, 0); dirtyAfterExport = true; pending[id] = pending[id] || {id}; pending[id][k] = v; const it = ITEMS.find(i => i.id === id); if (it) { it[k] = v; if (k === 'area') it.area_by = '사람'; } clearTimeout(flushTimer); flushTimer = setTimeout(flush, 500); }
+function mark(id, k, v) { if (k === 'title' && SEL.has(id)) SEL.get(id).title = v; if (!dirtyAfterExport && (ST.exports || []).length && $('#exportBox')) setTimeout(showExports, 0); dirtyAfterExport = true; pending[id] = pending[id] || {id}; pending[id][k] = v; const it = ITEMS.find(i => i.id === id); if (it) { it[k] = v; if (k === 'area') it.area_by = '사람'; } clearTimeout(flushTimer); flushTimer = setTimeout(flush, 500); }
 async function flush() {
   if (!Object.keys(pending).length) return;
   const body = {changes: Object.values(pending)}; pending = {};
@@ -312,7 +314,7 @@ async function flush() {
 function debounceInput(el, fn) { el.oninput = () => { clearTimeout(el._t); el._t = setTimeout(fn, 800); }; }
 let ovDirty = false;
 window.addEventListener('beforeunload', () => {
-  const el = document.activeElement; if (el && el.matches && el.matches('#main input, #main textarea')) { try { clearTimeout(el._t); el.dispatchEvent(new Event('change')); } catch (e) { } }
+  const el = document.activeElement; if (el && el.matches && el.matches('#main input, #main textarea') && el.value !== el.defaultValue) { try { clearTimeout(el._t); el.dispatchEvent(new Event('change')); } catch (e) { } }   // 고친 칸만
   if (!navigator.sendBeacon) return;
   if (Object.keys(pending).length) navigator.sendBeacon('/api/items', JSON.stringify({changes: Object.values(pending)}));
   if (ovDirty) navigator.sendBeacon('/api/settings', JSON.stringify({overview: OV, assets: ASSETS}));
@@ -447,7 +449,7 @@ function bindPrep() {
     else if (j.cancelled) { $('#extractMsg').innerHTML = extractMsgHtml(); }
     else { $('#extractMsg').innerHTML = '<div class="note">이 PC에서는 윈도 폴더 창을 열지 못해 화면 안 목록으로 고릅니다.</div>'; pkLoad($('#folder').value.trim() || '').catch(e => alert(e.message)); } };
   const rc = $('#recent'); if (rc) rc.onchange = () => { if (rc.value) { $('#folder').value = rc.value; rc.blur(); doExtract(rc.value, []); } };
-  const ka = $('#btnKwAdd'); if (ka) ka.onclick = () => { const t = $('#areas'); t.value = t.value.replace(/\s*$/, '') + '\n새 업무: ' + ka.dataset.kw; t.focus(); const i = t.value.lastIndexOf('새 업무'); t.setSelectionRange(i, i + 5); alert('업무 키워드 맨 아래에 「새 업무: …」 줄을 더했습니다. 「새 업무」를 알맞은 업무 이름으로 고치고 필요 없는 말은 지운 뒤 「적용(다시 분류)」을 누르세요.'); };
+  const ka = $('#btnKwAdd'); if (ka) ka.onclick = () => { const t = $('#areas'); t.value = t.value.replace(/\s*$/, '') + '\n새 업무: ' + ka.dataset.kw; t.focus(); const i = t.value.lastIndexOf('새 업무'); t.setSelectionRange(i, i + '새 업무'.length); alert('업무 키워드 맨 아래에 「새 업무: …」 줄을 더했습니다. 「새 업무」를 알맞은 업무 이름으로 고치고 필요 없는 말은 지운 뒤 「적용(다시 분류)」을 누르세요.'); };
   $$('[data-preset]').forEach(b => b.onclick = () => { const p = (ST.presets || []).find(x => x[0] === b.dataset.preset); if (!p) return; $('#areas').value = p[1]; $('#btnAreas').click(); });
   const sa = $('#subAll'); if (sa) { sa.onclick = () => $$('.sub').forEach(c => c.checked = true); $('#subNone').onclick = () => $$('.sub').forEach(c => c.checked = false); $('#btnReread').onclick = () => doExtract($('#folder').value, $$('.sub').filter(c => !c.checked).map(c => c.value)); }
   const seg = $('#engineSeg'); if (seg) {
@@ -533,7 +535,8 @@ function renderS1a(m) {
     used.forEach(a => { const o = OV[a] || {}; if ((o.desc || '').trim() || o.gone) return; const d = autoDesc(a); if (d) { OV[a] = Object.assign({}, o, {desc: d, desc_auto: true}); filled.push(a); } });
     if (!filled.length) return alert('채울 말을 찾지 못했습니다. 업무마다 직접 적어 주세요.');
     try { await settings({overview: OV}); ST.overview = OV; rerender(); alert(`업무 설명 ${filled.length}개를 문서 제목에서 자주 나온 말로 채웠습니다.\n「자동 초안」 표시가 있는 칸을 읽고 고쳐 쓰세요(그대로 두면 결과물에 「(자동 초안)」으로 실립니다).`); } catch (e) { alert('저장 실패: ' + e.message); } };
-  m.querySelectorAll('input[data-ov]').forEach(t => { t.onchange = async () => { const a = t.dataset.a; OV[a] = Object.assign({}, OV[a] || {}, {[t.dataset.ov]: t.value}); if (t.dataset.ov === 'desc') { delete OV[a].desc_auto; const ch = t.previousElementSibling; if (ch && ch.classList.contains('autochip')) ch.remove();
+  m.querySelectorAll('input[data-ov]').forEach(t => { t.onchange = async () => { const a = t.dataset.a; if (t.value === String((OV[a] || {})[t.dataset.ov] || '')) return;   // 고치지 않았으면 그대로(새로 고침·창 닫기 때의 change가 「자동 초안」 표시를 지우던 것)
+    OV[a] = Object.assign({}, OV[a] || {}, {[t.dataset.ov]: t.value}); if (t.dataset.ov === 'desc') { delete OV[a].desc_auto; const ch = t.previousElementSibling; if (ch && ch.classList.contains('autochip')) ch.remove();
       const ne = used.filter(x => !((OV[x] || {}).desc || '').trim() && !(OV[x] || {}).gone).length, bt = $('#btnAutoDesc'); if (bt) { bt.disabled = !ne; bt.textContent = ne ? `빈 설명 ${ne}개 자동으로 채우기` : '빈 설명 없음'; } } ovDirty = true; try { await settings({overview: OV}); ST.overview = OV; ovDirty = false; renderNav(); renderAside(); } catch (e) { alert('저장 실패: ' + e.message); } }; debounceInput(t, () => { if (t.value !== ((OV[t.dataset.a] || {})[t.dataset.ov] || '')) t.onchange(); }); });
 }
 // --- 1-나. 반복 업무(연간 일정)
@@ -623,7 +626,7 @@ function renderS4(m) {
 
 // ---------------------------------------------------------------- 오른쪽: 물어보기·완성도
 function renderAside() {
-  const box = $('#checklist'); if (!ITEMS.length) { box.innerHTML = '<div>초안을 만들면 여기에 완성도가 보입니다.</div>'; return; }
+  const box = $('#checklist'); if (!ITEMS.length) { box.innerHTML = '<div>초안을 만들면 여기에 완성도가 보입니다.</div>'; const qc0 = $('#qchips'); if (qc0) qc0.innerHTML = ''; return; }   // 다른 폴더를 읽어 초안이 비면 옛 폴더의 말 단추를 지움
   const qc = $('#qchips'); if (qc) { const kws = keywordsOf(ITEMS, 10, 0.5); qc.innerHTML = kws.length ? '<span class="s">자주 나온 말</span> ' + kws.map(w => `<button class="ghost sm" data-q="${esc(w)}">${esc(w)}</button>`).join('') : '';
     qc.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { $('#q').value = b.dataset.q; $('#q').oninput(); }); }   // 무엇을 찾을지 떠올리지 않아도 누르면 바로 찾음(받는 사람에게 특히)
   const used = bodyAreas(); box.innerHTML = used.map(a => { const c = completeness(a); return `<div><span>${esc(a)}</span><span class="${c.done ? 'ok' : 'no'}">${c.done ? '완료' : c.sug ? '제안 ' + c.sug + (c.auto ? ' · 자동 초안' : '') : c.auto ? '자동 초안 확인' : !c.desc ? '설명 없음' : '할 일 빈 현안 ' + c.noNext}</span></div>`; }).join('') + `<div><span>물품·예산</span><span class="${AS.every(([k]) => (ASSETS[k] || '').trim()) ? 'ok' : 'no'}">${AS.filter(([k]) => (ASSETS[k] || '').trim()).length}/4</span></div><div><span>인계·인수·입회자</span><span class="${ST.handover_from && ST.handover_to && ST.witness ? 'ok' : 'no'}">${[ST.handover_from, ST.handover_to, ST.witness].filter(Boolean).length}/3</span></div>`;
@@ -631,10 +634,10 @@ function renderAside() {
 let qTimer = null;
 $('#q').oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(async () => { const q = $('#q').value.trim(); if (q.length < 2) { $('#answers').innerHTML = ''; return; }
   try { const j = await api('/api/search?q=' + encodeURIComponent(q)); $('#answers').innerHTML = j.hits.length ? `<div class="s" style="font-size:.82rem;color:var(--ink3)">「${esc(q)}」${josa(q, '이', '가')} 든 파일 ${j.total}개 중 ${j.hits.length}개</div>` + j.hits.map(h => `<div class="ans"><div class="f">${esc(h.file)}${goBtn(h.file)}</div>${h.lines.map(l => `<div class="l">${esc(l)}</div>`).join('')}<div class="src">이름 ${h.name_hits}곳 · 본문 ${h.body_hits}곳</div></div>`).join('') : '<div class="ans">찾지 못했습니다. 다른 말로 찾아보세요.</div>'; bindGoto($('#answers')); } catch (e) { $('#answers').innerHTML = '<div class="ans">' + esc(e.message) + '</div>'; } }, 350); };
-function goBtn(file) { const it = ITEMS.find(i => i.file === file && !i.rkey && i.keep !== false && !i.private); return it ? ` <button class="ghost sm goto" data-goto="${it.id}" title="이 문서가 들어 있는 줄로 갑니다">이 문서 줄로 가기</button>` : ''; }
+function goBtn(file) { const it = ITEMS.find(i => i.file === file && !i.rkey && i.keep !== false && !i.private); return it ? ` <button class="ghost sm goto" data-goto="${esc(file)}" title="이 문서가 들어 있는 줄로 갑니다">이 문서 줄로 가기</button>` : ''; }
 function bindGoto(root) {
   root.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => {
-    const it = ITEMS.find(i => i.id === +b.dataset.goto); if (!it) return;
+    const f = b.dataset.goto, it = ITEMS.find(i => i.file === f && !i.rkey && i.keep !== false && !i.private) || ITEMS.find(i => i.file === f && !i.private); if (!it) return alert('이 문서는 지금 초안에 없습니다(초안을 다시 만들었거나 넣지 않는 문서).');
     const find = () => { const r = document.querySelector(`#main [data-id="${it.id}"]`); return r && (r.closest('tr.trow') || r); };
     const go = s => { clearSel(); sec = s; ls('sec', sec); ORD = null; rerender(); return find(); };
     const tr = go(it.kind3 === '현안' ? 's1c' : it.kind3 === '반복' ? 's1b' : 's2') || go('s2');   // 현안·반복은 그 절, 나머지는 2절(못 찾으면 2절)
@@ -686,7 +689,7 @@ function showExports() {
   const b = $('#btnOpenWork'); if (b) b.onclick = async () => { const j = await api('/api/openwork', {}); if (!j.ok) alert(j.error); };
 }
 $('#btnPrint').onclick = async () => { if (!ITEMS.length) return alert('인쇄할 초안이 없습니다.'); await renderPrintView(); window.print(); };
-$('#btnPreview').onclick = async () => { if (!ITEMS.length) return alert('초안이 없습니다.'); sec = 'preview'; ls('sec', sec); renderNav(); await renderPreview(); };
+$('#btnPreview').onclick = async () => { if (!ITEMS.length) return alert('초안이 없습니다.'); clearSel(); sec = 'preview'; ls('sec', sec); renderNav(); await renderPreview(); };
 async function renderPrintView() {
   await flush();
   const j = await api('/api/report'); document.getElementById('printView').innerHTML = j.html;   // 본문 밖(맨 끝)의 인쇄 전용 칸
