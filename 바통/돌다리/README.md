@@ -61,6 +61,7 @@ python 시험/robust_test.py
 python 시험/start_test.py
 node 시험/web_test.js
 node 시험/ux38_test.js
+python 시험/output38_test.py
 ```
 
 | 시험 | 보는 것 | 항목 |
